@@ -1,0 +1,53 @@
+/* ==================== 响应式布局 ==================== */
+
+/* 应力系数标定模块始终保持4:6并排布局 */
+
+@media (max-width: 1024px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .config-panel {
+        width: 100%;
+        min-width: 100%;
+        max-height: 40vh;
+    }
+    
+    .waveform-panel {
+        flex: 1;
+        min-height: 400px;
+    }
+    
+    .analysis-container {
+        flex-direction: column;
+    }
+    
+    .file-panel {
+        width: 100%;
+        max-height: 40vh;
+    }
+    
+    .measurement-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .top-controls {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .config-panel {
+        padding: 15px;
+        gap: 12px;
+    }
+    
+    .waveform-panel {
+        padding: 15px;
+    }
+}

@@ -1,0 +1,6 @@
+pyvisa
+numpy
+pywebview
+h5py
+scipy
+pywavelets

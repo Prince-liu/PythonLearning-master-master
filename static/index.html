@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>普源示波器实时波形显示系统</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 开屏画面样式 */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        #splashScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .splash-content {
+            text-align: center;
+            color: white;
+            animation: splashFadeIn 0.6s ease-out;
+        }
+        
+        @keyframes splashFadeIn {
+            from { opacity: 0; transform: translateY(-30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        .splash-logo {
+            font-size: 96px;
+            margin-bottom: 30px;
+            animation: splashPulse 2s ease-in-out infinite;
+            filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+        }
+        
+        @keyframes splashPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.85; }
+        }
+        
+        .splash-title {
+            font-size: 42px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            letter-spacing: 3px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .splash-subtitle {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 60px;
+            letter-spacing: 1px;
+        }
+        
+        .splash-loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            margin: 0 auto;
+        }
+        
+        .splash-dot {
+            width: 16px;
+            height: 16px;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: splashDotBounce 1.4s ease-in-out infinite;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+        }
+        
+        .splash-dot:nth-child(1) {
+            animation-delay: 0s;
+            background: #4CAF50;
+        }
+        
+        .splash-dot:nth-child(2) {
+            animation-delay: 0.2s;
+            background: #66BB6A;
+        }
+        
+        .splash-dot:nth-child(3) {
+            animation-delay: 0.4s;
+            background: #8BC34A;
+        }
+        
+        .splash-dot:nth-child(4) {
+            animation-delay: 0.6s;
+            background: #AED581;
+        }
+        
+        .splash-dot:nth-child(5) {
+            animation-delay: 0.8s;
+            background: #C5E1A5;
+        }
+        
+        @keyframes splashDotBounce {
+            0%, 80%, 100% {
+                transform: scale(0.8) translateY(0);
+                opacity: 0.6;
+            }
+            40% {
+                transform: scale(1.2) translateY(-20px);
+                opacity: 1;
+            }
+        }
+        
+        .splash-loading-text {
+            margin-top: 20px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .splash-version {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 开屏画面 -->
+    <div id="splashScreen">
+        <div class="splash-content">
+            <div class="splash-logo">📊</div>
+            <div class="splash-title">普源示波器实时波形显示系统</div>
+            <div class="splash-subtitle">RIGOL Oscilloscope Waveform Display System</div>
+            <div class="splash-loading-spinner">
+                <div class="splash-dot"></div>
+                <div class="splash-dot"></div>
+                <div class="splash-dot"></div>
+                <div class="splash-dot"></div>
+                <div class="splash-dot"></div>
+            </div>
+            <div class="splash-loading-text">正在初始化系统<span class="dots"></span></div>
+        </div>
+        <div class="splash-version">v1.0.0 | Python + pywebview</div>
+    </div>
+    
+    <div class="container">
+        <!-- 顶部标签栏 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="capture">📊 实时采集</button>
+            <button class="tab-btn" data-tab="analysis">📈 波形分析</button>
+            <button class="tab-btn" data-tab="calibration">🔬 应力系数标定</button>
+            <button class="tab-btn" data-tab="detection">🔍 单轴应力检测</button>
+        </div>
+
+        <!-- 实时采集页面 -->
+        <div id="captureTab" class="tab-content active">
+        <!-- 主内容区域 -->
+        <div class="main-content">
+            <!-- 左侧配置面板 -->
+            <div class="config-panel">
+                <!-- 设备连接控制 -->
+                <div class="device-controls">
+                    <button id="searchBtn" class="btn btn-primary btn-device">🔍 搜索设备</button>
+                    <button id="disconnectBtn" class="btn btn-danger btn-device" disabled>✕ 断开</button>
+                </div>
+                
+                <div class="config-section">
+                    <label class="config-label">可用设备</label>
+                    <select id="deviceSelect" class="config-select">
+                        <option value="">请先搜索设备</option>
+                    </select>
+                </div>
+
+                <div class="config-section">
+                    <h3 class="section-title">采集设置</h3>
+                    
+                    <label class="config-label">通道</label>
+                    <select id="channelSelect" class="config-select">
+                        <option value="1">通道 1</option>
+                        <option value="2">通道 2</option>
+                        <option value="3">通道 3</option>
+                        <option value="4">通道 4</option>
+                    </select>
+
+                    <label class="config-label">存储深度</label>
+                    <select id="memoryDepthSelect" class="config-select" disabled>
+                        <option value="AUTO">AUTO（自动）</option>
+                        <option value="1k">1k</option>
+                        <option value="10k" selected>10k</option>
+                        <option value="100k">100k</option>
+                        <option value="1M">1M</option>
+                        <option value="10M">10M</option>
+                        <option value="25M">25M</option>
+                        <option value="50M">50M</option>
+                        <option value="100M">100M</option>
+                        <option value="125M">125M</option>
+                        <option value="200M">200M</option>
+                        <option value="250M">250M</option>
+                    </select>
+
+                    <label class="config-label">时基（Time/Div）</label>
+                    <select id="timebaseSelect" class="config-select" disabled>
+                        <option value="10e-9">10 ns/div</option>
+                        <option value="20e-9">20 ns/div</option>
+                        <option value="50e-9">50 ns/div</option>
+                        <option value="100e-9">100 ns/div</option>
+                        <option value="200e-9">200 ns/div</option>
+                        <option value="500e-9">500 ns/div</option>
+                        <option value="1e-6">1 μs/div</option>
+                        <option value="2e-6">2 μs/div</option>
+                        <option value="5e-6" selected>5 μs/div</option>
+                        <option value="10e-6">10 μs/div</option>
+                        <option value="20e-6">20 μs/div</option>
+                        <option value="50e-6">50 μs/div</option>
+                        <option value="100e-6">100 μs/div</option>
+                    </select>
+
+                    <div class="button-group">
+                        <button id="autoSetBtn" class="btn btn-secondary" disabled>自动</button>
+                        <button id="runBtn" class="btn btn-secondary" disabled>运行</button>
+                        <button id="stopScopeBtn" class="btn btn-secondary" disabled>停止</button>
+                    </div>
+                </div>
+
+                <button id="captureBtn" class="btn btn-primary btn-large" disabled>
+                    ⬇ 采集波形
+                </button>
+                
+                <div class="btn-group">
+                    <button id="saveBtn" class="btn btn-success btn-large" disabled>
+                        💾 保存波形
+                    </button>
+                    <button id="saveDropdownBtn" class="btn btn-success btn-dropdown" disabled>
+                        ▼
+                    </button>
+                    <div id="saveDropdownMenu" class="dropdown-menu">
+                        <div class="dropdown-item" data-format="npy">💾 保存为 NPY</div>
+                        <div class="dropdown-item" data-format="csv">📊 保存为 CSV</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧波形显示区域 -->
+            <div class="waveform-panel">
+                <!-- 实时状态信息栏 -->
+                <div class="waveform-status-bar">
+                    <!-- 左侧：实时数据显示 -->
+                    <div class="status-bar-left">
+                        <div class="status-bar-item">
+                            <span class="status-bar-label">通道:</span>
+                            <span id="statusChannelValue" class="status-bar-value">CHAN1</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span class="status-bar-label">采样率:</span>
+                            <span id="sampleRateValue" class="status-bar-value">4.00 GSa/s</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span class="status-bar-label">存储深度:</span>
+                            <span id="memoryDepthValue" class="status-bar-value">10M</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span class="status-bar-label">时基:</span>
+                            <span id="timebaseValue" class="status-bar-value">50 ns/div</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span class="status-bar-label">垂直档位:</span>
+                            <span id="vScaleValue" class="status-bar-value">2.00 V/div (+1.0)</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 右侧：信息显示区域 -->
+                    <div id="statusBarInfoPanel" class="status-bar-info-panel" style="display: none;">
+                        <div id="statusBarInfoIcon" class="status-bar-info-icon">✅</div>
+                        <div class="status-bar-info-content">
+                            <div id="statusBarInfoText" class="status-bar-info-text">操作成功</div>
+                            <div id="statusBarInfoDetail" class="status-bar-info-detail">详细信息</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 波形显示主体：左边canvas + 右边垂直控制 -->
+                <div class="waveform-display">
+                    <div class="canvas-container">
+                        <canvas id="waveformCanvas"></canvas>
+                        <div id="statusMessage" class="status-message">请先搜索并连接设备</div>
+                    </div>
+                    
+
+                </div>
+                
+                <!-- 水平控制条（底部） -->
+                <div class="horizontal-controls">
+                    <div class="h-control-group">
+                        <button id="hLeftFastBtn" class="control-btn" title="快速左移">◀◀</button>
+                        <button id="hLeftBtn" class="control-btn" title="左移">◀</button>
+                        <button id="hCenterBtn" class="control-btn center-btn" title="水平回中">⊙ 回中</button>
+                        <button id="hRightBtn" class="control-btn" title="右移">▶</button>
+                        <button id="hRightFastBtn" class="control-btn" title="快速右移">▶▶</button>
+                    </div>
+                    <div class="v-scale-group">
+                        <label>垂直灵敏度:</label>
+                        <button id="vScaleDownBtn" class="control-btn" title="减小档位值">−</button>
+                        <button id="vScaleUpBtn" class="control-btn" title="增大档位值">+</button>
+                        <button id="vFineTuneBtn" class="control-btn" title="微调模式">微调</button>
+                    </div>
+                    <div class="reset-group">
+                        <button id="vCenterBtn" class="control-btn center-btn" title="垂直居中">⊙ 垂直居中</button>
+                        <button id="resetViewBtn" class="control-btn reset-btn" title="恢复默认视图">🔄 恢复默认</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- 波形分析页面 -->
+        <div id="analysisTab" class="tab-content">
+            <!-- 顶部工具栏 -->
+            <div class="analysis-toolbar">
+                <button id="selectFileBtn" class="btn btn-primary">📂 选择文件</button>
+                <span id="selectedFileName" class="file-name-display">未选择文件</span>
+                
+                <!-- 功能按钮 -->
+                <div style="margin-left: auto; display: flex; gap: 10px;">
+                    <button id="denoisingBtn" class="btn btn-secondary">🔊 小波降噪</button>
+                    <button id="hilbertBtn" class="btn btn-secondary">📈 Hilbert变换</button>
+                    <button id="timeDiffBtn" class="btn btn-secondary">⏱️ 时间差</button>
+                    <button id="crossCorrBtn" class="btn btn-secondary">🔗 互相关</button>
+                </div>
+            </div>
+            
+            <!-- 主内容区域 -->
+            <div id="analysisMainContainer" style="display: flex; flex: 1; overflow: hidden; gap: 10px;">
+                <!-- 左侧配置面板 -->
+                <div id="analysisSidebar" class="analysis-sidebar-left" style="display: none;">
+                    <div class="sidebar-header">
+                        <h3 id="sidebarTitle">配置</h3>
+                        <button id="closeSidebarBtn" class="btn-close-sidebar" title="关闭侧边栏">×</button>
+                    </div>
+                    
+                    <!-- 小波降噪面板 -->
+                    <div id="denoisingPanel" class="analysis-panel" style="display: none;">
+                        <div class="config-group">
+                            <label>小波类型</label>
+                            <select id="waveletType" class="config-input">
+                                <option value="sym6">sym6</option>
+                                <option value="db4">db4</option>
+                                <option value="db5">db5</option>
+                                <option value="coif2">coif2</option>
+                            </select>
+                        </div>
+                        <div class="config-group">
+                            <label>分解层数: <span id="decompLevelValue">5</span></label>
+                            <input type="range" id="decompLevel" min="1" max="10" value="5" class="config-slider">
+                        </div>
+                        <div class="config-group">
+                            <label>阈值方法</label>
+                            <select id="thresholdMethod" class="config-input">
+                                <option value="soft">软阈值</option>
+                                <option value="hard">硬阈值</option>
+                            </select>
+                        </div>
+                        <div class="config-group">
+                            <label>阈值模式</label>
+                            <select id="thresholdMode" class="config-input">
+                                <option value="heursure">Heursure</option>
+                                <option value="universal">Universal</option>
+                                <option value="minimax">Minimax</option>
+                            </select>
+                        </div>
+                        <button id="applyDenoiseBtn" class="btn btn-primary btn-block">应用降噪</button>
+                        <button id="toggleViewBtn" class="btn btn-secondary btn-block" disabled>切换视图</button>
+                        <div id="denoiseResult" class="result-box" style="display: none;">
+                            <p>阈值: <span id="thresholdValue">--</span></p>
+                            <p>噪声σ: <span id="sigmaValue">--</span></p>
+                        </div>
+                    </div>
+                    
+                    <!-- Hilbert变换面板 -->
+                    <div id="hilbertPanel" class="analysis-panel" style="display: none;">
+                        <div class="config-group">
+                            <label>
+                                <input type="checkbox" id="showOriginal" checked>
+                                显示原始信号
+                            </label>
+                        </div>
+                        <div class="config-group">
+                            <label>包络线颜色</label>
+                            <input type="color" id="envelopeColor" value="#ff6b6b" class="config-input">
+                        </div>
+                        <div class="config-group">
+                            <label>线宽: <span id="widthValue">1</span></label>
+                            <input type="range" id="envelopeWidth" min="1" max="5" value="1" class="config-slider">
+                        </div>
+                        <button id="applyHilbertBtn" class="btn btn-primary btn-block">应用Hilbert</button>
+                        <button id="clearHilbertBtn" class="btn btn-secondary btn-block">清除包络</button>
+                    </div>
+                    
+                    <!-- 时间差计算面板 -->
+                    <div id="timeDiffPanel" class="analysis-panel" style="display: none;">
+                        <div class="config-group">
+                            <label>起始点设置</label>
+                            <div style="display: flex; gap: 8px; margin-top: 8px;">
+                                <button id="useZeroBtn" class="btn btn-primary" style="flex: 1;">使用0点</button>
+                                <button id="selectStartBtn" class="btn btn-secondary" style="flex: 1;">选择峰位</button>
+                            </div>
+                        </div>
+                        
+                        <div id="startPointInfo" class="info-box" style="margin-top: 10px;">
+                            <p><strong>起始点:</strong> <span id="startPointValue">0.0000 μs</span></p>
+                        </div>
+                        
+                        <p class="help-text">点击波形上的波峰位置来测量时间差</p>
+                        
+                        <button id="selectEndBtn" class="btn btn-success btn-block">点击选择波峰</button>
+                        <button id="clearTimeDiffBtn" class="btn btn-secondary btn-block">清除标记</button>
+                        
+                        <div id="timeDiffResult" class="result-box" style="display: none;">
+                            <p>起始点: <span id="peak1Time">--</span> μs</p>
+                            <p>波峰位置: <span id="peak2Time">--</span> μs</p>
+                            <p class="highlight">时间差: <span id="timeDiff">--</span> μs</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 互相关面板 -->
+                    <div id="crossCorrPanel" class="analysis-panel" style="display: none;">
+                        <button id="selectMultipleFilesBtn" class="btn btn-primary btn-block">📂 选择CSV文件</button>
+                        <div id="fileListDisplay" class="info-box" style="margin-top: 10px; display: none;">
+                            <p><strong>已选择文件:</strong></p>
+                            <div id="fileList" style="max-height: 60px; overflow-y: auto; font-size: 12px; line-height: 1.5;"></div>
+                        </div>
+                        <div class="config-group" id="referenceSelectGroup" style="display: none;">
+                            <label>参考基准信号</label>
+                            <select id="referenceSignalSelect" class="config-input">
+                                <option value="">请选择参考信号</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 信号截取范围 -->
+                        <div class="config-group" id="truncateRangeGroup" style="display: none;">
+                            <label>信号截取范围 (μs)</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #666;">起始时间</label>
+                                    <input type="number" id="truncateStartInput" class="config-input" value="5.0" step="0.1" min="0" style="margin-top: 2px;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #666;">结束时间</label>
+                                    <input type="number" id="truncateEndInput" class="config-input" value="" placeholder="不截断" step="0.1" min="0" style="margin-top: 2px;">
+                                </div>
+                            </div>
+                            <p style="font-size: 11px; color: #666; margin-top: 4px; margin-bottom: 0;">
+                                💡 提示：起始时间默认5μs，结束时间留空表示不截断右侧
+                            </p>
+                        </div>
+                        
+                        <button id="calculateCrossCorr" class="btn btn-success btn-block" disabled>🔬 计算互相关</button>
+                        <button id="exportCrossCorr" class="btn btn-secondary btn-block" disabled>💾 导出结果</button>
+                        <div id="crossCorrStatus" class="info-box" style="margin-top: 10px; display: none;">
+                            <p id="crossCorrStatusText">--</p>
+                        </div>
+                        
+                        <!-- 互相关结果显示 -->
+                        <div id="crossCorrResultsDisplay" style="margin-top: 15px; display: none;">
+                            <h4 style="margin-bottom: 10px; color: #333;">📊 互相关结果</h4>
+                            <div id="crossCorrResultsList" style="max-height: 300px; overflow-y: auto;">
+                                <!-- 结果将动态插入这里 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 波形显示区域 -->
+                <div id="analysisDisplayArea" class="analysis-display-full">
+                    <div class="waveform-header">
+                        <!-- 状态栏信息面板占位 -->
+                        <div id="analysisStatusBarInfoPanel" class="status-bar-info-panel" style="display: none;">
+                            <div id="analysisStatusBarInfoIcon" class="status-bar-info-icon">✅</div>
+                            <div class="status-bar-info-content">
+                                <div id="analysisStatusBarInfoText" class="status-bar-info-text">操作成功</div>
+                                <div id="analysisStatusBarInfoDetail" class="status-bar-info-detail">详细信息</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 工具栏按钮 -->
+                        <div class="canvas-toolbar">
+                            <button id="analysisScreenshotBtn" class="btn-icon" title="截图保存">📷</button>
+                            <button id="analysisPanBtn" class="btn-icon" title="拖动模式 - 点击启用后拖动波形">✋</button>
+                            <button id="analysisZoomInBtn" class="btn-icon" title="框选放大 - 点击启用后拖动鼠标选择区域">🔍+</button>
+                            <button id="analysisFitBtn" class="btn-icon" title="适应窗口">⬜</button>
+                            <button id="analysisResetBtn" class="btn-icon" title="重置 - 恢复原始视图">🏠</button>
+                        </div>
+                    </div>
+                    <div class="canvas-container" style="position: relative;">
+                        <canvas id="analysisCanvas"></canvas>
+                        <!-- 图例 -->
+                        <div id="analysisLegend" class="canvas-legend" style="display: none;">
+                            <div class="legend-item">
+                                <span class="legend-line" style="background: #2563eb;"></span>
+                                <span class="legend-text">原始信号</span>
+                            </div>
+                        </div>
+                        <div id="analysisStatusMessage" class="status-message">请选择波形文件</div>
+                    </div>
+                </div>
+                
+
+
+            </div>
+        </div>
+
+        <!-- 应力系数标定实验页面 -->
+        <div id="calibrationTab" class="tab-content">
+            <div class="stress-detection-container">
+                <!-- 左侧控制面板 -->
+                <div class="stress-control-panel">
+                    <!-- 实验信息 -->
+                    <div class="config-section">
+                        <h4 class="section-title">📋 实验信息</h4>
+                        <label class="config-label">材料名称</label>
+                        <input type="text" id="sd-materialName" class="config-input" placeholder="例如: 碳纤维复合材料板">
+                        
+                        <label class="config-label">测试方向</label>
+                        <div style="display: flex; gap: 5px;">
+                            <button id="sd-addDirectionBtn" class="btn btn-primary" style="flex: 1;">+ 添加方向</button>
+                            <button id="sd-manageExperimentsBtn" class="btn btn-secondary" style="flex: 1;">📂 实验管理</button>
+                        </div>
+                        
+                        <!-- 🆕 方向标签页 -->
+                        <div id="sd-directionTabs" class="direction-tabs" style="display: none;">
+                            <!-- 方向标签将动态插入这里 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 实验参数 -->
+                    <div class="config-section">
+                        <h4 class="section-title" id="sd-paramTitle">⚙️ 实验参数</h4>
+                        <label class="config-label">应力范围 (MPa)</label>
+                        <div class="input-group">
+                            <input type="number" id="sd-stressMin" class="config-input-small" value="0" min="0">
+                            <span>-</span>
+                            <input type="number" id="sd-stressMax" class="config-input-small" value="100" min="0">
+                        </div>
+                        
+                        <label class="config-label">应力步长 (MPa)</label>
+                        <input type="number" id="sd-stressStep" class="config-input" value="10" min="1">
+                        
+                        <button id="sd-toggleExperimentBtn" class="btn btn-primary btn-block">▶️ 开始实验</button>
+                    </div>
+                    
+                    <!-- 数据采集 -->
+                    <div class="config-section">
+                        <h4 class="section-title" id="sd-captureTitle">📸 数据采集</h4>
+                        <button id="sd-captureBaselineBtn" class="btn btn-primary btn-block" disabled>采集基准波形</button>
+                        
+                        <label class="config-label">当前应力点 (MPa)</label>
+                        <input type="number" id="sd-currentStress" class="config-input" value="0" min="0">
+                        
+                        <button id="sd-captureWaveformBtn" class="btn btn-success btn-block" disabled>采集波形</button>
+                        <button id="sd-endCaptureBtn" class="btn btn-secondary btn-block" disabled>采集结束</button>
+                        <button id="sd-resetExperimentBtn" class="btn btn-danger btn-block" disabled>🔄 重置实验</button>
+                    </div>
+                    
+                    <!-- 数据分析 -->
+                    <div class="config-section">
+                        <h4 class="section-title" id="sd-analysisTitle">📊 数据分析</h4>
+                        <button id="sd-fitCurveBtn" class="btn btn-primary btn-block" disabled>绘制拟合曲线</button>
+                        <button id="sd-exportDataBtn" class="btn btn-secondary btn-block" disabled>导出数据</button>
+                    </div>
+                </div>
+                
+                <!-- 右侧显示区域 -->
+                <div class="stress-display-area">
+                    <!-- 实时波形监控 -->
+                    <div class="stress-monitor-section">
+                        <div class="waveform-header">
+                            <!-- 左侧：信息显示面板 -->
+                            <div id="sd-statusBarInfoPanel" class="status-bar-info-panel" style="display: none;">
+                                <div id="sd-statusBarInfoIcon" class="status-bar-info-icon">✅</div>
+                                <div class="status-bar-info-content">
+                                    <div id="sd-statusBarInfoText" class="status-bar-info-text">操作成功</div>
+                                    <div id="sd-statusBarInfoDetail" class="status-bar-info-detail">详细信息</div>
+                                </div>
+                            </div>
+                            
+                            <!-- 右侧：监控控制 -->
+                            <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+                                <button id="sd-startMonitorBtn" class="btn-monitor-compact" title="开始监控">▶️</button>
+                                <button id="sd-stopMonitorBtn" class="btn-monitor-compact btn-monitor-stop" title="停止监控" style="display: none;">⏸️</button>
+                                <span id="sd-monitorStatus" class="monitor-status">未监控</span>
+                            </div>
+                        </div>
+                        <div class="canvas-container">
+                            <canvas id="sd-monitorCanvas"></canvas>
+                            <div id="sd-monitorMessage" class="status-message">点击"▶️"开始监控</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 下方区域：数据表格 + 拟合曲线 -->
+                    <div class="stress-bottom-section">
+                        <!-- 数据表格 -->
+                        <div class="stress-data-table">
+                            <div class="table-header">
+                                <span id="sd-tableTitle">测试方向: --</span>
+                            </div>
+                            <div class="table-container">
+                                <table id="sd-dataTable">
+                                    <thead>
+                                        <tr>
+                                            <th>应力值 (MPa)</th>
+                                            <th>声时差 (ns)</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sd-dataTableBody">
+                                        <tr>
+                                            <td colspan="3" class="empty-message">暂无数据</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- 拟合曲线图 -->
+                        <div class="stress-fit-curve">
+                            <div class="curve-header">
+                                <span>拟合曲线</span>
+                                <span id="sd-fitEquation" class="fit-equation">Δt = -- σ + --</span>
+                            </div>
+                            <div class="canvas-container">
+                                <canvas id="sd-fitCanvas"></canvas>
+                                <div id="sd-fitMessage" class="status-message">请先采集数据</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 单轴应力检测页面 -->
+        <div id="detectionTab" class="tab-content">
+            <div class="stress-detection-container">
+                <!-- 左侧控制面板 -->
+                <div class="stress-control-panel">
+                    <!-- 标定系数加载 -->
+                    <div class="config-section">
+                        <h4 class="section-title">📐 标定系数</h4>
+                        <button id="det-loadCalibrationBtn" class="btn btn-primary btn-block">加载标定数据</button>
+                        <div id="det-calibrationInfo" class="info-box" style="display: none; margin-top: 10px;">
+                            <p><strong>材料:</strong> <span id="det-materialName">--</span></p>
+                            <p><strong>方向:</strong> <span id="det-direction">--</span></p>
+                            <p><strong>斜率:</strong> <span id="det-slope">--</span> ns/MPa</p>
+                            <p><strong>截距:</strong> <span id="det-intercept">--</span> ns</p>
+                            <p><strong>R²:</strong> <span id="det-r2">--</span></p>
+                        </div>
+                    </div>
+                    
+                    <!-- 基准波形 -->
+                    <div class="config-section">
+                        <h4 class="section-title">📸 基准波形</h4>
+                        <button id="det-captureBaselineBtn" class="btn btn-primary btn-block" disabled>采集基准波形</button>
+                        <div id="det-baselineInfo" class="info-box" style="display: none; margin-top: 10px;">
+                            <p>✅ 基准波形已采集</p>
+                            <p><span id="det-baselinePoints">--</span> 采样点</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 实时检测 -->
+                    <div class="config-section">
+                        <h4 class="section-title">🔍 实时检测</h4>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            💡 需要先加载标定数据和采集基准波形
+                        </p>
+                        <button id="det-startDetectionBtn" class="btn btn-success btn-block" disabled>▶️ 开始检测</button>
+                        <button id="det-stopDetectionBtn" class="btn btn-warning btn-block" disabled style="display: none;">⏸️ 停止检测</button>
+                        
+                        <div id="det-resultDisplay" class="result-box" style="display: none; margin-top: 15px;">
+                            <h4 style="margin-bottom: 10px; color: #333;">检测结果</h4>
+                            <p><strong>声时差:</strong> <span id="det-timeDiff">--</span> ns</p>
+                            <p class="highlight"><strong>应力值:</strong> <span id="det-stressValue">--</span> MPa</p>
+                            <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                                更新时间: <span id="det-updateTime">--</span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据记录 -->
+                    <div class="config-section">
+                        <h4 class="section-title">💾 数据记录</h4>
+                        <button id="det-recordBtn" class="btn btn-secondary btn-block" disabled>记录当前值</button>
+                        <button id="det-exportBtn" class="btn btn-secondary btn-block" disabled>导出记录</button>
+                        <div id="det-recordCount" class="info-box" style="display: none; margin-top: 10px;">
+                            <p>已记录: <span id="det-recordCountValue">0</span> 条</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧显示区域 -->
+                <div class="stress-display-area">
+                    <!-- 实时波形显示 -->
+                    <div class="stress-monitor-section" style="height: 100%;">
+                        <div class="waveform-header">
+                            <span>实时波形与单轴应力检测</span>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <button id="det-startMonitorBtn" class="btn-icon" title="开始波形监控">▶️</button>
+                                <button id="det-stopMonitorBtn" class="btn-icon" title="停止波形监控" style="display: none;">⏸️</button>
+                                <span id="det-monitorStatus" class="monitor-status">未监控</span>
+                            </div>
+                        </div>
+                        <div class="canvas-container" style="height: calc(100% - 50px);">
+                            <canvas id="det-waveformCanvas"></canvas>
+                            <div id="det-statusMessage" class="status-message">点击"▶️"开始波形监控</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🆕 实验管理对话框 -->
+    <div id="experimentManagerModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>📂 实验数据管理</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="btn btn-primary btn-sm" onclick="StressCalibrationModule.导出全部数据()">📊 导出全部数据</button>
+                    <button id="deleteAllDataBtn" class="btn btn-danger btn-sm" onclick="StressCalibrationModule.删除全部数据()">🗑️ 删除全部数据</button>
+                    <button class="modal-close" onclick="StressCalibrationModule.关闭实验管理对话框()">×</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="experimentListContainer" style="max-height: 500px; overflow-y: auto;">
+                    <p style="text-align: center; color: #999;">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🆕 自定义输入对话框 -->
+    <div id="customPromptModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="customPromptTitle">输入</h3>
+                <button class="modal-close" onclick="window.closeCustomPrompt()">×</button>
+            </div>
+            <div class="modal-body">
+                <p id="customPromptMessage" style="margin-bottom: 15px; color: #666;"></p>
+                <input type="text" id="customPromptInput" class="config-input" style="width: 100%; margin-bottom: 15px;">
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="window.closeCustomPrompt()">取消</button>
+                    <button class="btn btn-primary" onclick="window.confirmCustomPrompt()">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- 开屏画面控制脚本 -->
+    <script>
+        // 隐藏开屏画面的函数
+        window.hideSplash = function() {
+            const splash = document.getElementById('splashScreen');
+            if (splash) {
+                splash.classList.add('hidden');
+                // 动画结束后移除元素（0.5秒）
+                setTimeout(() => {
+                    splash.remove();
+                }, 500);
+            }
+        };
+    </script>
+    
+    <!-- 模块化 JavaScript -->
+    <script src="js/common.js"></script>
+    <!-- 实时采集模块 -->
+    <script src="js/realtime-capture/realtime-capture.js"></script>
+    <!-- 波形分析模块（按依赖顺序加载）-->
+    <script src="js/waveform-analysis/waveform-drawing.js"></script>
+    <script src="js/waveform-analysis/waveform-zoom.js"></script>
+    <script src="js/waveform-analysis/waveform-processing.js"></script>
+    <script src="js/waveform-analysis/waveform-crosscorr.js"></script>
+    <script src="js/waveform-analysis/waveform-analysis.js"></script>
+    <!-- 应力系数标定模块 -->
+    <script src="js/stress-calibration/stress-calibration-manager.js"></script>
+    <script src="js/stress-calibration/stress-calibration-capture.js"></script>
+    <script src="js/stress-calibration/stress-calibration.js"></script>
+    <!-- 单轴应力检测模块 -->
+    <script src="js/stress-detection-uniaxial/stress-detection-uniaxial.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

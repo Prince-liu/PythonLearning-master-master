@@ -1,0 +1,641 @@
+/* ==================== 单轴应力检测模块样式 ==================== */
+
+.stress-detection-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 15px;
+    padding: 15px;
+    background: #f5f5f5;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* 左侧控制面板 */
+.stress-control-panel {
+    width: 350px;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.stress-control-panel .section-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #4CAF50;
+}
+
+/* 方向管理 */
+.direction-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.direction-input-group .config-select {
+    flex: 1;
+}
+
+.direction-input-group .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 18px;
+    font-weight: bold;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.direction-input-group .btn-icon:hover {
+    background: #45a049;
+}
+
+.direction-list {
+    margin-top: 8px;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.direction-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.direction-item .direction-name {
+    flex: 1;
+    color: #333;
+}
+
+.direction-item .btn-delete {
+    padding: 2px 8px;
+    font-size: 11px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.direction-item .btn-delete:hover {
+    background: #da190b;
+}
+
+/* 右侧显示区域 */
+.stress-display-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* 实时波形监控区域 */
+.stress-monitor-section {
+    background: white;
+    border-radius: 8px;
+    padding: 8px 15px 15px 15px;
+    flex: 0 0 auto;
+    height: 400px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    position: relative; /* 为绝对定位的信息条提供定位上下文 */
+}
+
+.stress-monitor-section .waveform-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+    padding: 6px 0;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+    min-height: 40px; /* 固定最小高度，防止抖动 */
+}
+
+.monitor-status {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    background: #e0e0e0;
+    color: #666;
+}
+
+.monitor-status.active {
+    background: #4CAF50;
+    color: white;
+}
+
+/* 下方区域：表格 + 曲线 */
+.stress-bottom-section {
+    flex: 1;
+    display: flex;
+    gap: 15px;
+    min-height: 300px;
+    overflow: hidden;
+}
+
+/* 数据表格 */
+.stress-data-table {
+    flex: 4;
+    min-width: 0;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.stress-data-table .table-header {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+
+.table-container {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+#sd-dataTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+#sd-dataTable thead {
+    position: sticky;
+    top: 0;
+    background: #f5f5f5;
+    z-index: 1;
+}
+
+#sd-dataTable th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: bold;
+    color: #333;
+    border-bottom: 2px solid #4CAF50;
+}
+
+#sd-dataTable td {
+    padding: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+#sd-dataTable tbody tr:hover {
+    background: #f9f9f9;
+}
+
+#sd-dataTable .empty-message {
+    text-align: center;
+    color: #999;
+    padding: 20px;
+}
+
+#sd-dataTable .btn-delete-row {
+    padding: 2px 8px;
+    font-size: 11px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+#sd-dataTable .btn-delete-row:hover {
+    background: #da190b;
+}
+
+/* 禁用状态的删除按钮 - 灰红色 */
+#sd-dataTable .btn-delete-row:disabled,
+#sd-dataTable .btn-delete-row.disabled {
+    background: #e0a19f;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+#sd-dataTable .btn-delete-row:disabled:hover,
+#sd-dataTable .btn-delete-row.disabled:hover {
+    background: #e0a19f;
+}
+
+/* 拟合曲线图 */
+.stress-fit-curve {
+    flex: 6;
+    min-width: 0;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+.stress-fit-curve .curve-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.fit-equation {
+    font-size: 14px;
+    font-family: 'Consolas', monospace;
+    color: #d32f2f;
+    font-weight: bold;
+}
+
+.stress-fit-curve .canvas-container {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+}
+
+/* Canvas 容器 */
+.stress-monitor-section .canvas-container {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.stress-monitor-section canvas {
+    width: 100%;
+    height: 100%;
+    background: #0a0a0a;
+    border-radius: 4px;
+}
+
+.stress-fit-curve canvas {
+    width: 100%;
+    height: 100%;
+    background: white;
+}
+
+#calibrationCanvas,
+#stressCurveCanvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* 状态消息 */
+.stress-monitor-section .status-message,
+.stress-fit-curve .status-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #666;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+/* 旧版应力标定样式（兼容） */
+.calibration-container {
+    display: flex;
+    height: 100%;
+    gap: 15px;
+}
+
+.calibration-panel {
+    width: 380px;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.calibration-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+}
+
+.waveform-compare {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    height: 350px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stress-curve {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    height: 300px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.measurement-list {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    flex: 1;
+    min-height: 200px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.measurement-list h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 14px;
+}
+
+.data-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.data-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.data-item:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.data-item.reference {
+    border-left: 3px solid #2563eb;
+}
+
+.data-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.data-item-stress {
+    color: #1f2937;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.data-item-shift {
+    color: #10b981;
+    font-size: 12px;
+}
+
+.data-item-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.section-subtitle {
+    margin: 0 0 10px 0;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.info-label {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.info-value {
+    color: #10b981;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.info-value.not-set {
+    color: #9ca3af;
+}
+
+.coefficient-display {
+    color: #10b981;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.waveform-compare .canvas-container,
+.stress-curve .canvas-container {
+    flex: 1;
+    position: relative;
+    min-height: 200px;
+}
+
+/* 单轴应力检测模块特定样式优化 */
+.stress-control-panel .input-group {
+    gap: 4px;
+}
+
+.stress-control-panel .config-input-small {
+    padding: 8px 4px;
+    font-size: 12px;
+    text-align: center;
+}
+
+.stress-control-panel .input-group span {
+    font-size: 11px;
+    padding: 0 2px;
+}
+
+.stress-control-panel .config-input {
+    padding: 8px 6px;
+    font-size: 13px;
+}
+
+.stress-control-panel .config-label {
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+/* 应力输入组（输入框和按钮在同一行，3:7比例） */
+.stress-input-group {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+}
+
+.stress-input-wrapper {
+    flex: 0 0 30%;  /* 输入框占30% */
+    display: flex;
+    flex-direction: column;
+}
+
+.stress-input-wrapper .config-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #666;
+}
+
+.stress-input-wrapper .config-input {
+    width: 100%;
+    height: 42px;  /* 固定高度 */
+    box-sizing: border-box;
+}
+
+.stress-input-group .btn {
+    flex: 1;  /* 按钮占剩余空间（约70%） */
+    height: 42px;  /* 与输入框相同高度 */
+    align-self: flex-end;  /* 底部对齐 */
+}
+/* 监控按钮样式 */
+.btn-monitor-compact {
+    padding: 4px 12px;
+    font-size: 16px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    min-width: 36px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-monitor-compact:hover {
+    background: #45a049;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.16);
+    transform: translateY(-1px);
+}
+
+.btn-monitor-compact:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.btn-monitor-compact.btn-monitor-stop {
+    background: #ff9800;
+}
+
+.btn-monitor-compact.btn-monitor-stop:hover {
+    background: #fb8c00;
+}
+
+/* ==================== 状态栏信息面板 ==================== */
+/* 应力系数标定模块的消息条样式 */
+.stress-monitor-section .status-bar-info-panel {
+    position: absolute;
+    top: 8px;
+    left: 15px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    animation: slideInLeft 0.3s ease;
+    min-width: 200px;
+    max-width: 60%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stress-monitor-section .status-bar-info-panel.success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
+}
+
+.stress-monitor-section .status-bar-info-panel.info {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+
+.stress-monitor-section .status-bar-info-panel.warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.stress-monitor-section .status-bar-info-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.stress-monitor-section .status-bar-info-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.stress-monitor-section .status-bar-info-text {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.stress-monitor-section .status-bar-info-detail {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.2;
+}
+
+/* 方向徽章样式 */
+.direction-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #2563eb;
+    background: #eff6ff;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 4px;
+    vertical-align: middle;
+}

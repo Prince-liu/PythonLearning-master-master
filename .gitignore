@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 项目特定
+*.log
+*.tmp
+test_*.html
+test_*.py
+
+# Kiro AI
+.kiro/
+
+# pywebview 缓存
+.webview_cache/
+
+# 波形数据（可选，根据需要调整）
+# *.npy
+# *.csv
+# *.h5
+# *.hdf5
