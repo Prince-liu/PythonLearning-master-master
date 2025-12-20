@@ -4,3 +4,5 @@ pywebview
 h5py
 scipy
 pywavelets
+shapely
+matplotlib

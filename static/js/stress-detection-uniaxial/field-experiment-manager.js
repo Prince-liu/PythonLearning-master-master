@@ -25,40 +25,63 @@ const FieldExperimentManager = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-content field-modal">
                 <div class="modal-header">
                     <h3>📋 新建应力场实验</h3>
                     <button class="modal-close" onclick="FieldExperimentManager.关闭新建对话框()">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>实验名称 <span class="required">*</span></label>
-                        <input type="text" id="field-exp-name" class="form-control" placeholder="例如：铝板应力分布测试">
-                    </div>
-                    <div class="form-group">
-                        <label>试件材料 <span class="required">*</span></label>
-                        <input type="text" id="field-exp-material" class="form-control" placeholder="例如：6061铝合金">
-                    </div>
-                    <div class="form-group">
-                        <label>试件厚度 (mm) <span class="required">*</span></label>
-                        <input type="number" id="field-exp-thickness" class="form-control" value="10" min="0.1" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>测试目的</label>
-                        <textarea id="field-exp-purpose" class="form-control" rows="2" placeholder="描述本次测试的目的..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>操作员</label>
-                        <input type="text" id="field-exp-operator" class="form-control" placeholder="操作员姓名">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group" style="flex:1">
-                            <label>环境温度 (°C)</label>
-                            <input type="number" id="field-exp-temperature" class="form-control" value="25" step="0.1">
+                    <!-- 必填信息区 -->
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📌</span>
+                            <span>基本信息</span>
+                            <span class="required-hint">* 必填</span>
                         </div>
-                        <div class="form-group" style="flex:1">
-                            <label>环境湿度 (%)</label>
-                            <input type="number" id="field-exp-humidity" class="form-control" value="50" min="0" max="100">
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>实验名称 <span class="required">*</span></label>
+                                <input type="text" id="field-exp-name" class="form-input" placeholder="例如：铝板应力分布测试">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>试件材料 <span class="required">*</span></label>
+                                    <input type="text" id="field-exp-material" class="form-input" placeholder="例如：6061铝合金">
+                                </div>
+                                <div class="form-group">
+                                    <label>试件厚度 (mm) <span class="required">*</span></label>
+                                    <input type="number" id="field-exp-thickness" class="form-input" value="10" min="0.1" step="0.1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 可选信息区 -->
+                    <div class="form-section optional">
+                        <div class="form-section-title">
+                            <span class="section-icon">📝</span>
+                            <span>补充信息</span>
+                            <span class="optional-hint">可选</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>测试目的</label>
+                                <textarea id="field-exp-purpose" class="form-input" rows="2" placeholder="描述本次测试的目的..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>操作员</label>
+                                <input type="text" id="field-exp-operator" class="form-input" placeholder="操作员姓名">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>环境温度 (°C)</label>
+                                    <input type="number" id="field-exp-temperature" class="form-input" value="25" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>环境湿度 (%)</label>
+                                    <input type="number" id="field-exp-humidity" class="form-input" value="50" min="0" max="100">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -146,12 +169,12 @@ const FieldExperimentManager = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 700px; max-height: 80vh;">
+            <div class="modal-content field-modal modal-lg" style="max-height: 80vh;">
                 <div class="modal-header">
                     <h3>📁 实验管理</h3>
                     <button class="modal-close" onclick="FieldExperimentManager.关闭管理对话框()">×</button>
                 </div>
-                <div class="modal-body" style="overflow-y: auto; max-height: 60vh;">
+                <div class="modal-body" style="max-height: 55vh;">
                     <div id="field-experiment-list" class="experiment-list">
                         <div class="loading">加载中...</div>
                     </div>
@@ -281,25 +304,33 @@ const FieldExperimentManager = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-content field-modal modal-sm">
                 <div class="modal-header">
                     <h3>📤 导出数据</h3>
                     <button class="modal-close" onclick="document.getElementById('field-export-modal').remove()">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>导出格式</label>
-                        <select id="field-export-format" class="form-control">
-                            <option value="csv">CSV (测点数据)</option>
-                            <option value="excel">Excel (完整报告)</option>
-                            <option value="hdf5">HDF5 (含波形数据)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="field-export-contour" checked>
-                            同时导出云图图片
-                        </label>
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📄</span>
+                            <span>导出选项</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>导出格式</label>
+                                <select id="field-export-format" class="form-input">
+                                    <option value="csv">CSV (测点数据)</option>
+                                    <option value="excel">Excel (完整报告)</option>
+                                    <option value="hdf5">HDF5 (含波形数据)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="field-export-contour" checked style="width: 16px; height: 16px;">
+                                    <span style="font-weight: normal;">同时导出云图图片</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

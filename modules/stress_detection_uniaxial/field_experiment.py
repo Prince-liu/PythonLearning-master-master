@@ -155,9 +155,13 @@ class FieldExperiment:
         
         return self.db.complete_experiment(exp_id)
     
-    def get_experiment_list(self) -> List[Dict[str, Any]]:
+    def get_experiment_list(self) -> Dict[str, Any]:
         """获取所有应力场实验列表"""
-        return self.db.get_experiment_list()
+        try:
+            experiments = self.db.get_experiment_list()
+            return {"success": True, "data": experiments}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
     
     # ==================== 标定数据加载 ====================
     

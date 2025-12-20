@@ -670,32 +670,29 @@ const StressDetectionUniaxialModule = (function() {
             overlay.className = 'modal';
             overlay.style.display = 'flex';
             
-            const content = document.createElement('div');
-            content.className = 'modal-content';
-            content.style.maxWidth = '450px';
-            
-            content.innerHTML = `
-                <div class="modal-header">
-                    <h3>${标题}</h3>
-                    <button class="modal-close">×</button>
-                </div>
-                <div class="modal-body">
-                    <p style="margin-bottom: 20px; white-space: pre-line;">${消息}</p>
-                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            overlay.innerHTML = `
+                <div class="modal-content field-modal modal-sm">
+                    <div class="modal-header">
+                        <h3>${标题}</h3>
+                        <button class="modal-close">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="confirm-message">${消息}</p>
+                    </div>
+                    <div class="modal-footer">
                         <button class="btn btn-secondary cancel-btn">取消</button>
                         <button class="btn btn-primary confirm-btn">确定</button>
                     </div>
                 </div>
             `;
             
-            overlay.appendChild(content);
             document.body.appendChild(overlay);
             
             const cleanup = () => document.body.removeChild(overlay);
             
-            content.querySelector('.modal-close').onclick = () => { cleanup(); resolve(false); };
-            content.querySelector('.cancel-btn').onclick = () => { cleanup(); resolve(false); };
-            content.querySelector('.confirm-btn').onclick = () => { cleanup(); resolve(true); };
+            overlay.querySelector('.modal-close').onclick = () => { cleanup(); resolve(false); };
+            overlay.querySelector('.cancel-btn').onclick = () => { cleanup(); resolve(false); };
+            overlay.querySelector('.confirm-btn').onclick = () => { cleanup(); resolve(true); };
             
             // ESC键取消
             const handleKeydown = (e) => {

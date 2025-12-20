@@ -210,54 +210,62 @@ const FieldShapePanel = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-content field-modal modal-sm">
                 <div class="modal-header">
-                    <h3>添加孔洞</h3>
+                    <h3>🔘 添加孔洞</h3>
                     <button class="modal-close" onclick="document.getElementById('field-hole-modal').remove()">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>孔洞形状</label>
-                        <select id="field-hole-shape" class="form-control">
-                            <option value="circle">圆形</option>
-                            <option value="rectangle">矩形</option>
-                        </select>
-                    </div>
-                    <div id="field-hole-circle-params">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1">
-                                <label>圆心X (mm)</label>
-                                <input type="number" id="field-hole-cx" class="form-control" value="50">
-                            </div>
-                            <div class="form-group" style="flex:1">
-                                <label>圆心Y (mm)</label>
-                                <input type="number" id="field-hole-cy" class="form-control" value="50">
-                            </div>
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📐</span>
+                            <span>孔洞参数</span>
                         </div>
-                        <div class="form-group">
-                            <label>半径 (mm)</label>
-                            <input type="number" id="field-hole-radius" class="form-control" value="10" min="0.1">
-                        </div>
-                    </div>
-                    <div id="field-hole-rect-params" style="display:none;">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1">
-                                <label>左上角X (mm)</label>
-                                <input type="number" id="field-hole-rx" class="form-control" value="40">
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>孔洞形状</label>
+                                <select id="field-hole-shape" class="form-input">
+                                    <option value="circle">圆形</option>
+                                    <option value="rectangle">矩形</option>
+                                </select>
                             </div>
-                            <div class="form-group" style="flex:1">
-                                <label>左上角Y (mm)</label>
-                                <input type="number" id="field-hole-ry" class="form-control" value="40">
+                            <div id="field-hole-circle-params">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>圆心X (mm)</label>
+                                        <input type="number" id="field-hole-cx" class="form-input" value="50">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>圆心Y (mm)</label>
+                                        <input type="number" id="field-hole-cy" class="form-input" value="50">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>半径 (mm)</label>
+                                    <input type="number" id="field-hole-radius" class="form-input" value="10" min="0.1">
+                                </div>
                             </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1">
-                                <label>宽度 (mm)</label>
-                                <input type="number" id="field-hole-rw" class="form-control" value="20">
-                            </div>
-                            <div class="form-group" style="flex:1">
-                                <label>高度 (mm)</label>
-                                <input type="number" id="field-hole-rh" class="form-control" value="20">
+                            <div id="field-hole-rect-params" style="display:none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>左上角X (mm)</label>
+                                        <input type="number" id="field-hole-rx" class="form-input" value="40">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>左上角Y (mm)</label>
+                                        <input type="number" id="field-hole-ry" class="form-input" value="40">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>宽度 (mm)</label>
+                                        <input type="number" id="field-hole-rw" class="form-input" value="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>高度 (mm)</label>
+                                        <input type="number" id="field-hole-rh" class="form-input" value="20">
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

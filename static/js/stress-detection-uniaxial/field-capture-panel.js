@@ -329,15 +329,15 @@ const FieldCapturePanel = (function() {
             overlay.style.display = 'flex';
             
             overlay.innerHTML = `
-                <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-content field-modal modal-sm">
                     <div class="modal-header">
-                        <h3>跳过测点</h3>
+                        <h3>⏭️ 跳过测点</h3>
                         <button class="modal-close">×</button>
                     </div>
                     <div class="modal-body">
                         <div class="form-group">
                             <label>跳过原因（可选）</label>
-                            <input type="text" id="skip-reason-input" class="form-control" placeholder="例如：探头无法到达">
+                            <input type="text" id="skip-reason-input" class="form-input" placeholder="例如：探头无法到达">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -463,33 +463,41 @@ const FieldCapturePanel = (function() {
         const qualityPercent = (data.quality_score * 100).toFixed(0);
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 450px;">
-                <div class="modal-header" style="background: #fff3cd;">
+            <div class="modal-content field-modal modal-sm">
+                <div class="modal-header warning">
                     <h3>⚠️ 波形质量警告</h3>
                     <button class="modal-close" onclick="document.getElementById('field-quality-warning-modal').remove()">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="quality-warning-info">
-                        <div class="quality-item">
-                            <span class="label">质量评分:</span>
-                            <span class="value ${qualityPercent < 60 ? 'bad' : 'warning'}">${qualityPercent}%</span>
+                    <div class="form-section" style="margin-bottom: 0;">
+                        <div class="form-section-title">
+                            <span class="section-icon">📊</span>
+                            <span>质量评估</span>
                         </div>
-                        <div class="quality-item">
-                            <span class="label">信噪比:</span>
-                            <span class="value">${data.snr?.toFixed(1) || '--'} dB</span>
+                        <div class="form-section-content">
+                            <div class="quality-warning-info" style="background: transparent; padding: 0;">
+                                <div class="quality-item">
+                                    <span class="label">质量评分:</span>
+                                    <span class="value ${qualityPercent < 60 ? 'bad' : 'warning'}">${qualityPercent}%</span>
+                                </div>
+                                <div class="quality-item">
+                                    <span class="label">信噪比:</span>
+                                    <span class="value">${data.snr?.toFixed(1) || '--'} dB</span>
+                                </div>
+                                <div class="quality-item">
+                                    <span class="label">时间差:</span>
+                                    <span class="value">${data.time_diff?.toFixed(2) || '--'} ns</span>
+                                </div>
+                                <div class="quality-item">
+                                    <span class="label">应力值:</span>
+                                    <span class="value">${data.stress?.toFixed(1) || '--'} MPa</span>
+                                </div>
+                            </div>
+                            <div class="quality-warning-message" style="margin-top: 12px; padding: 10px; background: #fff8e1; border-radius: 6px; border-left: 3px solid #ff9800;">
+                                <p style="margin: 0 0 4px 0;">波形质量较低，可能影响测量精度。</p>
+                                <p style="margin: 0; font-size: 12px; color: #666;">建议：检查探头耦合、调整示波器设置或重新采集。</p>
+                            </div>
                         </div>
-                        <div class="quality-item">
-                            <span class="label">时间差:</span>
-                            <span class="value">${data.time_diff?.toFixed(2) || '--'} ns</span>
-                        </div>
-                        <div class="quality-item">
-                            <span class="label">应力值:</span>
-                            <span class="value">${data.stress?.toFixed(1) || '--'} MPa</span>
-                        </div>
-                    </div>
-                    <div class="quality-warning-message">
-                        <p>波形质量较低，可能影响测量精度。</p>
-                        <p>建议：检查探头耦合、调整示波器设置或重新采集。</p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -573,39 +581,47 @@ const FieldCapturePanel = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-content field-modal modal-sm">
                 <div class="modal-header">
                     <h3>🔧 降噪设置</h3>
                     <button class="modal-close" onclick="document.getElementById('field-denoise-modal').remove()">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>降噪方法</label>
-                        <select id="field-denoise-method" class="form-control">
-                            <option value="wavelet" selected>小波降噪</option>
-                            <option value="savgol">Savitzky-Golay滤波</option>
-                            <option value="none">不降噪</option>
-                        </select>
-                    </div>
-                    <div id="field-denoise-wavelet-params">
-                        <div class="form-group">
-                            <label>小波基</label>
-                            <select id="field-denoise-wavelet" class="form-control">
-                                <option value="sym6" selected>sym6</option>
-                                <option value="db4">db4</option>
-                                <option value="coif3">coif3</option>
-                            </select>
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📉</span>
+                            <span>降噪参数</span>
                         </div>
-                        <div class="form-group">
-                            <label>分解层数</label>
-                            <input type="number" id="field-denoise-level" class="form-control" value="5" min="1" max="10">
-                        </div>
-                        <div class="form-group">
-                            <label>阈值模式</label>
-                            <select id="field-denoise-threshold-mode" class="form-control">
-                                <option value="soft" selected>软阈值</option>
-                                <option value="hard">硬阈值</option>
-                            </select>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>降噪方法</label>
+                                <select id="field-denoise-method" class="form-input">
+                                    <option value="wavelet" selected>小波降噪</option>
+                                    <option value="savgol">Savitzky-Golay滤波</option>
+                                    <option value="none">不降噪</option>
+                                </select>
+                            </div>
+                            <div id="field-denoise-wavelet-params">
+                                <div class="form-group">
+                                    <label>小波基</label>
+                                    <select id="field-denoise-wavelet" class="form-input">
+                                        <option value="sym6" selected>sym6</option>
+                                        <option value="db4">db4</option>
+                                        <option value="coif3">coif3</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>分解层数</label>
+                                    <input type="number" id="field-denoise-level" class="form-input" value="5" min="1" max="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>阈值模式</label>
+                                    <select id="field-denoise-threshold-mode" class="form-input">
+                                        <option value="soft" selected>软阈值</option>
+                                        <option value="hard">硬阈值</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

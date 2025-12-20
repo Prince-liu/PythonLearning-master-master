@@ -1,0 +1,331 @@
+/* ==================== 应力模块通用样式 ==================== */
+/* 弹窗、表单等共用样式 */
+
+/* ==================== 通用弹窗样式 ==================== */
+
+/* 统一弹窗容器 */
+.field-modal {
+    max-width: 520px;
+    width: 95%;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.field-modal.modal-sm { max-width: 400px; }
+.field-modal.modal-md { max-width: 520px; }
+.field-modal.modal-lg { max-width: 700px; }
+
+/* 弹窗头部 */
+.field-modal .modal-header {
+    padding: 16px 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 12px 12px 0 0;
+}
+
+.field-modal .modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.field-modal .modal-header.warning {
+    background: #fff8e1;
+    border-bottom-color: #ffe082;
+}
+
+/* 弹窗内容 */
+.field-modal .modal-body {
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* 弹窗底部 */
+.field-modal .modal-footer {
+    padding: 16px 20px;
+    background: #f9f9f9;
+    border-top: 1px solid #e5e7eb;
+    border-radius: 0 0 12px 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 弹窗按钮 */
+.field-modal .btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.field-modal .btn-secondary {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    color: #666;
+}
+
+.field-modal .btn-secondary:hover {
+    background: #eee;
+    border-color: #ccc;
+}
+
+.field-modal .btn-primary {
+    background: #4CAF50;
+    border: none;
+    color: #fff;
+}
+
+.field-modal .btn-primary:hover {
+    background: #43a047;
+}
+
+.field-modal .btn-warning {
+    background: #ff9800;
+    border: none;
+    color: #fff;
+}
+
+.field-modal .btn-warning:hover {
+    background: #f57c00;
+}
+
+.field-modal .btn-danger {
+    background: #f44336;
+    border: none;
+    color: #fff;
+}
+
+.field-modal .btn-danger:hover {
+    background: #d32f2f;
+}
+
+/* 弹窗表单组 */
+.field-modal .form-group {
+    margin-bottom: 14px;
+}
+
+.field-modal .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.field-modal .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+    margin-bottom: 6px;
+}
+
+.field-modal .form-group label .required {
+    color: #e53935;
+    margin-left: 2px;
+}
+
+/* 弹窗表单行 */
+.field-modal .form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.field-modal .form-row .form-group {
+    flex: 1;
+}
+
+/* 确认对话框样式 */
+.field-modal .confirm-message {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.6;
+    white-space: pre-line;
+    margin-bottom: 0;
+}
+
+/* ==================== 新建实验弹窗样式（兼容旧类名）==================== */
+
+.field-create-modal {
+    max-width: 520px;
+    width: 95%;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.field-create-modal .modal-body {
+    padding: 20px;
+}
+
+/* 表单分区 */
+.form-section {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.form-section.optional {
+    border-color: #e8e8e8;
+    background: #fafafa;
+}
+
+.form-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f5f7fa;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.form-section.optional .form-section-title {
+    background: #f0f0f0;
+    border-bottom-color: #e8e8e8;
+}
+
+.section-icon {
+    font-size: 16px;
+}
+
+.required-hint {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: #e53935;
+    background: #ffebee;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.optional-hint {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: #757575;
+    background: #eeeeee;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.form-section-content {
+    padding: 16px;
+}
+
+/* 表单组 */
+.field-create-modal .form-group {
+    margin-bottom: 14px;
+}
+
+.field-create-modal .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.field-create-modal .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+    margin-bottom: 6px;
+}
+
+.field-create-modal .form-group label .required {
+    color: #e53935;
+    margin-left: 2px;
+}
+
+/* 表单行（并排） */
+.field-create-modal .form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.field-create-modal .form-row .form-group {
+    flex: 1;
+}
+
+/* 输入框样式 */
+.form-input {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    background: #fff;
+    color: #333;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+}
+
+.form-input::placeholder {
+    color: #aaa;
+}
+
+textarea.form-input {
+    resize: vertical;
+    min-height: 60px;
+}
+
+/* 数字输入框 */
+input[type="number"].form-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+input[type="number"].form-input::-webkit-outer-spin-button,
+input[type="number"].form-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* 弹窗底部按钮 */
+.field-create-modal .modal-footer {
+    padding: 16px 20px;
+    background: #f9f9f9;
+    border-top: 1px solid #e5e7eb;
+    border-radius: 0 0 12px 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.field-create-modal .btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.field-create-modal .btn-secondary {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    color: #666;
+}
+
+.field-create-modal .btn-secondary:hover {
+    background: #eee;
+    border-color: #ccc;
+}
+
+.field-create-modal .btn-primary {
+    background: #4CAF50;
+    border: none;
+    color: #fff;
+}
+
+.field-create-modal .btn-primary:hover {
+    background: #43a047;
+}

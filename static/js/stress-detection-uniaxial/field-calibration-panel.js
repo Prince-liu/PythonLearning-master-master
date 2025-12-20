@@ -77,12 +77,12 @@ const FieldCalibrationPanel = (function() {
         overlay.style.display = 'flex';
         
         overlay.innerHTML = `
-            <div class="modal-content" style="max-width: 600px; max-height: 70vh;">
+            <div class="modal-content field-modal modal-lg" style="max-height: 75vh;">
                 <div class="modal-header">
-                    <h3>选择标定实验</h3>
+                    <h3>📊 选择标定实验</h3>
                     <button class="modal-close" onclick="document.getElementById('field-calib-select-modal').remove()">×</button>
                 </div>
-                <div class="modal-body" style="overflow-y: auto; max-height: 50vh;">
+                <div class="modal-body" style="max-height: 55vh;">
                     <div id="field-calib-exp-list" class="experiment-list">
                         <div class="loading">加载中...</div>
                     </div>
