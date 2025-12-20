@@ -530,6 +530,9 @@ class FieldDatabaseManager:
         for row in cursor.fetchall():
             exp = dict(row)
             
+            # 添加 experiment_id 字段（前端使用）
+            exp['experiment_id'] = exp['id']
+            
             # 统计测点数
             cursor.execute('''
                 SELECT COUNT(*) as total,

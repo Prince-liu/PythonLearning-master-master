@@ -12,6 +12,16 @@ const FieldLayoutPanel = (function() {
     // 当前布点类型
     let 当前布点类型 = 'grid';  // 'grid' | 'polar' | 'adaptive' | 'custom'
     
+    // 边距设置
+    let 边距设置 = {
+        mode: 'uniform',  // 'uniform' | 'separate'
+        uniform: 10,
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10
+    };
+    
     // ========== 初始化 ==========
     function 初始化(state, els, cbs) {
         实验状态 = state;
@@ -30,6 +40,12 @@ const FieldLayoutPanel = (function() {
                 切换布点类型(this.value);
             });
         });
+        
+        // 边距设置按钮
+        const marginBtn = document.getElementById('field-layout-margin-btn');
+        if (marginBtn) {
+            marginBtn.addEventListener('click', 打开边距设置弹窗);
+        }
         
         // 生成测点按钮
         const generateBtn = document.getElementById('field-layout-generate');
@@ -53,6 +69,159 @@ const FieldLayoutPanel = (function() {
         const importBtn = document.getElementById('field-layout-import');
         if (importBtn) {
             importBtn.addEventListener('click', 导入CSV);
+        }
+    }
+    
+    // ========== 打开边距设置弹窗 ==========
+    function 打开边距设置弹窗() {
+        // 创建弹窗
+        const modal = document.createElement('div');
+        modal.className = 'field-margin-modal';
+        modal.innerHTML = `
+            <div class="field-margin-modal-content">
+                <div class="field-margin-modal-header">
+                    <span>边距设置</span>
+                    <span class="close-btn">×</span>
+                </div>
+                <div class="field-margin-modal-body">
+                    <div class="field-margin-mode-group">
+                        <label class="field-margin-mode-option">
+                            <input type="radio" name="margin-mode" value="uniform" ${边距设置.mode === 'uniform' ? 'checked' : ''}>
+                            <span>统一边距</span>
+                        </label>
+                        <div class="field-margin-uniform-input">
+                            <input type="number" id="margin-uniform-value" value="${边距设置.uniform}" min="0" step="1">
+                            <span>mm</span>
+                        </div>
+                        
+                        <label class="field-margin-mode-option">
+                            <input type="radio" name="margin-mode" value="separate" ${边距设置.mode === 'separate' ? 'checked' : ''}>
+                            <span>分别设置</span>
+                        </label>
+                        <div class="field-margin-separate-inputs ${边距设置.mode === 'separate' ? 'active' : ''}">
+                            <div class="field-margin-separate-row">
+                                <div class="field-margin-separate-item">
+                                    <label>上边距 (mm)</label>
+                                    <input type="number" id="margin-top-value" value="${边距设置.top}" min="0" step="1">
+                                </div>
+                                <div class="field-margin-separate-item">
+                                    <label>下边距 (mm)</label>
+                                    <input type="number" id="margin-bottom-value" value="${边距设置.bottom}" min="0" step="1">
+                                </div>
+                            </div>
+                            <div class="field-margin-separate-row">
+                                <div class="field-margin-separate-item">
+                                    <label>左边距 (mm)</label>
+                                    <input type="number" id="margin-left-value" value="${边距设置.left}" min="0" step="1">
+                                </div>
+                                <div class="field-margin-separate-item">
+                                    <label>右边距 (mm)</label>
+                                    <input type="number" id="margin-right-value" value="${边距设置.right}" min="0" step="1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field-margin-hint">
+                        💡 边距是指测点区域到试件边缘的距离
+                    </div>
+                </div>
+                <div class="field-margin-modal-footer">
+                    <button class="btn btn-secondary cancel-btn">取消</button>
+                    <button class="btn btn-primary confirm-btn">确定</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // 绑定模式切换
+        const modeRadios = modal.querySelectorAll('input[name="margin-mode"]');
+        const separateInputs = modal.querySelector('.field-margin-separate-inputs');
+        
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'separate') {
+                    separateInputs.classList.add('active');
+                } else {
+                    separateInputs.classList.remove('active');
+                }
+            });
+        });
+        
+        // 绑定关闭按钮
+        modal.querySelector('.close-btn').onclick = () => modal.remove();
+        modal.querySelector('.cancel-btn').onclick = () => modal.remove();
+        
+        // 绑定确定按钮
+        modal.querySelector('.confirm-btn').onclick = () => {
+            const mode = modal.querySelector('input[name="margin-mode"]:checked').value;
+            
+            if (mode === 'uniform') {
+                const value = parseFloat(modal.querySelector('#margin-uniform-value').value) || 10;
+                边距设置.mode = 'uniform';
+                边距设置.uniform = value;
+                边距设置.top = value;
+                边距设置.bottom = value;
+                边距设置.left = value;
+                边距设置.right = value;
+            } else {
+                边距设置.mode = 'separate';
+                边距设置.top = parseFloat(modal.querySelector('#margin-top-value').value) || 10;
+                边距设置.bottom = parseFloat(modal.querySelector('#margin-bottom-value').value) || 10;
+                边距设置.left = parseFloat(modal.querySelector('#margin-left-value').value) || 10;
+                边距设置.right = parseFloat(modal.querySelector('#margin-right-value').value) || 10;
+            }
+            
+            // 更新隐藏字段
+            更新边距隐藏字段();
+            
+            // 更新显示
+            更新边距显示();
+            
+            modal.remove();
+            callbacks?.显示状态信息('✅', '边距设置已更新', '', 'success');
+        };
+        
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+    
+    // ========== 更新边距隐藏字段 ==========
+    function 更新边距隐藏字段() {
+        const topEl = document.getElementById('field-layout-grid-margin-top');
+        const bottomEl = document.getElementById('field-layout-grid-margin-bottom');
+        const leftEl = document.getElementById('field-layout-grid-margin-left');
+        const rightEl = document.getElementById('field-layout-grid-margin-right');
+        const modeEl = document.getElementById('field-layout-margin-mode');
+        
+        if (topEl) topEl.value = 边距设置.top;
+        if (bottomEl) bottomEl.value = 边距设置.bottom;
+        if (leftEl) leftEl.value = 边距设置.left;
+        if (rightEl) rightEl.value = 边距设置.right;
+        if (modeEl) modeEl.value = 边距设置.mode;
+    }
+    
+    // ========== 更新边距显示 ==========
+    function 更新边距显示() {
+        const display = document.getElementById('field-layout-margin-display');
+        if (!display) return;
+        
+        if (边距设置.mode === 'uniform') {
+            display.textContent = `统一: ${边距设置.uniform}`;
+        } else {
+            // 分别设置模式
+            // 检查是否四边相同
+            if (边距设置.top === 边距设置.bottom && 
+                边距设置.left === 边距设置.right && 
+                边距设置.top === 边距设置.left) {
+                display.textContent = `${边距设置.top} (四边)`;
+            } else {
+                display.textContent = `上${边距设置.top} 下${边距设置.bottom} 左${边距设置.left} 右${边距设置.right}`;
+            }
         }
     }
     
@@ -80,10 +249,12 @@ const FieldLayoutPanel = (function() {
             case 'grid':
                 params.rows = parseInt(document.getElementById('field-layout-grid-rows')?.value) || 5;
                 params.cols = parseInt(document.getElementById('field-layout-grid-cols')?.value) || 5;
-                params.margin_left = parseFloat(document.getElementById('field-layout-grid-margin-left')?.value) || 10;
-                params.margin_right = parseFloat(document.getElementById('field-layout-grid-margin-right')?.value) || 10;
-                params.margin_top = parseFloat(document.getElementById('field-layout-grid-margin-top')?.value) || 10;
-                params.margin_bottom = parseFloat(document.getElementById('field-layout-grid-margin-bottom')?.value) || 10;
+                
+                // 使用边距设置对象
+                params.margin_left = 边距设置.left;
+                params.margin_right = 边距设置.right;
+                params.margin_top = 边距设置.top;
+                params.margin_bottom = 边距设置.bottom;
                 
                 // 检查是否使用变间距
                 const useVariableSpacing = document.getElementById('field-layout-grid-variable')?.checked;

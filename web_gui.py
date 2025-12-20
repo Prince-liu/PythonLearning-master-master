@@ -373,12 +373,12 @@ class WebAPI:
             calibration = config_snapshot.get('calibration', {})
             k = calibration.get('k', 0)
             
-            if k > 0:
-                self.field_capture.set_experiment(
-                    exp_id, 
-                    self.field_experiment.current_hdf5,
-                    k
-                )
+            # 无论是否有标定数据，都设置采集器的当前实验
+            self.field_capture.set_experiment(
+                exp_id, 
+                self.field_experiment.current_hdf5,
+                k if k > 0 else 1.0  # 如果没有标定数据，使用默认值1.0
+            )
             
             # 初始化云图生成器
             self.contour_generator = ContourGenerator(exp_id)

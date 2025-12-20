@@ -156,8 +156,8 @@ class PointGenerator:
             center_y = params.get('center_y', default_cy)
             
             # 径向参数
-            r_start = params.get('r_start', 0)
-            r_end = params.get('r_end', 50)
+            r_start = params.get('r_start', params.get('r_min', 0))
+            r_end = params.get('r_end', params.get('r_max', 50))
             r_count = params.get('r_count', 5)
             
             # 角度参数
@@ -167,18 +167,21 @@ class PointGenerator:
             
             all_points = []
             
-            # 是否包含中心点
-            if params.get('include_center', True) and r_start == 0:
+            # 检查圆心是否可以设点（在形状内且不在孔洞内）
+            include_center = params.get('include_center', True)
+            center_is_valid = ShapeUtils.is_point_inside(center_x, center_y, shape_config, check_modifiers=True)
+            
+            # 如果圆心可设点，添加圆心点
+            if include_center and center_is_valid:
                 all_points.append({
                     'x': center_x,
                     'y': center_y,
                     'r': 0,
                     'theta': 0
                 })
-                # 如果起始半径为0，从第二层开始
-                r_values = np.linspace(r_start, r_end, r_count + 1)[1:] if r_start == 0 else np.linspace(r_start, r_end, r_count)
-            else:
-                r_values = np.linspace(r_start, r_end, r_count)
+            
+            # 生成径向层的半径值
+            r_values = np.linspace(r_start, r_end, r_count)
             
             # 生成每层的点
             points_per_ring = params.get('points_per_ring', [])

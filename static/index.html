@@ -770,9 +770,19 @@
                                         <div class="form-group"><label>行数</label><input type="number" id="field-layout-grid-rows" class="form-control" value="5" min="1"></div>
                                         <div class="form-group"><label>列数</label><input type="number" id="field-layout-grid-cols" class="form-control" value="5" min="1"></div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group"><label>边距(mm)</label><input type="number" id="field-layout-grid-margin-left" class="form-control" value="10" min="0"></div>
+                                    <div class="form-group">
+                                        <label>边距(mm)</label>
+                                        <div class="field-margin-display">
+                                            <span id="field-layout-margin-display">统一: 10</span>
+                                            <button type="button" id="field-layout-margin-btn" class="btn btn-secondary btn-xs">设置</button>
+                                        </div>
                                     </div>
+                                    <!-- 隐藏的边距值存储 -->
+                                    <input type="hidden" id="field-layout-grid-margin-top" value="10">
+                                    <input type="hidden" id="field-layout-grid-margin-bottom" value="10">
+                                    <input type="hidden" id="field-layout-grid-margin-left" value="10">
+                                    <input type="hidden" id="field-layout-grid-margin-right" value="10">
+                                    <input type="hidden" id="field-layout-margin-mode" value="uniform">
                                 </div>
                                 <!-- 极坐标参数 -->
                                 <div id="field-layout-polar-params" class="field-layout-params" style="display:none;">
@@ -830,6 +840,29 @@
                                 <div class="field-panel-actions">
                                     <button id="field-baseline-view" class="btn btn-secondary btn-sm">👁️ 查看波形</button>
                                     <button id="field-baseline-change" class="btn btn-primary btn-sm">🔄 更换基准点</button>
+                                </div>
+                                
+                                <!-- 应力计算模式 -->
+                                <div class="field-stress-mode-section">
+                                    <div class="section-divider"></div>
+                                    <div class="field-stress-mode-title">应力计算模式:</div>
+                                    <div class="field-stress-mode-options">
+                                        <label class="field-radio-option">
+                                            <input type="radio" name="field-stress-mode" value="relative" checked>
+                                            <span class="radio-label">相对应力模式（基准点 = 0 MPa）</span>
+                                        </label>
+                                        <label class="field-radio-option">
+                                            <input type="radio" name="field-stress-mode" value="absolute">
+                                            <span class="radio-label">绝对应力模式</span>
+                                        </label>
+                                    </div>
+                                    <div id="field-absolute-stress-input" class="field-absolute-stress-input" style="display: none;">
+                                        <label class="field-input-label">
+                                            基准点应力值 (MPa):
+                                            <input type="number" id="field-baseline-stress-value" value="0" step="0.1">
+                                        </label>
+                                        <div class="field-input-hint">💡 正值=拉应力，负值=压应力</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1023,19 +1056,26 @@
                         </div>
                     </div>
                     
+                    <!-- 上下拖拽分割条 -->
+                    <div class="field-resize-handle field-resize-vertical" id="field-resize-vertical"></div>
+                    
                     <!-- 下半区：预览画布 + 云图 -->
                     <div class="field-bottom-section">
                         <!-- 预览画布 -->
-                        <div class="field-preview-container">
-                            <div class="field-canvas-header">
+                        <div class="field-preview-container" id="field-preview-container">
+                            <div class="field-canvas-header field-collapsible-header" data-target="preview">
                                 <span>📐 测点预览</span>
+                                <span class="collapse-icon">▼</span>
                             </div>
                             <canvas id="field-preview-canvas"></canvas>
                         </div>
+                        <!-- 左右拖拽分割条 -->
+                        <div class="field-resize-handle field-resize-horizontal" id="field-resize-horizontal"></div>
                         <!-- 云图显示 -->
-                        <div class="field-contour-container">
-                            <div class="field-canvas-header">
+                        <div class="field-contour-container" id="field-contour-container">
+                            <div class="field-canvas-header field-collapsible-header" data-target="contour">
                                 <span>🌈 应力云图</span>
+                                <span class="collapse-icon">▼</span>
                             </div>
                             <canvas id="field-contour-canvas"></canvas>
                         </div>
@@ -1128,6 +1168,7 @@
     <!-- 单轴应力检测模块 - 应力场测绘 -->
     <script src="js/stress-detection-uniaxial/field-canvas.js"></script>
     <script src="js/stress-detection-uniaxial/field-contour.js"></script>
+    <script src="js/stress-detection-uniaxial/field-resizer.js"></script>
     <script src="js/stress-detection-uniaxial/field-calibration-panel.js"></script>
     <script src="js/stress-detection-uniaxial/field-shape-panel.js"></script>
     <script src="js/stress-detection-uniaxial/field-layout-panel.js"></script>

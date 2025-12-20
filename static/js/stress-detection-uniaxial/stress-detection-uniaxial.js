@@ -8,14 +8,18 @@ const StressDetectionUniaxialModule = (function() {
     let 实验状态 = {
         当前实验: null,           // 当前加载的实验对象
         标定数据: null,           // 标定系数信息
+        标定系数: 0,              // 应力系数 k (MPa/ns)
         形状配置: null,           // 形状定义
         测点列表: [],             // 生成的测点
-        已测点列表: [],           // 已采集的测点
+        已测点列表: [],           // 已采集的测点索引
+        已测点数据: [],           // 已采集的测点数据（含应力值）
         基准点ID: null,           // 基准测点ID
         当前测点索引: 0,          // 当前采集的测点索引
         实时监控中: false,        // 监控状态
         云图数据: null,           // 云图插值数据
-        自动保存状态: 'idle'      // 'idle' | 'saving' | 'saved' | 'error'
+        自动保存状态: 'idle',     // 'idle' | 'saving' | 'saved' | 'error'
+        应力计算模式: 'relative', // 'relative' | 'absolute'
+        基准点应力值: 0           // 绝对应力模式下的基准点应力值 (MPa)
     };
     
     // DOM 元素缓存
@@ -164,6 +168,79 @@ const StressDetectionUniaxialModule = (function() {
                 // TODO: 打开基准点选择对话框
                 显示状态信息('ℹ️', '选择新的基准点', '请在预览画布中点击测点', 'info');
             });
+        }
+        
+        // 应力计算模式切换
+        const stressModeRadios = document.querySelectorAll('input[name="field-stress-mode"]');
+        const absoluteStressInput = document.getElementById('field-absolute-stress-input');
+        const baselineStressValue = document.getElementById('field-baseline-stress-value');
+        
+        stressModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const mode = e.target.value;
+                实验状态.应力计算模式 = mode;
+                
+                // 显示/隐藏绝对应力输入框
+                if (absoluteStressInput) {
+                    absoluteStressInput.style.display = mode === 'absolute' ? 'block' : 'none';
+                }
+                
+                // 更新应力值显示
+                if (mode === 'relative') {
+                    实验状态.基准点应力值 = 0;
+                    显示状态信息('✅', '已切换到相对应力模式', '基准点应力 = 0 MPa', 'success');
+                } else {
+                    const value = parseFloat(baselineStressValue?.value) || 0;
+                    实验状态.基准点应力值 = value;
+                    显示状态信息('✅', '已切换到绝对应力模式', `基准点应力 = ${value} MPa`, 'success');
+                }
+                
+                // 重新计算所有测点的应力值
+                重新计算应力值();
+            });
+        });
+        
+        // 基准点应力值输入
+        if (baselineStressValue) {
+            baselineStressValue.addEventListener('change', (e) => {
+                const value = parseFloat(e.target.value) || 0;
+                实验状态.基准点应力值 = value;
+                
+                if (实验状态.应力计算模式 === 'absolute') {
+                    显示状态信息('✅', '基准点应力值已更新', `${value} MPa`, 'success');
+                    // 重新计算所有测点的应力值
+                    重新计算应力值();
+                }
+            });
+        }
+    }
+    
+    // ========== 重新计算应力值 ==========
+    function 重新计算应力值() {
+        // 如果没有已测点，直接返回
+        if (!实验状态.已测点数据 || 实验状态.已测点数据.length === 0) {
+            return;
+        }
+        
+        const k = 实验状态.标定系数;
+        const baselineStress = 实验状态.基准点应力值 || 0;
+        
+        // 更新每个测点的应力值
+        实验状态.已测点数据.forEach(point => {
+            if (point.time_diff !== undefined && point.time_diff !== null) {
+                // σ = σ_基准 + k × Δt
+                point.stress_value = baselineStress + k * point.time_diff;
+            }
+        });
+        
+        // 更新表格显示
+        if (typeof FieldCapturePanel !== 'undefined' && FieldCapturePanel.更新数据表格) {
+            FieldCapturePanel.更新数据表格();
+        }
+        
+        // 更新云图
+        if (typeof FieldContour !== 'undefined' && FieldContour.更新云图) {
+            FieldContour.更新云图();
         }
     }
     
@@ -315,6 +392,17 @@ const StressDetectionUniaxialModule = (function() {
             子模块.云图显示 = FieldContour;
             子模块.云图显示.初始化(实验状态, elements.contourCanvas, {
                 显示状态信息
+            });
+        }
+        
+        // 面板拖拽和折叠模块
+        if (typeof FieldResizer !== 'undefined') {
+            FieldResizer.初始化({
+                刷新画布: () => {
+                    子模块.预览画布?.调整尺寸?.();
+                    子模块.云图显示?.调整尺寸?.();
+                    子模块.采集面板?.调整波形画布?.();
+                }
             });
         }
     }

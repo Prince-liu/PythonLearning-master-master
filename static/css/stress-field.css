@@ -81,9 +81,10 @@
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     min-height: 0;
     padding-right: 4px;
+    padding-bottom: 10px;
 }
 
 .field-panels-container::-webkit-scrollbar {
@@ -111,6 +112,7 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     overflow: visible;
     flex-shrink: 0;
+    position: relative;
 }
 
 .field-panel-header {
@@ -147,6 +149,8 @@
 
 .field-panel-body {
     padding: 12px;
+    padding-bottom: 14px;
+    overflow: visible;
 }
 
 /* 状态徽章 */
@@ -219,6 +223,8 @@
     display: flex;
     gap: 6px;
     margin-top: 10px;
+    position: relative;
+    z-index: 1;
 }
 
 .field-panel-actions .btn {
@@ -375,17 +381,18 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
     min-width: 0;
     overflow: hidden;
 }
 
 /* 上半区 */
 .field-top-section {
-    flex: 0 0 45%;
+    flex: 1;
     display: flex;
     gap: 10px;
-    min-height: 0;
+    min-height: 150px;
+    transition: flex 0.1s ease;
 }
 
 /* 数据表格容器 */
@@ -488,8 +495,39 @@
 .field-bottom-section {
     flex: 1;
     display: flex;
-    gap: 10px;
-    min-height: 0;
+    gap: 0;
+    min-height: 150px;
+}
+
+/* 拖拽分割条 */
+.field-resize-handle {
+    background: #e0e0e0;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.field-resize-handle:hover {
+    background: #4CAF50;
+}
+
+.field-resize-handle.active {
+    background: #4CAF50;
+}
+
+/* 垂直拖拽条（上下调节） */
+.field-resize-vertical {
+    height: 6px;
+    cursor: ns-resize;
+    margin: 2px 0;
+    border-radius: 3px;
+}
+
+/* 水平拖拽条（左右调节） */
+.field-resize-horizontal {
+    width: 6px;
+    cursor: ew-resize;
+    margin: 0 2px;
+    border-radius: 3px;
 }
 
 /* 预览画布容器 */
@@ -502,6 +540,62 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-width: 0;
+    transition: flex 0.3s ease;
+}
+
+/* 折叠状态 - 水平收起 */
+.field-preview-container.collapsed,
+.field-contour-container.collapsed {
+    flex: 0 0 40px !important;
+    min-width: 40px;
+    max-width: 40px;
+}
+
+.field-preview-container.collapsed .field-canvas-header,
+.field-contour-container.collapsed .field-canvas-header {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 12px 10px;
+    height: 100%;
+    box-sizing: border-box;
+    justify-content: flex-start;
+    border-bottom: none;
+    border-right: 1px solid #eee;
+}
+
+.field-preview-container.collapsed canvas,
+.field-contour-container.collapsed canvas {
+    display: none;
+}
+
+/* 可折叠标题栏 */
+.field-collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.field-collapsible-header:hover {
+    background: #f0f0f0;
+}
+
+.field-collapsible-header .collapse-icon {
+    font-size: 10px;
+    color: #999;
+    transition: transform 0.3s;
+}
+
+/* 预览面板折叠时图标向左 */
+.field-preview-container.collapsed .field-collapsible-header .collapse-icon {
+    transform: rotate(90deg);
+}
+
+/* 云图面板折叠时图标向右 */
+.field-contour-container.collapsed .field-collapsible-header .collapse-icon {
+    transform: rotate(-90deg);
 }
 
 .field-canvas-header {
@@ -522,7 +616,7 @@
 /* 状态栏 */
 .field-status-bar {
     position: absolute;
-    bottom: 20px;
+    top: 20px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -533,11 +627,11 @@
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     z-index: 100;
-    animation: slideUp 0.3s ease;
+    animation: slideDown 0.3s ease;
 }
 
-@keyframes slideUp {
-    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+@keyframes slideDown {
+    from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
@@ -864,4 +958,252 @@
     background: #fff8e1;
     border-radius: 4px;
     border-left: 3px solid #ff9800;
+}
+
+
+/* 应力计算模式样式 */
+.field-stress-mode-section {
+    margin-top: 12px;
+}
+
+.field-stress-mode-section .section-divider {
+    height: 1px;
+    background: #e0e0e0;
+    margin-bottom: 12px;
+}
+
+.field-stress-mode-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.field-stress-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.field-radio-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+}
+
+.field-radio-option input[type="radio"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: #4CAF50;
+}
+
+.field-radio-option .radio-label {
+    flex: 1;
+}
+
+.field-absolute-stress-input {
+    margin-top: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #2196F3;
+}
+
+.field-absolute-stress-input .field-input-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #555;
+}
+
+.field-absolute-stress-input input[type="number"] {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: right;
+}
+
+.field-absolute-stress-input input[type="number"]:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.field-input-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+}
+
+
+/* 边距设置显示区域 */
+.field-margin-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.field-margin-display span {
+    flex: 1;
+    color: #333;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.field-margin-display .btn-xs {
+    padding: 2px 8px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* 边距设置弹窗 */
+.field-margin-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.field-margin-modal-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    width: 320px;
+    max-width: 90%;
+}
+
+.field-margin-modal-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.field-margin-modal-header .close-btn {
+    cursor: pointer;
+    font-size: 18px;
+    color: #999;
+    line-height: 1;
+}
+
+.field-margin-modal-header .close-btn:hover {
+    color: #333;
+}
+
+.field-margin-modal-body {
+    padding: 16px;
+}
+
+.field-margin-mode-group {
+    margin-bottom: 16px;
+}
+
+.field-margin-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+}
+
+.field-margin-mode-option input[type="radio"] {
+    accent-color: #4CAF50;
+}
+
+.field-margin-uniform-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 22px;
+    margin-bottom: 12px;
+}
+
+.field-margin-uniform-input input {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.field-margin-separate-inputs {
+    margin-left: 22px;
+    display: none;
+}
+
+.field-margin-separate-inputs.active {
+    display: block;
+}
+
+.field-margin-separate-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.field-margin-separate-item {
+    flex: 1;
+}
+
+.field-margin-separate-item label {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.field-margin-separate-item input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.field-margin-hint {
+    margin-top: 12px;
+    padding: 8px;
+    background: #E3F2FD;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #1976D2;
+}
+
+.field-margin-modal-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.field-margin-modal-footer .btn {
+    padding: 6px 16px;
+    font-size: 13px;
 }

@@ -294,19 +294,29 @@ class ShapeUtils:
             # 计算到圆心的距离
             dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
             
-            # 检查半径范围
-            if not (inner_r <= dist <= outer_r):
+            # 检查半径范围（加入小容差处理浮点数精度问题）
+            tolerance = 1e-6
+            if not (inner_r - tolerance <= dist <= outer_r + tolerance):
                 inside_base = False
             else:
                 # 检查角度范围
-                angle = np.degrees(np.arctan2(y - cy, x - cx))
-                if angle < 0:
-                    angle += 360
-                
-                if start_angle <= end_angle:
-                    inside_base = start_angle <= angle <= end_angle
+                # 如果是完整圆（360度），直接通过
+                if abs(end_angle - start_angle) >= 360:
+                    inside_base = True
                 else:
-                    inside_base = angle >= start_angle or angle <= end_angle
+                    angle = np.degrees(np.arctan2(y - cy, x - cx))
+                    if angle < 0:
+                        angle += 360
+                    
+                    # 规范化起始和结束角度到 [0, 360)
+                    start_norm = start_angle % 360
+                    end_norm = end_angle % 360
+                    
+                    if start_norm <= end_norm:
+                        inside_base = start_norm <= angle <= end_norm
+                    else:
+                        # 跨越0度的情况
+                        inside_base = angle >= start_norm or angle <= end_norm
         
         elif shape_type == 'polygon':
             vertices = shape_config.get('vertices', [])
