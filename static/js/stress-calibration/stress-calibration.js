@@ -28,40 +28,28 @@ const StressCalibrationModule = (function() {
             overlay.className = 'modal';
             overlay.style.display = 'flex';
             
-            // 创建对话框内容
-            const content = document.createElement('div');
-            content.className = 'modal-content';
-            content.style.maxWidth = '500px';
-            
-            // 创建头部
-            const header = document.createElement('div');
-            header.className = 'modal-header';
-            header.innerHTML = `
-                <h3>${标题}</h3>
-                <button class="modal-close">×</button>
-            `;
-            
-            // 创建主体
-            const body = document.createElement('div');
-            body.className = 'modal-body';
-            body.innerHTML = `
-                <p style="margin-bottom: 20px; color: #333; white-space: pre-line; line-height: 1.6;">${消息}</p>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button class="btn btn-secondary cancel-btn">取消</button>
-                    <button class="btn btn-primary confirm-btn">确定</button>
+            overlay.innerHTML = `
+                <div class="modal-content field-modal modal-sm">
+                    <div class="modal-header">
+                        <h3>${标题}</h3>
+                        <button class="modal-close">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="confirm-message">${消息}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary cancel-btn">取消</button>
+                        <button class="btn btn-primary confirm-btn">确定</button>
+                    </div>
                 </div>
             `;
             
-            // 组装对话框
-            content.appendChild(header);
-            content.appendChild(body);
-            overlay.appendChild(content);
             document.body.appendChild(overlay);
             
             // 绑定事件
-            const closeBtn = header.querySelector('.modal-close');
-            const cancelBtn = body.querySelector('.cancel-btn');
-            const confirmBtn = body.querySelector('.confirm-btn');
+            const closeBtn = overlay.querySelector('.modal-close');
+            const cancelBtn = overlay.querySelector('.cancel-btn');
+            const confirmBtn = overlay.querySelector('.confirm-btn');
             
             const cleanup = () => {
                 document.body.removeChild(overlay);

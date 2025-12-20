@@ -1054,37 +1054,42 @@
 
     <!-- 🆕 实验管理对话框 -->
     <div id="experimentManagerModal" class="modal" style="display: none;">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content field-modal modal-lg" style="max-height: 80vh;">
             <div class="modal-header">
                 <h3>📂 实验数据管理</h3>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <button class="btn btn-primary btn-sm" onclick="StressCalibrationModule.导出全部数据()">📊 导出全部数据</button>
-                    <button id="deleteAllDataBtn" class="btn btn-danger btn-sm" onclick="StressCalibrationModule.删除全部数据()">🗑️ 删除全部数据</button>
+                    <button class="btn btn-primary btn-sm" onclick="StressCalibrationModule.导出全部数据()">📊 导出全部</button>
+                    <button id="deleteAllDataBtn" class="btn btn-danger btn-sm" onclick="StressCalibrationModule.删除全部数据()">🗑️ 删除全部</button>
                     <button class="modal-close" onclick="StressCalibrationModule.关闭实验管理对话框()">×</button>
                 </div>
             </div>
-            <div class="modal-body">
-                <div id="experimentListContainer" style="max-height: 500px; overflow-y: auto;">
+            <div class="modal-body" style="max-height: 55vh;">
+                <div id="experimentListContainer">
                     <p style="text-align: center; color: #999;">加载中...</p>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="StressCalibrationModule.关闭实验管理对话框()">关闭</button>
             </div>
         </div>
     </div>
 
     <!-- 🆕 自定义输入对话框 -->
     <div id="customPromptModal" class="modal" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content field-modal modal-sm">
             <div class="modal-header">
                 <h3 id="customPromptTitle">输入</h3>
                 <button class="modal-close" onclick="window.closeCustomPrompt()">×</button>
             </div>
             <div class="modal-body">
-                <p id="customPromptMessage" style="margin-bottom: 15px; color: #666;"></p>
-                <input type="text" id="customPromptInput" class="config-input" style="width: 100%; margin-bottom: 15px;">
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button class="btn btn-secondary" onclick="window.closeCustomPrompt()">取消</button>
-                    <button class="btn btn-primary" onclick="window.confirmCustomPrompt()">确定</button>
+                <div class="form-group">
+                    <label id="customPromptMessage" style="color: #666;"></label>
+                    <input type="text" id="customPromptInput" class="form-input">
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeCustomPrompt()">取消</button>
+                <button class="btn btn-primary" onclick="window.confirmCustomPrompt()">确定</button>
             </div>
         </div>
     </div>
