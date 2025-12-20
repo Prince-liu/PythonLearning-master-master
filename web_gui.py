@@ -10,7 +10,13 @@
 
 import webview
 import os
-from modules import OscilloscopeBase, RealtimeCapture, WaveformAnalysis, StressCalibration, StressDetectionUniaxial, SignalProcessingWrapper
+from modules import OscilloscopeBase, RealtimeCapture, WaveformAnalysis, StressCalibration, SignalProcessingWrapper
+from modules.stress_detection_uniaxial import (
+    FieldDatabaseManager, FieldExperimentHDF5, ShapeUtils, PointGenerator,
+    StressFieldInterpolation, ContourGenerator, ContourCache,
+    FieldExperiment, FieldCapture, DataValidator, DataExporter,
+    ErrorCode, APIResponse, FieldLogger
+)
 
 
 class WebAPI:
@@ -22,7 +28,11 @@ class WebAPI:
         self.realtime = None  # 需要window实例，稍后初始化
         self.analysis = None  # 需要window实例，稍后初始化
         self.calibration = None  # 需要window实例，稍后初始化
-        self.detection_uniaxial = None  # 需要window实例，稍后初始化
+        self.field_experiment = None  # 应力场实验管理器
+        self.field_capture = None  # 应力场数据采集器
+        self.contour_generator = None  # 云图生成器
+        self.contour_cache = ContourCache()  # 云图缓存
+        self.data_exporter = None  # 数据导出器
         self.signal_proc = SignalProcessingWrapper()  # 信号处理包装
         self.window = None
     
@@ -32,7 +42,11 @@ class WebAPI:
         self.realtime = RealtimeCapture(self.osc, window)
         self.analysis = WaveformAnalysis(window)
         self.calibration = StressCalibration(window)
-        self.detection_uniaxial = StressDetectionUniaxial(window)
+        # 初始化应力场测绘模块
+        self.field_experiment = FieldExperiment()
+        db = self.field_experiment.db
+        self.field_capture = FieldCapture(db, self.osc)
+        self.data_exporter = DataExporter(db)
     
     # ==================== 示波器基础功能 ====================
     
@@ -320,23 +334,611 @@ class WebAPI:
         """选择互相关结果保存路径"""
         return self.analysis.选择CSV保存路径()
     
-    # ==================== 单轴应力检测功能（新增）====================
+    # ==================== 应力场测绘功能（新版）====================
     
-    def 选择标定数据文件(self):
-        """🆕 选择标定数据文件（HDF5格式）"""
-        return self.detection_uniaxial.选择标定数据文件()
+    # ---------- 实验管理 ----------
     
-    def 计算互相关时间差(self, 基准电压, 基准时间, 当前电压, 当前时间):
-        """🆕 计算两个波形之间的互相关时间差"""
-        return self.detection_uniaxial.计算互相关时间差(基准电压, 基准时间, 当前电压, 当前时间)
+    def create_field_experiment(self, experiment_data):
+        """创建应力场实验
+        
+        Args:
+            experiment_data: {
+                "name": str,
+                "test_purpose": str,
+                "sample_material": str,
+                "sample_thickness": float,
+                "operator": str,
+                "notes": str
+            }
+        
+        Returns:
+            {"success": bool, "error_code": int, "message": str, "data": {...}}
+        """
+        return self.field_experiment.create_experiment(experiment_data)
     
-    def 导出应力检测记录(self, 文件路径, 导出数据):
-        """🆕 导出单轴应力检测记录到CSV"""
-        return self.detection_uniaxial.导出应力检测记录(文件路径, 导出数据)
+    def load_field_experiment(self, exp_id):
+        """加载应力场实验
+        
+        Args:
+            exp_id: 实验ID (如 "FIELD001")
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        result = self.field_experiment.load_experiment(exp_id)
+        if result['success']:
+            # 同步设置采集器的当前实验
+            exp_data = result['data']['experiment']
+            config_snapshot = result['data'].get('config_snapshot', {})
+            calibration = config_snapshot.get('calibration', {})
+            k = calibration.get('k', 0)
+            
+            if k > 0:
+                self.field_capture.set_experiment(
+                    exp_id, 
+                    self.field_experiment.current_hdf5,
+                    k
+                )
+            
+            # 初始化云图生成器
+            self.contour_generator = ContourGenerator(exp_id)
+        
+        return result
     
-    def 选择应力检测CSV保存路径(self):
-        """🆕 选择单轴应力检测CSV保存路径"""
-        return self.detection_uniaxial.选择CSV保存路径()
+    def delete_field_experiment(self, exp_id):
+        """删除应力场实验
+        
+        Args:
+            exp_id: 实验ID
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_experiment.delete_experiment(exp_id)
+    
+    def complete_field_experiment(self, exp_id=None):
+        """完成应力场实验
+        
+        Args:
+            exp_id: 实验ID (可选，默认当前实验)
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_experiment.complete_experiment(exp_id)
+    
+    def get_field_experiment_list(self):
+        """获取所有应力场实验列表
+        
+        Returns:
+            list: 实验列表
+        """
+        return self.field_experiment.get_experiment_list()
+    
+    def get_field_experiment_statistics(self, exp_id=None):
+        """获取实验统计信息
+        
+        Args:
+            exp_id: 实验ID (可选)
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        return self.field_experiment.get_experiment_statistics(exp_id)
+    
+    # ---------- 标定数据 ----------
+    
+    def load_calibration_from_experiment(self, calib_exp_id, direction):
+        """从本地标定实验加载标定系数
+        
+        Args:
+            calib_exp_id: 标定实验ID
+            direction: 测试方向 (如 "0°")
+        
+        Returns:
+            {"success": bool, "data": {...}, "warnings": [...]}
+        """
+        result = self.field_experiment.load_calibration_from_experiment(calib_exp_id, direction)
+        
+        # 如果加载成功，同步更新采集器
+        if result['success'] and self.field_experiment.current_exp_id:
+            k = result['data'].get('k', 0)
+            if k > 0:
+                self.field_capture.set_experiment(
+                    self.field_experiment.current_exp_id,
+                    self.field_experiment.current_hdf5,
+                    k
+                )
+        
+        return result
+    
+    def load_calibration_from_file(self, file_path):
+        """从文件导入标定数据
+        
+        Args:
+            file_path: 文件路径 (JSON或CSV)
+        
+        Returns:
+            {"success": bool, "data": {...}, "warnings": [...]}
+        """
+        result = self.field_experiment.load_calibration_from_file(file_path)
+        
+        if result['success'] and self.field_experiment.current_exp_id:
+            k = result['data'].get('k', 0)
+            if k > 0:
+                self.field_capture.set_experiment(
+                    self.field_experiment.current_exp_id,
+                    self.field_experiment.current_hdf5,
+                    k
+                )
+        
+        return result
+    
+    def validate_calibration_data(self, calibration_data):
+        """验证标定数据有效性
+        
+        Args:
+            calibration_data: 标定数据 {k, r_squared, ...}
+        
+        Returns:
+            {"success": bool, "is_valid": bool, "warnings": [...]}
+        """
+        return self.field_experiment.validate_calibration_data(calibration_data)
+    
+    def select_calibration_file(self):
+        """打开文件选择对话框选择标定文件
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        try:
+            result = self.window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=('JSON文件 (*.json)', 'CSV文件 (*.csv)', '所有文件 (*.*)'),
+                allow_multiple=False
+            )
+            if result and len(result) > 0:
+                return {"success": True, "file_path": result[0]}
+            return {"success": False, "message": "未选择文件"}
+        except Exception as e:
+            return {"success": False, "message": f"选择文件失败: {str(e)}"}
+    
+    # ---------- 形状和布点 ----------
+    
+    def validate_shape(self, shape_config):
+        """验证形状配置
+        
+        Args:
+            shape_config: 形状配置字典
+        
+        Returns:
+            {"success": bool, "is_valid": bool, "area": float, "warnings": [...]}
+        """
+        return ShapeUtils.validate_shape(shape_config)
+    
+    def save_shape_config(self, shape_config):
+        """保存形状配置到当前实验
+        
+        Args:
+            shape_config: 形状配置
+        
+        Returns:
+            {"success": bool, "message": str, "area": float}
+        """
+        return self.field_experiment.save_shape_config(shape_config)
+    
+    def generate_point_layout(self, shape_config, layout_type, params):
+        """生成测点布局
+        
+        Args:
+            shape_config: 形状配置
+            layout_type: 布点类型 ('grid' | 'polar' | 'adaptive' | 'custom')
+            params: 布点参数
+        
+        Returns:
+            {"success": bool, "points": [...], "total_count": int, "valid_count": int}
+        """
+        if layout_type == 'grid':
+            return PointGenerator.generate_grid_points(shape_config, params)
+        elif layout_type == 'polar':
+            return PointGenerator.generate_polar_points(shape_config, params)
+        elif layout_type == 'adaptive':
+            return PointGenerator.generate_adaptive_points(shape_config, params)
+        elif layout_type == 'custom':
+            file_path = params.get('file_path', '')
+            return PointGenerator.load_custom_points(file_path, shape_config)
+        else:
+            return {"success": False, "error": f"不支持的布点类型: {layout_type}"}
+    
+    def optimize_point_order(self, points, strategy='zigzag'):
+        """优化测点顺序
+        
+        Args:
+            points: 测点列表
+            strategy: 优化策略 ('zigzag' | 'nearest' | 'spiral')
+        
+        Returns:
+            {"success": bool, "points": [...], "total_distance": float}
+        """
+        return PointGenerator.optimize_point_order(points, strategy)
+    
+    def save_point_layout(self, points):
+        """保存测点布局到当前实验
+        
+        Args:
+            points: 测点列表
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        if not self.field_experiment.current_exp_id:
+            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
+        
+        return self.field_experiment.db.save_point_layout(
+            self.field_experiment.current_exp_id, 
+            points
+        )
+    
+    def select_custom_points_file(self):
+        """打开文件选择对话框选择自定义测点文件
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        try:
+            result = self.window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=('CSV文件 (*.csv)', '所有文件 (*.*)'),
+                allow_multiple=False
+            )
+            if result and len(result) > 0:
+                return {"success": True, "file_path": result[0]}
+            return {"success": False, "message": "未选择文件"}
+        except Exception as e:
+            return {"success": False, "message": f"选择文件失败: {str(e)}"}
+    
+    # ---------- 数据采集 ----------
+    
+    def capture_field_point(self, point_index, auto_denoise=True):
+        """采集单个测点
+        
+        Args:
+            point_index: 测点索引
+            auto_denoise: 是否自动降噪
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        return self.field_capture.capture_point(point_index, auto_denoise)
+    
+    def set_baseline_point(self, point_index):
+        """设置基准测点
+        
+        Args:
+            point_index: 测点索引
+        
+        Returns:
+            {"success": bool, "message": str, "recalculated_points": int}
+        """
+        return self.field_capture.set_baseline_point(point_index)
+    
+    def validate_baseline_quality(self):
+        """验证当前基准波形的质量
+        
+        Returns:
+            {"success": bool, "is_valid": bool, "quality": {...}}
+        """
+        return self.field_capture.validate_baseline_quality()
+    
+    def skip_field_point(self, point_index, reason=""):
+        """跳过测点
+        
+        Args:
+            point_index: 测点索引
+            reason: 跳过原因
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_capture.skip_point(point_index, reason)
+    
+    def recapture_field_point(self, point_index, auto_denoise=True):
+        """重新采集测点
+        
+        Args:
+            point_index: 测点索引
+            auto_denoise: 是否自动降噪
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        return self.field_capture.recapture_point(point_index, auto_denoise)
+    
+    def set_denoise_config(self, config):
+        """设置降噪配置
+        
+        Args:
+            config: 降噪配置 {enabled, method, wavelet, level, ...}
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_capture.set_denoise_config(config)
+    
+    def test_denoise_effect(self, waveform=None):
+        """测试降噪效果
+        
+        Args:
+            waveform: 波形数据 (可选)
+        
+        Returns:
+            {"success": bool, "original_snr": float, "denoised_snr": float, ...}
+        """
+        return self.field_capture.test_denoise_effect(waveform)
+    
+    def evaluate_waveform_quality(self, waveform):
+        """评估波形质量
+        
+        Args:
+            waveform: 波形数据 {time, voltage, sample_rate}
+        
+        Returns:
+            {"score": float, "snr": float, "is_good": bool, "issues": [...]}
+        """
+        return self.field_capture.evaluate_waveform_quality(waveform)
+    
+    # ---------- 云图生成 ----------
+    
+    def update_field_contour(self, exp_id=None):
+        """更新云图
+        
+        Args:
+            exp_id: 实验ID (可选，默认当前实验)
+        
+        Returns:
+            {"success": bool, "mode": str, "grid": {...}, "method": str, "confidence": str}
+        """
+        exp_id = exp_id or self.field_experiment.current_exp_id
+        if not exp_id:
+            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
+        
+        # 获取已测量的测点
+        measured_points = self.field_experiment.db.get_measured_points(exp_id)
+        
+        if not measured_points:
+            return {
+                "success": True,
+                "mode": "points_only",
+                "message": "没有已测量的测点"
+            }
+        
+        # 加载实验数据获取形状配置
+        exp_result = self.field_experiment.db.load_experiment(exp_id)
+        if not exp_result['success']:
+            return exp_result
+        
+        shape_config = exp_result['data']['experiment'].get('shape_config', {})
+        
+        # 转换测点格式
+        points = [{
+            'x': p['x_coord'],
+            'y': p['y_coord'],
+            'stress_value': p['stress_value']
+        } for p in measured_points]
+        
+        # 执行插值
+        interp_result = StressFieldInterpolation.interpolate_stress_field(
+            points, shape_config
+        )
+        
+        return interp_result
+    
+    def generate_contour_colors(self, grid_data, shape_config, colormap=None, vmin=None, vmax=None):
+        """生成云图颜色数据
+        
+        Args:
+            grid_data: 插值网格数据 {xi, yi, zi}
+            shape_config: 形状配置
+            colormap: 色标名称
+            vmin, vmax: 色标范围
+        
+        Returns:
+            {"success": bool, "colors": [...], "stats": {...}, "colorbar": {...}}
+        """
+        if not self.contour_generator:
+            exp_id = self.field_experiment.current_exp_id or 'temp'
+            self.contour_generator = ContourGenerator(exp_id)
+        
+        return self.contour_generator.generate_contour(
+            grid_data, shape_config, 
+            colormap=colormap, vmin=vmin, vmax=vmax
+        )
+    
+    def get_colorbar_data(self, vmin, vmax, colormap=None):
+        """获取色标数据
+        
+        Args:
+            vmin, vmax: 值范围
+            colormap: 色标名称
+        
+        Returns:
+            {"success": bool, "colors": [...], "values": [...]}
+        """
+        if not self.contour_generator:
+            exp_id = self.field_experiment.current_exp_id or 'temp'
+            self.contour_generator = ContourGenerator(exp_id)
+        
+        return self.contour_generator.get_colorbar_data(vmin, vmax, colormap)
+    
+    def export_contour_image(self, exp_id=None, format='png', dpi=300, options=None):
+        """导出云图图片
+        
+        Args:
+            exp_id: 实验ID
+            format: 图片格式 ('png' | 'svg')
+            dpi: 分辨率
+            options: 导出选项 {show_points, show_colorbar, title, ...}
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        exp_id = exp_id or self.field_experiment.current_exp_id
+        if not exp_id:
+            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
+        
+        # 获取云图数据
+        contour_result = self.update_field_contour(exp_id)
+        if not contour_result['success'] or contour_result.get('mode') == 'points_only':
+            return {"success": False, "message": "没有足够的数据生成云图"}
+        
+        # 获取实验数据
+        exp_result = self.field_experiment.db.load_experiment(exp_id)
+        if not exp_result['success']:
+            return exp_result
+        
+        shape_config = exp_result['data']['experiment'].get('shape_config', {})
+        points = exp_result['data']['points']
+        
+        # 初始化云图生成器
+        if not self.contour_generator:
+            self.contour_generator = ContourGenerator(exp_id)
+        
+        options = options or {}
+        
+        return self.contour_generator.export_contour_image(
+            contour_result['grid'],
+            shape_config,
+            points=points,
+            format=format,
+            dpi=dpi,
+            show_points=options.get('show_points', True),
+            show_colorbar=options.get('show_colorbar', True),
+            title=options.get('title')
+        )
+    
+    def select_contour_export_path(self, format='png'):
+        """选择云图导出路径
+        
+        Args:
+            format: 图片格式
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        try:
+            if format == 'png':
+                file_types = ('PNG图片 (*.png)',)
+            elif format == 'svg':
+                file_types = ('SVG图片 (*.svg)',)
+            else:
+                file_types = ('所有文件 (*.*)',)
+            
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                file_types=file_types,
+                save_filename=f'contour.{format}'
+            )
+            if result:
+                return {"success": True, "file_path": result}
+            return {"success": False, "message": "未选择保存路径"}
+        except Exception as e:
+            return {"success": False, "message": f"选择路径失败: {str(e)}"}
+    
+    # ---------- 数据验证和导出 ----------
+    
+    def validate_point_data(self, point, neighbors=None):
+        """验证单个测点数据
+        
+        Args:
+            point: 测点数据
+            neighbors: 相邻测点列表
+        
+        Returns:
+            {"is_valid": bool, "is_suspicious": bool, "warnings": [...]}
+        """
+        return DataValidator.validate_point_data(point, neighbors)
+    
+    def validate_experiment_config(self, config):
+        """验证实验配置
+        
+        Args:
+            config: 实验配置
+        
+        Returns:
+            {"is_valid": bool, "warnings": [...], "errors": [...]}
+        """
+        return DataValidator.validate_experiment_config(config)
+    
+    def export_field_data(self, exp_id, format, options=None):
+        """导出实验数据
+        
+        Args:
+            exp_id: 实验ID
+            format: 导出格式 ('csv' | 'excel' | 'hdf5')
+            options: 导出选项
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        exp_id = exp_id or self.field_experiment.current_exp_id
+        if not exp_id:
+            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
+        
+        options = options or {}
+        
+        if format == 'csv':
+            return self.data_exporter.export_to_csv(
+                exp_id, 
+                options.get('output_path'),
+                options.get('include_quality', True)
+            )
+        elif format == 'excel':
+            return self.data_exporter.export_to_excel(
+                exp_id,
+                options.get('output_path')
+            )
+        elif format == 'hdf5':
+            return self.data_exporter.export_to_hdf5(
+                exp_id,
+                options.get('output_path'),
+                options.get('include_waveforms', True)
+            )
+        else:
+            return {"success": False, "message": f"不支持的导出格式: {format}"}
+    
+    def select_export_path(self, format):
+        """选择数据导出路径
+        
+        Args:
+            format: 导出格式
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        try:
+            if format == 'csv':
+                file_types = ('CSV文件 (*.csv)',)
+                filename = 'data.csv'
+            elif format == 'excel':
+                file_types = ('Excel文件 (*.xlsx)',)
+                filename = 'data.xlsx'
+            elif format == 'hdf5':
+                file_types = ('HDF5文件 (*.h5)',)
+                filename = 'data.h5'
+            else:
+                file_types = ('所有文件 (*.*)',)
+                filename = 'data'
+            
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                file_types=file_types,
+                save_filename=filename
+            )
+            if result:
+                return {"success": True, "file_path": result}
+            return {"success": False, "message": "未选择保存路径"}
+        except Exception as e:
+            return {"success": False, "message": f"选择路径失败: {str(e)}"}
     
 
 def 创建窗口():

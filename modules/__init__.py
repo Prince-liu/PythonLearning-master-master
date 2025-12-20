@@ -14,7 +14,21 @@ from .core import (
 from .realtime_capture import RealtimeCapture
 from .waveform_analysis import WaveformAnalysis
 from .stress_calibration import StressCalibration
-from .stress_detection_uniaxial import StressDetectionUniaxial
+
+# 应力场测绘模块（新版）
+from .stress_detection_uniaxial import (
+    FieldDatabaseManager,
+    FieldExperimentHDF5,
+    ShapeUtils,
+    PointGenerator,
+    StressFieldInterpolation,
+    ContourGenerator,
+    ContourCache,
+    FieldExperiment,
+    FieldCapture,
+    DataValidator,
+    DataExporter,
+)
 
 __all__ = [
     # 核心基础设施
@@ -26,5 +40,16 @@ __all__ = [
     'RealtimeCapture',
     'WaveformAnalysis',
     'StressCalibration',
-    'StressDetectionUniaxial',
+    # 应力场测绘模块
+    'FieldDatabaseManager',
+    'FieldExperimentHDF5',
+    'ShapeUtils',
+    'PointGenerator',
+    'StressFieldInterpolation',
+    'ContourGenerator',
+    'ContourCache',
+    'FieldExperiment',
+    'FieldCapture',
+    'DataValidator',
+    'DataExporter',
 ]

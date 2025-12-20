@@ -646,81 +646,403 @@
             </div>
         </div>
 
-        <!-- 单轴应力检测页面 -->
+        <!-- 单轴应力检测页面 - 应力场测绘 -->
         <div id="detectionTab" class="tab-content">
-            <div class="stress-detection-container">
-                <!-- 左侧控制面板 -->
-                <div class="stress-control-panel">
-                    <!-- 标定系数加载 -->
-                    <div class="config-section">
-                        <h4 class="section-title">📐 标定系数</h4>
-                        <button id="det-loadCalibrationBtn" class="btn btn-primary btn-block">加载标定数据</button>
-                        <div id="det-calibrationInfo" class="info-box" style="display: none; margin-top: 10px;">
-                            <p><strong>材料:</strong> <span id="det-materialName">--</span></p>
-                            <p><strong>方向:</strong> <span id="det-direction">--</span></p>
-                            <p><strong>斜率:</strong> <span id="det-slope">--</span> ns/MPa</p>
-                            <p><strong>截距:</strong> <span id="det-intercept">--</span> ns</p>
-                            <p><strong>R²:</strong> <span id="det-r2">--</span></p>
+            <div class="field-mapping-container">
+                <!-- 左侧控制栏 -->
+                <div class="field-control-panel">
+                    <!-- 实验管理区（固定） -->
+                    <div class="field-experiment-section">
+                        <div class="field-experiment-header">
+                            <span id="field-experiment-name">未加载实验</span>
+                            <span id="field-experiment-status" class="field-status-badge">--</span>
+                        </div>
+                        <div class="field-experiment-info">
+                            <span>进度: <span id="field-experiment-progress">0/0</span></span>
+                            <span id="field-autosave-status"></span>
+                        </div>
+                        <div class="field-experiment-buttons">
+                            <button id="field-new-experiment-btn" class="btn btn-primary btn-sm">📋 新建</button>
+                            <button id="field-manage-experiments-btn" class="btn btn-secondary btn-sm">📁 管理</button>
+                            <button id="field-complete-experiment-btn" class="btn btn-success btn-sm" disabled>✅ 完成</button>
                         </div>
                     </div>
                     
-                    <!-- 基准波形 -->
-                    <div class="config-section">
-                        <h4 class="section-title">📸 基准波形</h4>
-                        <button id="det-captureBaselineBtn" class="btn btn-primary btn-block" disabled>采集基准波形</button>
-                        <div id="det-baselineInfo" class="info-box" style="display: none; margin-top: 10px;">
-                            <p>✅ 基准波形已采集</p>
-                            <p><span id="det-baselinePoints">--</span> 采样点</p>
+                    <!-- 折叠面板区域 -->
+                    <div class="field-panels-container">
+                        <!-- 1. 标定数据面板 -->
+                        <div class="field-panel" id="field-calibration-panel">
+                            <div class="field-panel-header">
+                                <span>📐 标定数据</span>
+                                <span id="field-calib-status" class="status-badge">⚪ 未加载</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-radio-group">
+                                    <label><input type="radio" name="field-calib-source" value="local" checked> 本地实验</label>
+                                    <label><input type="radio" name="field-calib-source" value="file"> 文件导入</label>
+                                    <label><input type="radio" name="field-calib-source" value="manual"> 手动输入</label>
+                                </div>
+                                <div id="field-calib-local-panel" class="field-calib-source-panel">
+                                    <button id="field-calib-load-local" class="btn btn-primary btn-block btn-sm">选择标定实验</button>
+                                </div>
+                                <div id="field-calib-file-panel" class="field-calib-source-panel" style="display:none;">
+                                    <button id="field-calib-load-file" class="btn btn-primary btn-block btn-sm">选择文件</button>
+                                </div>
+                                <div id="field-calib-manual-panel" class="field-calib-source-panel" style="display:none;">
+                                    <div class="form-group">
+                                        <label>应力系数 K (MPa/ns)</label>
+                                        <input type="number" id="field-calib-manual-k" class="form-control" step="0.01" placeholder="例如: 3.67">
+                                    </div>
+                                    <button id="field-calib-confirm-manual" class="btn btn-primary btn-block btn-sm">确认</button>
+                                </div>
+                                <div id="field-calib-info" class="field-info-box"></div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- 实时检测 -->
-                    <div class="config-section">
-                        <h4 class="section-title">🔍 实时检测</h4>
-                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                            💡 需要先加载标定数据和采集基准波形
-                        </p>
-                        <button id="det-startDetectionBtn" class="btn btn-success btn-block" disabled>▶️ 开始检测</button>
-                        <button id="det-stopDetectionBtn" class="btn btn-warning btn-block" disabled style="display: none;">⏸️ 停止检测</button>
                         
-                        <div id="det-resultDisplay" class="result-box" style="display: none; margin-top: 15px;">
-                            <h4 style="margin-bottom: 10px; color: #333;">检测结果</h4>
-                            <p><strong>声时差:</strong> <span id="det-timeDiff">--</span> ns</p>
-                            <p class="highlight"><strong>应力值:</strong> <span id="det-stressValue">--</span> MPa</p>
-                            <p style="font-size: 12px; color: #666; margin-top: 8px;">
-                                更新时间: <span id="det-updateTime">--</span>
-                            </p>
+                        <!-- 2. 形状定义面板 -->
+                        <div class="field-panel" id="field-shape-panel">
+                            <div class="field-panel-header">
+                                <span>📐 试件形状</span>
+                                <span id="field-shape-status" class="status-badge">⚪ 未设置</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-radio-group">
+                                    <label><input type="radio" name="field-shape-type" value="rectangle" checked> 矩形</label>
+                                    <label><input type="radio" name="field-shape-type" value="circle"> 圆形</label>
+                                    <label><input type="radio" name="field-shape-type" value="polygon"> 多边形</label>
+                                </div>
+                                <!-- 矩形参数 -->
+                                <div id="field-shape-rectangle-params" class="field-shape-params">
+                                    <div class="form-row">
+                                        <div class="form-group"><label>宽度(mm)</label><input type="number" id="field-shape-rect-width" class="form-control field-shape-param" value="100"></div>
+                                        <div class="form-group"><label>高度(mm)</label><input type="number" id="field-shape-rect-height" class="form-control field-shape-param" value="100"></div>
+                                    </div>
+                                </div>
+                                <!-- 圆形参数 -->
+                                <div id="field-shape-circle-params" class="field-shape-params" style="display:none;">
+                                    <div class="form-row">
+                                        <div class="form-group"><label>圆心X</label><input type="number" id="field-shape-circle-cx" class="form-control field-shape-param" value="50"></div>
+                                        <div class="form-group"><label>圆心Y</label><input type="number" id="field-shape-circle-cy" class="form-control field-shape-param" value="50"></div>
+                                    </div>
+                                    <div class="form-group"><label>半径(mm)</label><input type="number" id="field-shape-circle-radius" class="form-control field-shape-param" value="50"></div>
+                                </div>
+                                <!-- 多边形参数 -->
+                                <div id="field-shape-polygon-params" class="field-shape-params" style="display:none;">
+                                    <div class="form-group">
+                                        <label>顶点坐标 (每行一个: x,y)</label>
+                                        <textarea id="field-shape-polygon-vertices" class="form-control field-shape-param" rows="4" placeholder="0,0&#10;100,0&#10;100,100&#10;0,100"></textarea>
+                                    </div>
+                                </div>
+                                <!-- 布尔运算 -->
+                                <div class="field-modifiers-section">
+                                    <div class="field-modifiers-header">
+                                        <span>孔洞/缺口</span>
+                                        <button id="field-shape-add-hole" class="btn btn-sm">+ 添加</button>
+                                    </div>
+                                    <div id="field-shape-modifiers" class="field-modifiers-list"><div class="empty">无孔洞/缺口</div></div>
+                                </div>
+                                <div class="field-panel-actions">
+                                    <button id="field-shape-validate" class="btn btn-secondary btn-sm">验证</button>
+                                    <button id="field-shape-apply" class="btn btn-primary btn-sm">应用</button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- 数据记录 -->
-                    <div class="config-section">
-                        <h4 class="section-title">💾 数据记录</h4>
-                        <button id="det-recordBtn" class="btn btn-secondary btn-block" disabled>记录当前值</button>
-                        <button id="det-exportBtn" class="btn btn-secondary btn-block" disabled>导出记录</button>
-                        <div id="det-recordCount" class="info-box" style="display: none; margin-top: 10px;">
-                            <p>已记录: <span id="det-recordCountValue">0</span> 条</p>
+                        
+                        <!-- 3. 布点设置面板 -->
+                        <div class="field-panel" id="field-layout-panel">
+                            <div class="field-panel-header">
+                                <span>📍 测点布局</span>
+                                <span id="field-layout-status" class="status-badge">⚪ 未生成</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-radio-group">
+                                    <label><input type="radio" name="field-layout-type" value="grid" checked> 网格</label>
+                                    <label><input type="radio" name="field-layout-type" value="polar"> 极坐标</label>
+                                    <label><input type="radio" name="field-layout-type" value="custom"> 自定义</label>
+                                </div>
+                                <!-- 网格参数 -->
+                                <div id="field-layout-grid-params" class="field-layout-params">
+                                    <div class="form-row">
+                                        <div class="form-group"><label>行数</label><input type="number" id="field-layout-grid-rows" class="form-control" value="5" min="1"></div>
+                                        <div class="form-group"><label>列数</label><input type="number" id="field-layout-grid-cols" class="form-control" value="5" min="1"></div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label>边距(mm)</label><input type="number" id="field-layout-grid-margin-left" class="form-control" value="10" min="0"></div>
+                                    </div>
+                                </div>
+                                <!-- 极坐标参数 -->
+                                <div id="field-layout-polar-params" class="field-layout-params" style="display:none;">
+                                    <div class="form-row">
+                                        <div class="form-group"><label>圆心X</label><input type="number" id="field-layout-polar-cx" class="form-control" value="50"></div>
+                                        <div class="form-group"><label>圆心Y</label><input type="number" id="field-layout-polar-cy" class="form-control" value="50"></div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label>最小半径</label><input type="number" id="field-layout-polar-rmin" class="form-control" value="10"></div>
+                                        <div class="form-group"><label>最大半径</label><input type="number" id="field-layout-polar-rmax" class="form-control" value="40"></div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label>层数</label><input type="number" id="field-layout-polar-rcount" class="form-control" value="4" min="1"></div>
+                                        <div class="form-group"><label>每层点数</label><input type="number" id="field-layout-polar-ppr" class="form-control" value="8" min="1"></div>
+                                    </div>
+                                </div>
+                                <!-- 自定义参数 -->
+                                <div id="field-layout-custom-params" class="field-layout-params" style="display:none;">
+                                    <button id="field-layout-import" class="btn btn-primary btn-block btn-sm">📂 导入CSV</button>
+                                </div>
+                                <div class="field-panel-actions">
+                                    <button id="field-layout-generate" class="btn btn-primary btn-sm">生成测点</button>
+                                    <button id="field-layout-optimize" class="btn btn-secondary btn-sm">优化顺序</button>
+                                    <button id="field-layout-clear" class="btn btn-danger btn-sm">清空</button>
+                                </div>
+                                <div class="field-layout-info">测点数: <span id="field-layout-count">0</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 4. 基准波形管理面板 -->
+                        <div class="field-panel" id="field-baseline-panel">
+                            <div class="field-panel-header">
+                                <span>📊 基准波形管理</span>
+                                <span id="field-baseline-status" class="status-badge">⚪ 未设置</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-baseline-info">
+                                    <div class="field-info-item">
+                                        <span class="label">当前基准点:</span>
+                                        <span id="field-baseline-point-id" class="value">--</span>
+                                    </div>
+                                    <div class="field-info-item">
+                                        <span class="label">采集时间:</span>
+                                        <span id="field-baseline-time" class="value">--</span>
+                                    </div>
+                                    <div class="field-info-item">
+                                        <span class="label">信噪比:</span>
+                                        <span id="field-baseline-snr" class="value">--</span>
+                                    </div>
+                                    <div class="field-info-item">
+                                        <span class="label">质量评分:</span>
+                                        <span id="field-baseline-quality" class="value">--</span>
+                                    </div>
+                                </div>
+                                <div class="field-panel-actions">
+                                    <button id="field-baseline-view" class="btn btn-secondary btn-sm">👁️ 查看波形</button>
+                                    <button id="field-baseline-change" class="btn btn-primary btn-sm">🔄 更换基准点</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 5. 质量检查模式面板 -->
+                        <div class="field-panel" id="field-quality-panel">
+                            <div class="field-panel-header">
+                                <span>🔍 质量检查模式</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-quality-mode-selector">
+                                    <div class="field-quality-mode-card selected" data-mode="strict">
+                                        <div class="mode-icon">🔍</div>
+                                        <div class="mode-title">严格模式</div>
+                                        <div class="mode-desc">精细测量</div>
+                                    </div>
+                                    <div class="field-quality-mode-card" data-mode="fast">
+                                        <div class="mode-icon">⚡</div>
+                                        <div class="mode-title">快速模式</div>
+                                        <div class="mode-desc">粗略测量</div>
+                                    </div>
+                                </div>
+                                <div class="field-quality-features">
+                                    <div class="feature-item"><span class="check">✓</span> 实时质量评估</div>
+                                    <div class="feature-item"><span class="check">✓</span> 质量不合格时弹出警告</div>
+                                    <div class="feature-item"><span class="check">✓</span> 可选择重测或跳过</div>
+                                </div>
+                                <div id="field-quality-mode-desc" class="field-quality-mode-description">
+                                    适合正式实验和高精度测量
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 6. 采集控制面板 -->
+                        <div class="field-panel" id="field-capture-panel">
+                            <div class="field-panel-header">
+                                <span>📸 数据采集</span>
+                                <span id="field-capture-monitor-status" class="status-indicator">⚪ 已停止</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-capture-controls">
+                                    <button id="field-capture-start-monitor" class="btn btn-success btn-sm">▶️ 开始监控</button>
+                                    <button id="field-capture-stop-monitor" class="btn btn-warning btn-sm" disabled>⏸️ 停止</button>
+                                </div>
+                                <div class="field-current-point">
+                                    <div class="field-point-info">
+                                        <span>当前测点: <strong id="field-capture-point-id">--</strong></span>
+                                        <span>位置: (<span id="field-capture-point-x">--</span>, <span id="field-capture-point-y">--</span>)</span>
+                                    </div>
+                                    <div class="field-point-nav">
+                                        <button id="field-capture-prev" class="btn btn-sm">◀</button>
+                                        <span id="field-capture-progress">0 / 0</span>
+                                        <button id="field-capture-next" class="btn btn-sm">▶</button>
+                                    </div>
+                                </div>
+                                <div class="field-capture-actions">
+                                    <button id="field-capture-current" class="btn btn-primary btn-block">📸 采集当前测点</button>
+                                    <div class="field-capture-secondary">
+                                        <button id="field-capture-skip" class="btn btn-secondary btn-sm">跳过</button>
+                                        <button id="field-capture-recapture" class="btn btn-secondary btn-sm">重测</button>
+                                        <button id="field-capture-set-baseline" class="btn btn-secondary btn-sm">设为基准</button>
+                                    </div>
+                                </div>
+                                <div class="field-capture-options">
+                                    <label><input type="checkbox" id="field-capture-auto-denoise" checked> 自动降噪</label>
+                                    <button id="field-capture-denoise-settings" class="btn btn-sm">⚙️</button>
+                                </div>
+                                <div class="field-capture-result">
+                                    <div class="result-item"><span>时间差:</span><span id="field-capture-result-timediff">--</span> ns</div>
+                                    <div class="result-item"><span>应力:</span><span id="field-capture-result-stress">--</span> MPa</div>
+                                    <div class="result-item"><span>质量:</span><span id="field-capture-result-quality">--</span></div>
+                                    <div class="result-item"><span>SNR:</span><span id="field-capture-result-snr">--</span> dB</div>
+                                </div>
+                                <div class="field-progress-bar-container">
+                                    <div id="field-capture-progress-bar" class="field-progress-bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 7. 云图设置面板 -->
+                        <div class="field-panel" id="field-contour-settings-panel">
+                            <div class="field-panel-header">
+                                <span>🗺️ 云图设置</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-form-group">
+                                    <label>插值方法</label>
+                                    <select id="field-contour-interpolation" class="field-select">
+                                        <option value="auto">自动选择</option>
+                                        <option value="linear">线性插值</option>
+                                        <option value="cubic">三次插值</option>
+                                    </select>
+                                </div>
+                                <div class="field-form-group">
+                                    <label>分辨率</label>
+                                    <select id="field-contour-resolution" class="field-select">
+                                        <option value="50">低 (50×50)</option>
+                                        <option value="100" selected>中 (100×100)</option>
+                                        <option value="200">高 (200×200)</option>
+                                    </select>
+                                </div>
+                                <div class="field-form-group">
+                                    <label>色标范围 (MPa)</label>
+                                    <div class="field-input-row">
+                                        <input type="number" id="field-contour-min" class="field-input-sm" placeholder="自动">
+                                        <span>~</span>
+                                        <input type="number" id="field-contour-max" class="field-input-sm" placeholder="自动">
+                                    </div>
+                                </div>
+                                <div class="field-checkbox-group">
+                                    <label><input type="checkbox" id="field-contour-show-points" checked> 显示测点</label>
+                                    <label><input type="checkbox" id="field-contour-show-contour-lines"> 显示等高线</label>
+                                    <label><input type="checkbox" id="field-contour-auto-update" checked> 自动更新</label>
+                                </div>
+                                <div class="field-panel-actions">
+                                    <button id="field-contour-refresh" class="btn btn-primary btn-sm">🔄 刷新云图</button>
+                                    <button id="field-contour-export" class="btn btn-secondary btn-sm">📷 导出图片</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 8. 数据导出面板 -->
+                        <div class="field-panel" id="field-export-panel">
+                            <div class="field-panel-header">
+                                <span>📤 数据导出</span>
+                            </div>
+                            <div class="field-panel-body">
+                                <div class="field-form-group">
+                                    <label>导出格式</label>
+                                    <select id="field-export-format" class="field-select">
+                                        <option value="csv">CSV (测点数据)</option>
+                                        <option value="excel">Excel (完整报告)</option>
+                                        <option value="hdf5">HDF5 (含波形)</option>
+                                    </select>
+                                </div>
+                                <div class="field-checkbox-group">
+                                    <label><input type="checkbox" id="field-export-include-waveforms"> 包含波形数据</label>
+                                    <label><input type="checkbox" id="field-export-include-contour" checked> 包含云图</label>
+                                    <label><input type="checkbox" id="field-export-include-stats" checked> 包含统计</label>
+                                </div>
+                                <div class="field-panel-actions">
+                                    <button id="field-export-btn" class="btn btn-primary btn-block btn-sm">📥 导出数据</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- 右侧显示区域 -->
-                <div class="stress-display-area">
-                    <!-- 实时波形显示 -->
-                    <div class="stress-monitor-section" style="height: 100%;">
-                        <div class="waveform-header">
-                            <span>实时波形与单轴应力检测</span>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <button id="det-startMonitorBtn" class="btn-icon" title="开始波形监控">▶️</button>
-                                <button id="det-stopMonitorBtn" class="btn-icon" title="停止波形监控" style="display: none;">⏸️</button>
-                                <span id="det-monitorStatus" class="monitor-status">未监控</span>
+                <!-- 右侧显示区 -->
+                <div class="field-display-area">
+                    <!-- 上半区：数据表格 + 波形 -->
+                    <div class="field-top-section">
+                        <!-- 数据表格 -->
+                        <div class="field-data-table-container">
+                            <div class="field-table-header">
+                                <span>📊 测点数据</span>
+                                <div class="field-table-actions">
+                                    <button class="btn btn-sm" onclick="FieldExperimentManager.导出实验(StressDetectionUniaxialModule.获取当前实验()?.experiment_id)">📤 导出</button>
+                                </div>
+                            </div>
+                            <div class="field-table-wrapper">
+                                <table id="field-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>编号</th>
+                                            <th>X(mm)</th>
+                                            <th>Y(mm)</th>
+                                            <th>Δt(ns)</th>
+                                            <th>σ(MPa)</th>
+                                            <th>质量</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="field-data-table-body">
+                                        <tr><td colspan="7" style="text-align:center;color:#999;">暂无测点数据</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div class="canvas-container" style="height: calc(100% - 50px);">
-                            <canvas id="det-waveformCanvas"></canvas>
-                            <div id="det-statusMessage" class="status-message">点击"▶️"开始波形监控</div>
+                        <!-- 波形显示 -->
+                        <div class="field-waveform-container">
+                            <div class="field-waveform-header">
+                                <span>实时波形</span>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <button id="field-waveform-start" class="btn-monitor-compact" title="开始监控">▶️</button>
+                                    <button id="field-waveform-stop" class="btn-monitor-compact btn-monitor-stop" title="停止监控" style="display: none;">⏸️</button>
+                                    <span id="field-waveform-status" class="monitor-status">未监控</span>
+                                </div>
+                            </div>
+                            <canvas id="field-waveform-canvas"></canvas>
                         </div>
                     </div>
+                    
+                    <!-- 下半区：预览画布 + 云图 -->
+                    <div class="field-bottom-section">
+                        <!-- 预览画布 -->
+                        <div class="field-preview-container">
+                            <div class="field-canvas-header">
+                                <span>📐 测点预览</span>
+                            </div>
+                            <canvas id="field-preview-canvas"></canvas>
+                        </div>
+                        <!-- 云图显示 -->
+                        <div class="field-contour-container">
+                            <div class="field-canvas-header">
+                                <span>🌈 应力云图</span>
+                            </div>
+                            <canvas id="field-contour-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 状态栏 -->
+                <div id="field-status-bar" class="field-status-bar" style="display:none;">
+                    <span id="field-status-icon"></span>
+                    <span id="field-status-text"></span>
+                    <span id="field-status-detail"></span>
                 </div>
             </div>
         </div>
@@ -794,7 +1116,14 @@
     <script src="js/stress-calibration/stress-calibration-manager.js"></script>
     <script src="js/stress-calibration/stress-calibration-capture.js"></script>
     <script src="js/stress-calibration/stress-calibration.js"></script>
-    <!-- 单轴应力检测模块 -->
+    <!-- 单轴应力检测模块 - 应力场测绘 -->
+    <script src="js/stress-detection-uniaxial/field-canvas.js"></script>
+    <script src="js/stress-detection-uniaxial/field-contour.js"></script>
+    <script src="js/stress-detection-uniaxial/field-calibration-panel.js"></script>
+    <script src="js/stress-detection-uniaxial/field-shape-panel.js"></script>
+    <script src="js/stress-detection-uniaxial/field-layout-panel.js"></script>
+    <script src="js/stress-detection-uniaxial/field-capture-panel.js"></script>
+    <script src="js/stress-detection-uniaxial/field-experiment-manager.js"></script>
     <script src="js/stress-detection-uniaxial/stress-detection-uniaxial.js"></script>
     <script src="js/main.js"></script>
 </body>
