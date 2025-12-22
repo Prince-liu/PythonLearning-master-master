@@ -496,6 +496,47 @@ class WebAPI:
         
         return result
     
+    def save_manual_calibration(self, calibration_data):
+        """保存手动输入的标定数据
+        
+        Args:
+            calibration_data: 标定数据 {k, source, ...}
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        if not self.field_experiment.current_exp_id:
+            return {"success": False, "message": "没有当前实验"}
+        
+        try:
+            k = calibration_data.get('k', 0)
+            if k <= 0:
+                return {"success": False, "message": "无效的应力系数"}
+            
+            # 保存到HDF5配置快照
+            if self.field_experiment.current_hdf5:
+                config = self.field_experiment.current_hdf5.load_config_snapshot().get('data', {})
+                config['calibration'] = calibration_data
+                self.field_experiment.current_hdf5.save_config_snapshot(config)
+            
+            # 保存k到数据库
+            self.field_experiment.db.update_experiment(
+                self.field_experiment.current_exp_id,
+                {'calibration_k': k}
+            )
+            
+            # 更新采集器
+            self.field_capture.set_experiment(
+                self.field_experiment.current_exp_id,
+                self.field_experiment.current_hdf5,
+                k
+            )
+            
+            return {"success": True, "message": "手动标定数据已保存"}
+            
+        except Exception as e:
+            return {"success": False, "message": f"保存失败: {str(e)}"}
+    
     def validate_calibration_data(self, calibration_data):
         """验证标定数据有效性
         
@@ -595,11 +636,13 @@ class WebAPI:
         """
         return PointGenerator.optimize_point_order(points, strategy)
     
-    def save_point_layout(self, points):
-        """保存测点布局到当前实验
+    def save_point_layout(self, points, layout_type='grid', params=None):
+        """保存测点布局到当前实验（同时保存布点配置）
         
         Args:
             points: 测点列表
+            layout_type: 布点类型 (可选，默认'grid')
+            params: 布点参数 (可选)
         
         Returns:
             {"success": bool, "message": str}
@@ -607,10 +650,9 @@ class WebAPI:
         if not self.field_experiment.current_exp_id:
             return {"success": False, "error_code": 1021, "message": "没有当前实验"}
         
-        return self.field_experiment.db.save_point_layout(
-            self.field_experiment.current_exp_id, 
-            points
-        )
+        # 保存布点配置和测点
+        params = params or {}
+        return self.field_experiment.save_layout_config(layout_type, params, points)
     
     def select_custom_points_file(self):
         """打开文件选择对话框选择自定义测点文件
@@ -881,7 +923,7 @@ class WebAPI:
             exp_id: 实验ID
             format: 图片格式 ('png' | 'svg')
             dpi: 分辨率
-            options: 导出选项 {show_points, show_colorbar, title, ...}
+            options: 导出选项 {show_points, show_colorbar, title, output_path}
         
         Returns:
             {"success": bool, "file_path": str}
@@ -909,10 +951,32 @@ class WebAPI:
         
         options = options or {}
         
+        # 🆕 如果没有指定输出路径，打开文件保存对话框
+        output_path = options.get('output_path')
+        if not output_path:
+            try:
+                file_types = ('PNG图片 (*.png)', 'SVG矢量图 (*.svg)', '所有文件 (*.*)')
+                if format == 'svg':
+                    file_types = ('SVG矢量图 (*.svg)', 'PNG图片 (*.png)', '所有文件 (*.*)')
+                
+                result = self.window.create_file_dialog(
+                    webview.SAVE_DIALOG,
+                    file_types=file_types,
+                    save_filename=f'{exp_id}_contour.{format}'
+                )
+                
+                if result and len(result) > 0:
+                    output_path = result[0]
+                else:
+                    return {"success": False, "message": "用户取消"}
+            except Exception as e:
+                return {"success": False, "message": f"打开文件对话框失败: {str(e)}"}
+        
         return self.contour_generator.export_contour_image(
             contour_result['grid'],
             shape_config,
             points=points,
+            output_path=output_path,
             format=format,
             dpi=dpi,
             show_points=options.get('show_points', True),
@@ -979,7 +1043,7 @@ class WebAPI:
         Args:
             exp_id: 实验ID
             format: 导出格式 ('csv' | 'excel' | 'hdf5')
-            options: 导出选项
+            options: 导出选项 {output_path, include_quality, include_waveforms}
         
         Returns:
             {"success": bool, "file_path": str}
@@ -990,21 +1054,50 @@ class WebAPI:
         
         options = options or {}
         
+        # 🆕 如果没有指定输出路径，打开文件保存对话框
+        output_path = options.get('output_path')
+        if not output_path:
+            try:
+                if format == 'csv':
+                    file_types = ('CSV文件 (*.csv)', '所有文件 (*.*)')
+                    default_name = f'{exp_id}_data.csv'
+                elif format == 'excel':
+                    file_types = ('Excel文件 (*.xlsx)', '所有文件 (*.*)')
+                    default_name = f'{exp_id}_data.xlsx'
+                elif format == 'hdf5':
+                    file_types = ('HDF5文件 (*.h5)', '所有文件 (*.*)')
+                    default_name = f'{exp_id}_export.h5'
+                else:
+                    return {"success": False, "message": f"不支持的导出格式: {format}"}
+                
+                result = self.window.create_file_dialog(
+                    webview.SAVE_DIALOG,
+                    file_types=file_types,
+                    save_filename=default_name
+                )
+                
+                if result and len(result) > 0:
+                    output_path = result[0]
+                else:
+                    return {"success": False, "message": "用户取消"}
+            except Exception as e:
+                return {"success": False, "message": f"打开文件对话框失败: {str(e)}"}
+        
         if format == 'csv':
             return self.data_exporter.export_to_csv(
                 exp_id, 
-                options.get('output_path'),
+                output_path,
                 options.get('include_quality', True)
             )
         elif format == 'excel':
             return self.data_exporter.export_to_excel(
                 exp_id,
-                options.get('output_path')
+                output_path
             )
         elif format == 'hdf5':
             return self.data_exporter.export_to_hdf5(
                 exp_id,
-                options.get('output_path'),
+                output_path,
                 options.get('include_waveforms', True)
             )
         else:

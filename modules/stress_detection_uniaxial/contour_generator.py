@@ -206,7 +206,11 @@ class ContourGenerator:
         try:
             xi = np.array(grid_data['xi'])
             yi = np.array(grid_data['yi'])
-            zi = np.array(grid_data['zi'])
+            
+            # 🆕 处理zi中的None值（从JSON转换来的）
+            zi_raw = grid_data['zi']
+            # 将None转换为np.nan
+            zi = np.array([[np.nan if v is None else v for v in row] for row in zi_raw], dtype=float)
             
             # 计算色标范围
             valid_z = zi[~np.isnan(zi)]
@@ -228,10 +232,14 @@ class ContourGenerator:
             # 绘制测点
             if show_points and points:
                 for p in points:
-                    if p.get('status') == 'measured':
-                        ax.plot(p['x'], p['y'], 'ko', markersize=4)
-                    elif p.get('status') == 'pending':
-                        ax.plot(p['x'], p['y'], 'o', color='gray', markersize=3, alpha=0.5)
+                    # 🆕 兼容两种字段名：x/y 和 x_coord/y_coord
+                    x = p.get('x') or p.get('x_coord')
+                    y = p.get('y') or p.get('y_coord')
+                    if x is not None and y is not None:
+                        if p.get('status') == 'measured':
+                            ax.plot(x, y, 'ko', markersize=4)
+                        elif p.get('status') == 'pending':
+                            ax.plot(x, y, 'o', color='gray', markersize=3, alpha=0.5)
             
             # 添加色标
             if show_colorbar:
