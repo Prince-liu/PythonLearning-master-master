@@ -1,4 +1,4 @@
-// ==================== 布点设置面板模块 ====================
+﻿// ==================== 布点设置面板模块 ====================
 // 功能：布点方式选择、参数配置、测点生成、顺序优化
 
 const FieldLayoutPanel = (function() {
@@ -29,7 +29,7 @@ const FieldLayoutPanel = (function() {
         callbacks = cbs;
         
         绑定事件();
-        console.log('[布点面板] 模块初始化完成');
+
     }
     
     // ========== 事件绑定 ==========
@@ -1138,6 +1138,172 @@ const FieldLayoutPanel = (function() {
         更新状态徽章(points.length);
     }
     
+    // ========== 恢复布点参数（从保存的配置恢复）==========
+    function 恢复布点参数(layoutConfig, points) {
+        if (!layoutConfig) {
+            // 没有保存的配置，只更新测点数量
+            更新显示(points);
+            return;
+        }
+
+        const type = layoutConfig.type || 'grid';
+        const params = layoutConfig.params || {};
+        
+        // 切换到对应的布点类型
+        当前布点类型 = type;
+        const typeRadio = document.querySelector(`input[name="field-layout-type"][value="${type}"]`);
+        if (typeRadio) {
+            typeRadio.checked = true;
+        }
+        
+        // 显示对应的参数面板
+        document.querySelectorAll('.field-layout-params').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        const paramsPanel = document.getElementById(`field-layout-${type}-params`);
+        if (paramsPanel) {
+            paramsPanel.style.display = 'block';
+        }
+        
+        // 根据布点类型恢复参数
+        switch (type) {
+            case 'grid':
+                恢复网格参数(params);
+                break;
+            case 'polar':
+                恢复极坐标参数(params);
+                break;
+            case 'adaptive':
+                恢复自适应参数(params);
+                break;
+        }
+        
+        // 更新测点数量显示
+        更新状态徽章(points?.length || 0);
+    }
+    
+    // ========== 恢复网格参数 ==========
+    function 恢复网格参数(params) {
+        // 行数和列数
+        const rowsInput = document.getElementById('field-layout-grid-rows');
+        const colsInput = document.getElementById('field-layout-grid-cols');
+        if (rowsInput && params.rows) rowsInput.value = params.rows;
+        if (colsInput && params.cols) colsInput.value = params.cols;
+        
+        // 边距设置
+        if (params.margin_left !== undefined || params.margin_top !== undefined) {
+            边距设置.left = params.margin_left ?? 10;
+            边距设置.right = params.margin_right ?? 10;
+            边距设置.top = params.margin_top ?? 10;
+            边距设置.bottom = params.margin_bottom ?? 10;
+            
+            // 判断是统一还是分别设置
+            if (边距设置.left === 边距设置.right && 
+                边距设置.top === 边距设置.bottom && 
+                边距设置.left === 边距设置.top) {
+                边距设置.mode = 'uniform';
+                边距设置.uniform = 边距设置.left;
+            } else {
+                边距设置.mode = 'separate';
+            }
+            
+            更新边距隐藏字段();
+            更新边距显示();
+        }
+        
+        // 行间距（变距）
+        if (params.variable_row_spacing && Array.isArray(params.variable_row_spacing)) {
+            const modeInput = document.getElementById('field-layout-row-spacing-mode');
+            const arrayInput = document.getElementById('field-layout-row-spacing-array');
+            if (modeInput) modeInput.value = 'variable';
+            if (arrayInput) arrayInput.value = params.variable_row_spacing.join(',');
+            更新间距显示('row', 'variable', null, params.variable_row_spacing);
+        }
+        
+        // 列间距（变距）
+        if (params.variable_col_spacing && Array.isArray(params.variable_col_spacing)) {
+            const modeInput = document.getElementById('field-layout-col-spacing-mode');
+            const arrayInput = document.getElementById('field-layout-col-spacing-array');
+            if (modeInput) modeInput.value = 'variable';
+            if (arrayInput) arrayInput.value = params.variable_col_spacing.join(',');
+            更新间距显示('col', 'variable', null, params.variable_col_spacing);
+        }
+
+    }
+    
+    // ========== 恢复极坐标参数 ==========
+    function 恢复极坐标参数(params) {
+        const inputs = {
+            'field-layout-polar-cx': params.center_x,
+            'field-layout-polar-cy': params.center_y,
+            'field-layout-polar-rstart': params.r_start,
+            'field-layout-polar-rcount': params.r_count,
+            'field-layout-polar-astart': params.angle_start,
+            'field-layout-polar-aend': params.angle_end
+        };
+        
+        for (const [id, value] of Object.entries(inputs)) {
+            const input = document.getElementById(id);
+            if (input && value !== undefined) {
+                input.value = value;
+            }
+        }
+        
+        // 半径步长
+        if (Array.isArray(params.r_step)) {
+            // 变半径步长
+            const modeInput = document.getElementById('field-layout-polar-rstep-mode');
+            const arrayInput = document.getElementById('field-layout-polar-rstep-array');
+            if (modeInput) modeInput.value = 'variable';
+            if (arrayInput) arrayInput.value = params.r_step.join(',');
+        } else if (params.r_step !== undefined) {
+            const rstepInput = document.getElementById('field-layout-polar-rstep');
+            if (rstepInput) rstepInput.value = params.r_step;
+        }
+        
+        // 每层点数
+        if (Array.isArray(params.points_per_ring)) {
+            const modeInput = document.getElementById('field-layout-polar-ppr-mode');
+            const arrayInput = document.getElementById('field-layout-polar-ppr-array');
+            if (modeInput) modeInput.value = 'variable';
+            if (arrayInput) arrayInput.value = params.points_per_ring.join(',');
+        } else if (params.points_per_ring !== undefined) {
+            const pprInput = document.getElementById('field-layout-polar-ppr');
+            if (pprInput) pprInput.value = params.points_per_ring;
+        }
+
+    }
+    
+    // ========== 恢复自适应参数 ==========
+    function 恢复自适应参数(params) {
+        const inputs = {
+            'field-layout-adaptive-base': params.base_spacing,
+            'field-layout-adaptive-dense': params.dense_spacing
+        };
+        
+        for (const [id, value] of Object.entries(inputs)) {
+            const input = document.getElementById(id);
+            if (input && value !== undefined) {
+                input.value = value;
+            }
+        }
+        
+        // 密集区域设置
+        if (params.dense_region) {
+            const region = params.dense_region;
+            const typeInput = document.getElementById('field-layout-adaptive-region-type');
+            const cxInput = document.getElementById('field-layout-adaptive-region-cx');
+            const cyInput = document.getElementById('field-layout-adaptive-region-cy');
+            const rInput = document.getElementById('field-layout-adaptive-region-r');
+            
+            if (typeInput && region.type) typeInput.value = region.type;
+            if (cxInput && region.centerX !== undefined) cxInput.value = region.centerX;
+            if (cyInput && region.centerY !== undefined) cyInput.value = region.centerY;
+            if (rInput && region.radius !== undefined) rInput.value = region.radius;
+        }
+
+    }
+    
     function 清空() {
         更新状态徽章(0);
         
@@ -1190,8 +1356,7 @@ const FieldLayoutPanel = (function() {
         const adaptiveMinInput = document.getElementById('field-layout-adaptive-min');
         if (adaptiveTargetInput) adaptiveTargetInput.value = '50';
         if (adaptiveMinInput) adaptiveMinInput.value = '5';
-        
-        console.log('[布点面板] 已清空所有输入');
+
     }
     
     // ========== 获取当前布点类型 ==========
@@ -1210,6 +1375,7 @@ const FieldLayoutPanel = (function() {
         清空测点,
         导入CSV,
         更新显示,
+        恢复布点参数,
         清空
     };
 })();

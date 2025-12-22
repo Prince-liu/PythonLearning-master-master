@@ -1,4 +1,4 @@
-// ==================== 采集控制面板模块 ====================
+﻿// ==================== 采集控制面板模块 ====================
 // 功能：实时监控、测点采集、降噪设置、进度管理
 
 const FieldCapturePanel = (function() {
@@ -40,8 +40,7 @@ const FieldCapturePanel = (function() {
         
         // 初始化全局控制按钮状态
         更新全局控制按钮();
-        
-        console.log('[采集面板] 模块初始化完成');
+
     }
     
     // ========== 事件绑定 ==========
@@ -391,9 +390,9 @@ const FieldCapturePanel = (function() {
                 }
                 
                 // 刷新云图
-                console.log('[采集面板] 已测点数:', 实验状态.已测点列表.length);
+
                 if (实验状态.已测点列表.length >= 3) {
-                    console.log('[采集面板] 调用刷新云图');
+
                     callbacks?.刷新云图?.();
                 }
                 
@@ -566,8 +565,7 @@ const FieldCapturePanel = (function() {
         实验状态.当前测点索引 = value - 1;
         更新当前测点显示();
         callbacks?.刷新预览画布?.();
-        
-        console.log(`[采集面板] 跳转到测点 #${value}`);
+
     }
     
     // ========== 更新当前测点显示 ==========
@@ -783,15 +781,13 @@ const FieldCapturePanel = (function() {
                 
                 // 重新加载实验数据以获取更新后的应力值
                 const expId = 实验状态.当前实验?.id || 实验状态.当前实验?.experiment_id;
-                console.log('[采集面板] 更换基准点成功，准备重新加载实验数据, expId:', expId);
-                console.log('[采集面板] callbacks.加载实验数据 存在:', !!callbacks?.加载实验数据);
-                
+
                 if (expId && callbacks?.加载实验数据) {
-                    console.log('[采集面板] 调用 加载实验数据...');
+
                     await callbacks.加载实验数据(expId);
-                    console.log('[采集面板] 加载实验数据 完成');
+
                 } else {
-                    console.log('[采集面板] 没有加载实验数据回调，使用备用刷新');
+
                     // 如果没有加载实验数据的回调，至少刷新表格和云图
                     callbacks?.刷新数据表格?.();
                     callbacks?.刷新云图?.();
@@ -963,7 +959,7 @@ const FieldCapturePanel = (function() {
         }
         
         callbacks?.显示状态信息('✅', '采集已开始', '可以开始采集测点', 'success');
-        console.log('[采集面板] 采集流程已开始');
+
     }
     
     function 暂停采集流程() {
@@ -972,7 +968,7 @@ const FieldCapturePanel = (function() {
         更新全局控制按钮();
         禁用采集按钮();
         callbacks?.显示状态信息('ℹ️', '采集已暂停', '点击继续恢复采集', 'info');
-        console.log('[采集面板] 采集流程已暂停');
+
     }
     
     function 继续采集流程() {
@@ -981,7 +977,7 @@ const FieldCapturePanel = (function() {
         更新全局控制按钮();
         启用采集按钮();
         callbacks?.显示状态信息('✅', '采集已恢复', '', 'success');
-        console.log('[采集面板] 采集流程已恢复');
+
     }
     
     async function 完成采集() {
@@ -1046,7 +1042,7 @@ const FieldCapturePanel = (function() {
         callbacks?.刷新云图?.();
         
         callbacks?.显示状态信息('✅', '采集完成', `共 ${已测数量} 个有效测点`, 'success');
-        console.log('[采集面板] 采集流程已完成');
+
     }
     
     function 更新全局控制按钮() {

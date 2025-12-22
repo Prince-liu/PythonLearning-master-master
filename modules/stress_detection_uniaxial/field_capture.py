@@ -618,8 +618,6 @@ class FieldCapture:
         Returns:
             dict: 操作结果，包含重新计算的点数
         """
-        print(f"[set_baseline_point] 开始，point_index={point_index}, exp_id={self.current_exp_id}")
-        
         if not self.current_exp_id:
             return {"success": False, "error_code": 4001, "message": "没有设置当前实验"}
         
@@ -629,18 +627,14 @@ class FieldCapture:
         try:
             # 检查HDF5文件是否存在
             if not self.current_hdf5.file_exists():
-                print(f"[set_baseline_point] HDF5文件不存在: {self.current_hdf5.file_path}")
                 return {
                     "success": False,
                     "error_code": 4021,
                     "message": f"HDF5文件不存在: {self.current_hdf5.file_path}"
                 }
             
-            print(f"[set_baseline_point] HDF5文件存在: {self.current_hdf5.file_path}")
-            
             # 加载该测点的波形
             waveform_result = self.current_hdf5.load_point_waveform(point_index)
-            print(f"[set_baseline_point] 加载波形结果: success={waveform_result.get('success')}, message={waveform_result.get('message')}")
             
             if not waveform_result['success']:
                 return {
@@ -668,11 +662,9 @@ class FieldCapture:
             self.current_hdf5.save_baseline(point_index, waveform)
             
             # 更新数据库
-            print(f"[set_baseline_point] 更新数据库 baseline_point_id={point_index}")
             update_result = self.db.update_experiment(self.current_exp_id, {
                 'baseline_point_id': point_index
             })
-            print(f"[set_baseline_point] 数据库更新结果: {update_result}")
             
             # 重新计算所有已测量点的应力值
             recalculated = self._recalculate_all_stress_values()

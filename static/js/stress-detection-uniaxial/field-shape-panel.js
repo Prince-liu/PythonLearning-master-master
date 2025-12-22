@@ -1,4 +1,4 @@
-// ==================== 形状定义面板模块 ====================
+﻿// ==================== 形状定义面板模块 ====================
 // 功能：形状类型选择、参数输入、布尔运算、验证
 
 const FieldShapePanel = (function() {
@@ -22,7 +22,7 @@ const FieldShapePanel = (function() {
         callbacks = cbs;
         
         绑定事件();
-        console.log('[形状面板] 模块初始化完成');
+
     }
     
     // ========== 事件绑定 ==========
@@ -191,14 +191,11 @@ const FieldShapePanel = (function() {
         const config = 获取形状配置();
         
         // 调试：在界面上显示配置
-        console.log('[形状面板] 应用形状配置:', JSON.stringify(config, null, 2));
         
         // 先验证
         try {
             const result = await pywebview.api.validate_shape(config);
-            
-            console.log('[形状面板] 验证结果:', result);
-            
+
             if (!result.success || !result.is_valid) {
                 const errorMsg = result.error || '形状无效，无法应用';
                 // 显示详细错误信息
@@ -470,8 +467,7 @@ const FieldShapePanel = (function() {
             statusBadge.textContent = '⚪ 未设置';
             statusBadge.className = 'status-badge';
         }
-        
-        console.log('[形状面板] 已清空所有输入');
+
     }
     
     // ========== 工具函数 ==========

@@ -47,6 +47,40 @@ class ContourGenerator:
         self.exp_id = exp_id
         self.cache = None
         self.last_stats = None
+        self._font_configured = False
+    
+    def _configure_chinese_font(self):
+        """配置matplotlib中文字体支持"""
+        if not MATPLOTLIB_AVAILABLE or self._font_configured:
+            return
+        
+        try:
+            # Windows系统常见中文字体
+            chinese_fonts = [
+                'Microsoft YaHei',  # 微软雅黑
+                'SimHei',           # 黑体
+                'SimSun',           # 宋体
+                'KaiTi',            # 楷体
+                'FangSong'          # 仿宋
+            ]
+            
+            # 尝试设置中文字体
+            for font in chinese_fonts:
+                try:
+                    plt.rcParams['font.sans-serif'] = [font]
+                    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+                    self._font_configured = True
+                    break
+                except:
+                    continue
+            
+            # 如果所有中文字体都失败，使用默认字体（但中文会显示为方框）
+            if not self._font_configured:
+                print("警告: 未找到中文字体，图片中的中文可能无法正常显示")
+                self._font_configured = True  # 标记为已配置，避免重复尝试
+        except Exception as e:
+            print(f"配置中文字体失败: {str(e)}")
+            self._font_configured = True
     
     def generate_contour(self, grid_data: Dict[str, Any], 
                         shape_config: Dict[str, Any],
@@ -75,7 +109,11 @@ class ContourGenerator:
         try:
             xi = np.array(grid_data['xi'])
             yi = np.array(grid_data['yi'])
-            zi = np.array(grid_data['zi'])
+            
+            # 🆕 处理zi中的None值（从JSON转换来的）
+            zi_raw = grid_data['zi']
+            # 将None转换为np.nan
+            zi = np.array([[np.nan if v is None else v for v in row] for row in zi_raw], dtype=float)
             
             # 计算统计信息
             valid_z = zi[~np.isnan(zi)]
@@ -204,6 +242,9 @@ class ContourGenerator:
             }
         
         try:
+            # 配置中文字体支持
+            self._configure_chinese_font()
+            
             xi = np.array(grid_data['xi'])
             yi = np.array(grid_data['yi'])
             
@@ -243,7 +284,7 @@ class ContourGenerator:
             
             # 添加色标
             if show_colorbar:
-                cbar = plt.colorbar(im, ax=ax, label='应力 (MPa)')
+                cbar = plt.colorbar(im, ax=ax, label='Stress (MPa)')
             
             # 设置标题和标签
             if title:
@@ -390,6 +431,42 @@ class ContourGenerator:
         """清除缓存"""
         self.cache = None
         self.last_stats = None
+
+
+    
+    def generate_contour_lines(self, grid_data: Dict[str, Any], 
+                               levels: int = 8) -> Dict[str, Any]:
+        """
+        生成等高线数据
+        
+        Args:
+            grid_data: 插值网格数据 {xi, yi, zi}
+            levels: 等高线数量（默认8条）
+        
+        Returns:
+            dict: {"success": bool, "contours": [...], "levels": [...]}
+        """
+        try:
+            from .interpolation import StressFieldInterpolation
+            
+            xi = np.array(grid_data['xi'])
+            yi = np.array(grid_data['yi'])
+            
+            # 🆕 处理zi中的None值（从JSON转换来的）
+            zi_raw = grid_data['zi']
+            # 将None转换为np.nan
+            zi = np.array([[np.nan if v is None else v for v in row] for row in zi_raw], dtype=float)
+            
+            # 调用插值模块的等高线生成函数
+            result = StressFieldInterpolation.generate_contour_lines(zi, xi, yi, levels=levels)
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"生成等高线失败: {str(e)}"
+            }
 
 
 class ContourCache:

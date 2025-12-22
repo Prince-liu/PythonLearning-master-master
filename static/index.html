@@ -1057,11 +1057,35 @@
                                     <select id="field-export-format" class="field-select">
                                         <option value="csv">CSV (测点数据)</option>
                                         <option value="excel">Excel (完整报告)</option>
-                                        <option value="hdf5">HDF5 (含波形)</option>
+                                        <option value="hdf5">HDF5 (可含波形)</option>
                                     </select>
                                 </div>
+                                
+                                <!-- Excel格式选项 -->
+                                <div class="field-form-group" id="field-export-excel-options" style="display: none;">
+                                    <label>Excel格式</label>
+                                    <div class="field-radio-group">
+                                        <label><input type="radio" name="excel-format" value="multi" checked> 多表格式（推荐）</label>
+                                        <label><input type="radio" name="excel-format" value="single"> 单表格式</label>
+                                    </div>
+                                    <small style="color: #666; display: block; margin-top: 4px;">
+                                        多表：分为实验信息、测点数据、统计信息三个工作表<br>
+                                        单表：所有数据在一个工作表中
+                                    </small>
+                                </div>
+                                
+                                <!-- HDF5格式选项 -->
+                                <div class="field-form-group" id="field-export-hdf5-options" style="display: none;">
+                                    <label>HDF5选项</label>
+                                    <div class="field-checkbox-group">
+                                        <label><input type="checkbox" id="field-export-include-waveforms"> 包含波形数据</label>
+                                    </div>
+                                    <small style="color: #666; display: block; margin-top: 4px;">
+                                        💡 勾选后文件会包含所有测点的完整波形数据（约 1-2 MB）
+                                    </small>
+                                </div>
+                                
                                 <div class="field-checkbox-group">
-                                    <label><input type="checkbox" id="field-export-include-waveforms"> 包含波形数据</label>
                                     <label><input type="checkbox" id="field-export-include-contour" checked> 包含云图</label>
                                     <label><input type="checkbox" id="field-export-include-stats" checked> 包含统计</label>
                                 </div>

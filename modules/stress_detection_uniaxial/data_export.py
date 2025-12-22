@@ -230,20 +230,22 @@ class DataExporter:
                 "message": f"CSV导出失败: {str(e)}"
             }
     
-    def export_to_excel(self, exp_id: str, output_path: str = None) -> Dict[str, Any]:
+    def export_to_excel(self, exp_id: str, output_path: str = None, 
+                       single_sheet: bool = False) -> Dict[str, Any]:
         """
-        导出为Excel文件（多sheet）
+        导出为Excel文件
         
         Args:
             exp_id: 实验ID
             output_path: 输出路径 (可选)
+            single_sheet: 是否使用单表格式 (默认False，使用多表格式)
         
         Returns:
             dict: {"success": bool, "file_path": str}
         """
         try:
             import openpyxl
-            from openpyxl.styles import Font, Alignment, PatternFill
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
         except ImportError:
             return {
                 "success": False,
@@ -265,124 +267,227 @@ class DataExporter:
                 output_dir = 'data/uniaxial_field/exports'
                 os.makedirs(output_dir, exist_ok=True)
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_path = os.path.join(output_dir, f'{exp_id}_data_{timestamp}.xlsx')
+                format_suffix = 'single' if single_sheet else 'multi'
+                output_path = os.path.join(output_dir, f'{exp_id}_data_{format_suffix}_{timestamp}.xlsx')
             
             # 创建工作簿
             wb = openpyxl.Workbook()
             
-            # Sheet 1: 元数据
-            ws_meta = wb.active
-            ws_meta.title = '实验信息'
-            
-            meta_data = [
-                ('实验ID', exp_id),
-                ('实验名称', exp_data.get('name', '')),
-                ('创建时间', exp_data.get('created_at', '')),
-                ('完成时间', exp_data.get('completed_at', '')),
-                ('状态', exp_data.get('status', '')),
-                ('试件材料', exp_data.get('sample_material', '')),
-                ('试件厚度(mm)', exp_data.get('sample_thickness', '')),
-                ('实验目的', exp_data.get('test_purpose', '')),
-                ('操作员', exp_data.get('operator', '')),
-                ('环境温度(°C)', exp_data.get('temperature', '')),
-                ('环境湿度(%)', exp_data.get('humidity', '')),
-            ]
-            
-            for row_idx, (key, value) in enumerate(meta_data, 1):
-                ws_meta.cell(row=row_idx, column=1, value=key)
-                ws_meta.cell(row=row_idx, column=2, value=value)
-            
-            # Sheet 2: 测点数据
-            ws_points = wb.create_sheet('测点数据')
-            
-            # 确定坐标类型
-            shape_config = exp_data.get('shape_config', {})
-            use_polar = shape_config.get('type') == 'circle'
-            
-            if use_polar:
-                headers = ['#', 'R(mm)', 'θ(°)', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
-                          '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
-            else:
-                headers = ['#', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
-                          '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
-            
-            for col_idx, header in enumerate(headers, 1):
-                cell = ws_points.cell(row=1, column=col_idx, value=header)
-                cell.font = Font(bold=True)
-            
-            for row_idx, point in enumerate(points, 2):
-                if use_polar:
-                    data = [
-                        point['point_index'],
-                        point.get('r_coord'),
-                        point.get('theta_coord'),
-                        point.get('x_coord'),
-                        point.get('y_coord'),
-                        point.get('time_diff'),
-                        point.get('stress_value'),
-                        point.get('status'),
-                        point.get('quality_score'),
-                        point.get('snr'),
-                        '是' if point.get('is_suspicious') else '',
-                        point.get('measured_at')
-                    ]
-                else:
-                    data = [
-                        point['point_index'],
-                        point.get('x_coord'),
-                        point.get('y_coord'),
-                        point.get('time_diff'),
-                        point.get('stress_value'),
-                        point.get('status'),
-                        point.get('quality_score'),
-                        point.get('snr'),
-                        '是' if point.get('is_suspicious') else '',
-                        point.get('measured_at')
-                    ]
+            if single_sheet:
+                # 单表格式：所有数据在一个表中
+                ws = wb.active
+                ws.title = '实验数据'
                 
-                for col_idx, value in enumerate(data, 1):
-                    ws_points.cell(row=row_idx, column=col_idx, value=value)
-            
-            # Sheet 3: 统计信息
-            ws_stats = wb.create_sheet('统计信息')
-            
-            measured_points = [p for p in points if p.get('status') == 'measured']
-            stress_values = [p['stress_value'] for p in measured_points if p.get('stress_value') is not None]
-            
-            stats_data = [
-                ('总测点数', len(points)),
-                ('已测量', len(measured_points)),
-                ('待测量', len([p for p in points if p.get('status') == 'pending'])),
-                ('已跳过', len([p for p in points if p.get('status') == 'skipped'])),
-                ('可疑点', len([p for p in points if p.get('is_suspicious')])),
-            ]
-            
-            if stress_values:
-                stats_data.extend([
-                    ('', ''),
-                    ('应力统计', ''),
-                    ('最小值(MPa)', min(stress_values)),
-                    ('最大值(MPa)', max(stress_values)),
-                    ('平均值(MPa)', np.mean(stress_values)),
-                    ('标准差(MPa)', np.std(stress_values)),
-                    ('范围(MPa)', max(stress_values) - min(stress_values)),
-                ])
-            
-            for row_idx, (key, value) in enumerate(stats_data, 1):
-                ws_stats.cell(row=row_idx, column=1, value=key)
-                if isinstance(value, float):
-                    ws_stats.cell(row=row_idx, column=2, value=round(value, 2))
+                current_row = 1
+                
+                # 写入实验信息（作为表头）
+                meta_data = [
+                    ('实验ID', exp_id),
+                    ('实验名称', exp_data.get('name', '')),
+                    ('创建时间', exp_data.get('created_at', '')),
+                    ('试件材料', exp_data.get('sample_material', '')),
+                    ('试件厚度(mm)', exp_data.get('sample_thickness', '')),
+                    ('操作员', exp_data.get('operator', '')),
+                ]
+                
+                for key, value in meta_data:
+                    ws.cell(row=current_row, column=1, value=key).font = Font(bold=True)
+                    ws.cell(row=current_row, column=2, value=value)
+                    current_row += 1
+                
+                current_row += 1  # 空行
+                
+                # 写入统计信息
+                measured_points = [p for p in points if p.get('status') == 'measured']
+                stress_values = [p['stress_value'] for p in measured_points if p.get('stress_value') is not None]
+                
+                ws.cell(row=current_row, column=1, value='测点统计').font = Font(bold=True)
+                current_row += 1
+                
+                stats_data = [
+                    ('总测点数', len(points)),
+                    ('已测量', len(measured_points)),
+                    ('待测量', len([p for p in points if p.get('status') == 'pending'])),
+                ]
+                
+                if stress_values:
+                    stats_data.extend([
+                        ('应力最小值(MPa)', round(min(stress_values), 2)),
+                        ('应力最大值(MPa)', round(max(stress_values), 2)),
+                        ('应力平均值(MPa)', round(np.mean(stress_values), 2)),
+                    ])
+                
+                for key, value in stats_data:
+                    ws.cell(row=current_row, column=1, value=key)
+                    ws.cell(row=current_row, column=2, value=value)
+                    current_row += 1
+                
+                current_row += 1  # 空行
+                
+                # 写入测点数据表
+                shape_config = exp_data.get('shape_config', {})
+                use_polar = shape_config.get('type') == 'circle'
+                
+                if use_polar:
+                    headers = ['#', 'R(mm)', 'θ(°)', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
+                              '状态', '质量评分', 'SNR(dB)']
                 else:
-                    ws_stats.cell(row=row_idx, column=2, value=value)
+                    headers = ['#', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
+                              '状态', '质量评分', 'SNR(dB)']
+                
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws.cell(row=current_row, column=col_idx, value=header)
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(start_color='DDDDDD', end_color='DDDDDD', fill_type='solid')
+                
+                current_row += 1
+                
+                for point in points:
+                    if use_polar:
+                        data = [
+                            point['point_index'],
+                            point.get('r_coord'),
+                            point.get('theta_coord'),
+                            point.get('x_coord'),
+                            point.get('y_coord'),
+                            point.get('time_diff'),
+                            point.get('stress_value'),
+                            point.get('status'),
+                            point.get('quality_score'),
+                            point.get('snr'),
+                        ]
+                    else:
+                        data = [
+                            point['point_index'],
+                            point.get('x_coord'),
+                            point.get('y_coord'),
+                            point.get('time_diff'),
+                            point.get('stress_value'),
+                            point.get('status'),
+                            point.get('quality_score'),
+                            point.get('snr'),
+                        ]
+                    
+                    for col_idx, value in enumerate(data, 1):
+                        ws.cell(row=current_row, column=col_idx, value=value)
+                    current_row += 1
+                
+            else:
+                # 多表格式：分为三个工作表
+                # Sheet 1: 元数据
+                ws_meta = wb.active
+                ws_meta.title = '实验信息'
+                
+                meta_data = [
+                    ('实验ID', exp_id),
+                    ('实验名称', exp_data.get('name', '')),
+                    ('创建时间', exp_data.get('created_at', '')),
+                    ('完成时间', exp_data.get('completed_at', '')),
+                    ('状态', exp_data.get('status', '')),
+                    ('试件材料', exp_data.get('sample_material', '')),
+                    ('试件厚度(mm)', exp_data.get('sample_thickness', '')),
+                    ('实验目的', exp_data.get('test_purpose', '')),
+                    ('操作员', exp_data.get('operator', '')),
+                    ('环境温度(°C)', exp_data.get('temperature', '')),
+                    ('环境湿度(%)', exp_data.get('humidity', '')),
+                ]
+                
+                for row_idx, (key, value) in enumerate(meta_data, 1):
+                    ws_meta.cell(row=row_idx, column=1, value=key)
+                    ws_meta.cell(row=row_idx, column=2, value=value)
+                
+                # Sheet 2: 测点数据
+                ws_points = wb.create_sheet('测点数据')
+                
+                # 确定坐标类型
+                shape_config = exp_data.get('shape_config', {})
+                use_polar = shape_config.get('type') == 'circle'
+                
+                if use_polar:
+                    headers = ['#', 'R(mm)', 'θ(°)', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
+                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
+                else:
+                    headers = ['#', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
+                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
+                
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws_points.cell(row=1, column=col_idx, value=header)
+                    cell.font = Font(bold=True)
+                
+                for row_idx, point in enumerate(points, 2):
+                    if use_polar:
+                        data = [
+                            point['point_index'],
+                            point.get('r_coord'),
+                            point.get('theta_coord'),
+                            point.get('x_coord'),
+                            point.get('y_coord'),
+                            point.get('time_diff'),
+                            point.get('stress_value'),
+                            point.get('status'),
+                            point.get('quality_score'),
+                            point.get('snr'),
+                            '是' if point.get('is_suspicious') else '',
+                            point.get('measured_at')
+                        ]
+                    else:
+                        data = [
+                            point['point_index'],
+                            point.get('x_coord'),
+                            point.get('y_coord'),
+                            point.get('time_diff'),
+                            point.get('stress_value'),
+                            point.get('status'),
+                            point.get('quality_score'),
+                            point.get('snr'),
+                            '是' if point.get('is_suspicious') else '',
+                            point.get('measured_at')
+                        ]
+                    
+                    for col_idx, value in enumerate(data, 1):
+                        ws_points.cell(row=row_idx, column=col_idx, value=value)
+                
+                # Sheet 3: 统计信息
+                ws_stats = wb.create_sheet('统计信息')
+                
+                measured_points = [p for p in points if p.get('status') == 'measured']
+                stress_values = [p['stress_value'] for p in measured_points if p.get('stress_value') is not None]
+                
+                stats_data = [
+                    ('总测点数', len(points)),
+                    ('已测量', len(measured_points)),
+                    ('待测量', len([p for p in points if p.get('status') == 'pending'])),
+                    ('已跳过', len([p for p in points if p.get('status') == 'skipped'])),
+                    ('可疑点', len([p for p in points if p.get('is_suspicious')])),
+                ]
+                
+                if stress_values:
+                    stats_data.extend([
+                        ('', ''),
+                        ('应力统计', ''),
+                        ('最小值(MPa)', min(stress_values)),
+                        ('最大值(MPa)', max(stress_values)),
+                        ('平均值(MPa)', np.mean(stress_values)),
+                        ('标准差(MPa)', np.std(stress_values)),
+                        ('范围(MPa)', max(stress_values) - min(stress_values)),
+                    ])
+                
+                for row_idx, (key, value) in enumerate(stats_data, 1):
+                    ws_stats.cell(row=row_idx, column=1, value=key)
+                    if isinstance(value, float):
+                        ws_stats.cell(row=row_idx, column=2, value=round(value, 2))
+                    else:
+                        ws_stats.cell(row=row_idx, column=2, value=value)
             
             # 保存
             wb.save(output_path)
             
+            format_name = '单表' if single_sheet else '多表'
             return {
                 "success": True,
                 "error_code": 0,
                 "file_path": output_path,
-                "message": f"已导出Excel文件"
+                "message": f"已导出Excel文件（{format_name}格式）"
             }
             
         except Exception as e:

@@ -107,7 +107,15 @@ class FieldExperiment:
         if hdf5.file_exists():
             config_result = hdf5.load_config_snapshot()
             if config_result['success']:
-                result['data']['config_snapshot'] = config_result['data']
+                hdf5_config = config_result['data']
+                # 🔧 修复：将HDF5配置合并到experiment对象的config_snapshot中
+                # 数据库中的config_snapshot可能为空，HDF5中保存了完整的配置
+                db_config = result['data']['experiment'].get('config_snapshot', {})
+                # 合并配置：HDF5配置优先（因为它保存了布点参数等详细信息）
+                merged_config = {**db_config, **hdf5_config}
+                result['data']['experiment']['config_snapshot'] = merged_config
+                # 同时在data层级也保存一份（兼容旧代码）
+                result['data']['config_snapshot'] = merged_config
         
         # 设置当前实验
         self.current_exp_id = exp_id

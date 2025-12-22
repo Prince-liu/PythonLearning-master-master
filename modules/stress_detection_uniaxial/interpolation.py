@@ -129,17 +129,7 @@ class StressFieldInterpolation:
             
             if has_valid_shape:
                 mask = ShapeUtils.create_shape_mask(shape_config, xi_grid, yi_grid)
-                
-                # 调试：打印遮罩信息
-                mask_count = np.sum(mask)
-                total_count = mask.size
-                print(f"[插值] 形状遮罩: {mask_count}/{total_count} 个点在形状内 ({100*mask_count/total_count:.1f}%)")
-                print(f"[插值] 形状配置: type={shape_type}, width={shape_config.get('width')}, height={shape_config.get('height')}")
-                print(f"[插值] 网格范围: x=[{xi_grid.min():.1f}, {xi_grid.max():.1f}], y=[{yi_grid.min():.1f}, {yi_grid.max():.1f}]")
-                
                 zi_grid = np.where(mask, zi_grid, np.nan)
-            else:
-                print(f"[插值] 跳过形状遮罩: 形状配置无效 (type={shape_type})")
             
             # 将 NaN 转换为 None（JSON 兼容）
             def nan_to_none(arr):
@@ -275,18 +265,41 @@ class StressFieldInterpolation:
             fig, ax = plt.subplots()
             cs = ax.contour(xi, yi, zi, levels=level_values)
             
-            # 提取等高线数据
+            # 提取等高线数据（兼容不同matplotlib版本）
             contours = []
-            for i, collection in enumerate(cs.collections):
-                paths = collection.get_paths()
-                level_contours = []
-                for path in paths:
-                    vertices = path.vertices.tolist()
-                    level_contours.append(vertices)
-                contours.append({
-                    'level': float(level_values[i]),
-                    'paths': level_contours
-                })
+            try:
+                # 新版本：直接使用 cs.allsegs
+                if hasattr(cs, 'allsegs'):
+                    for i, segments in enumerate(cs.allsegs):
+                        level_contours = []
+                        for seg in segments:
+                            if len(seg) > 0:
+                                level_contours.append(seg.tolist())
+                        if level_contours:
+                            contours.append({
+                                'level': float(level_values[i]),
+                                'paths': level_contours
+                            })
+                # 旧版本：使用 collections
+                elif hasattr(cs, 'collections'):
+                    for i, collection in enumerate(cs.collections):
+                        paths = collection.get_paths()
+                        level_contours = []
+                        for path in paths:
+                            vertices = path.vertices.tolist()
+                            level_contours.append(vertices)
+                        contours.append({
+                            'level': float(level_values[i]),
+                            'paths': level_contours
+                        })
+                else:
+                    raise AttributeError("无法从 contour 对象提取等高线数据")
+            except Exception as extract_error:
+                plt.close(fig)
+                return {
+                    "success": False,
+                    "error": f"提取等高线数据失败: {str(extract_error)}"
+                }
             
             plt.close(fig)
             

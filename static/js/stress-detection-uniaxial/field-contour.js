@@ -1,4 +1,4 @@
-// ==================== 云图显示模块 ====================
+﻿// ==================== 云图显示模块 ====================
 // 功能：云图绘制、色标显示、交互、导出
 
 const FieldContour = (function() {
@@ -52,8 +52,7 @@ const FieldContour = (function() {
             绑定事件();
             调整尺寸();
         }
-        
-        console.log('[云图显示] 模块初始化完成');
+
     }
     
     // ========== 事件绑定 ==========
@@ -84,9 +83,15 @@ const FieldContour = (function() {
         // 显示等高线复选框
         const showContourLinesCheckbox = document.getElementById('field-contour-show-contour-lines');
         if (showContourLinesCheckbox) {
-            showContourLinesCheckbox.addEventListener('change', (e) => {
+            showContourLinesCheckbox.addEventListener('change', async (e) => {
                 显示设置.显示等高线 = e.target.checked;
-                刷新();
+                
+                // 如果勾选且有云图数据，加载等高线
+                if (e.target.checked && 云图数据?.success && 云图数据?.mode === 'contour') {
+                    await 加载等高线数据();
+                } else {
+                    刷新();
+                }
             });
         }
         
@@ -225,11 +230,62 @@ const FieldContour = (function() {
     
     // ========== 更新数据 ==========
     function 更新数据(data) {
-        console.log('[云图显示] 收到数据:', data);
-        console.log('[云图显示] mode:', data?.mode);
-        console.log('[云图显示] grid:', data?.grid ? '有数据' : '无数据');
+
         云图数据 = data;
+        
+        // 如果显示等高线，加载等高线数据
+        if (显示设置.显示等高线 && data?.success && data?.mode === 'contour') {
+            加载等高线数据();
+        }
+        
         刷新();
+    }
+    
+    // ========== 加载等高线数据 ==========
+    async function 加载等高线数据() {
+        try {
+
+            // 显示加载状态
+            if (callbacks?.显示状态信息) {
+                callbacks.显示状态信息('⏳', '正在生成等高线...', '', 'info', 0);
+            }
+            
+            const expId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
+            if (!expId) {
+
+                if (callbacks?.显示状态信息) {
+                    callbacks.显示状态信息('⚠️', '无法加载等高线', '没有实验ID', 'warning');
+                }
+                return;
+            }
+
+            const result = await pywebview.api.get_contour_lines(expId, 8);  // 8条等高线
+
+            if (result.success) {
+                云图数据.contour_lines = result.contours;
+
+                // 显示成功信息
+                if (callbacks?.显示状态信息) {
+                    callbacks.显示状态信息('✅', '等高线已生成', `共 ${result.contours.length} 条`, 'success', 3000);
+                }
+                
+                刷新();
+            } else {
+                console.error('[云图显示] 等高线加载失败:', result.message || result.error);
+                
+                // 显示错误信息
+                if (callbacks?.显示状态信息) {
+                    callbacks.显示状态信息('❌', '等高线生成失败', result.message || result.error || '未知错误', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('[云图显示] 加载等高线失败:', error);
+            
+            // 显示错误信息
+            if (callbacks?.显示状态信息) {
+                callbacks.显示状态信息('❌', '等高线加载异常', error.toString(), 'error');
+            }
+        }
     }
     
     // ========== 刷新画布 ==========
@@ -278,16 +334,21 @@ const FieldContour = (function() {
         绘制形状轮廓(transform);
         
         // 绘制云图
-        console.log('[云图显示] 准备绘制云图, mode:', 云图数据?.mode, 'grid:', 云图数据?.grid ? '有' : '无');
+
         if (云图数据.mode === 'contour' && 云图数据.grid) {
-            console.log('[云图显示] 开始绘制云图');
+
             绘制云图(transform);
         } else {
-            console.log('[云图显示] 跳过云图绘制, mode:', 云图数据?.mode);
+
         }
         
         // 再次绘制形状轮廓边框（确保边框在云图上方）
         绘制形状边框(transform);
+        
+        // 绘制等高线（在测点之前）
+        if (显示设置.显示等高线 && 云图数据.contour_lines) {
+            绘制等高线(transform);
+        }
         
         // 绘制测点
         if (显示设置.显示测点) {
@@ -482,7 +543,7 @@ const FieldContour = (function() {
     function 绘制云图(transform) {
         const grid = 云图数据.grid;
         if (!grid || !grid.xi || !grid.yi || !grid.zi) {
-            console.log('[云图显示] 绘制云图: grid数据不完整');
+
             return;
         }
         
@@ -490,23 +551,19 @@ const FieldContour = (function() {
         const vmin = 云图数据.stats?.vmin ?? 云图数据.metadata?.vmin ?? Math.min(...grid.zi.flat().filter(v => v !== null));
         const vmax = 云图数据.stats?.vmax ?? 云图数据.metadata?.vmax ?? Math.max(...grid.zi.flat().filter(v => v !== null));
         const vrange = vmax - vmin || 1;
-        
-        console.log('[云图显示] 绘制云图: vmin=', vmin, 'vmax=', vmax, 'vrange=', vrange);
-        
+
         const rows = grid.zi.length;
         const cols = grid.zi[0]?.length || 0;
         
         if (rows === 0 || cols === 0) {
-            console.log('[云图显示] 绘制云图: rows或cols为0');
+
             return;
         }
         
         // 计算像素大小
         const dx = Math.abs((grid.xi[0][1] - grid.xi[0][0]) * scale);
         const dy = Math.abs((grid.yi[1]?.[0] - grid.yi[0][0]) * scale);
-        
-        console.log('[云图显示] 绘制云图: rows=', rows, 'cols=', cols, 'dx=', dx, 'dy=', dy, 'scale=', scale);
-        
+
         // 统计有效点数
         let validCount = 0;
         let drawnCount = 0;
@@ -535,8 +592,7 @@ const FieldContour = (function() {
                 drawnCount++;
             }
         }
-        
-        console.log('[云图显示] 绘制完成: validCount=', validCount, 'drawnCount=', drawnCount);
+
     }
     
     // ========== 值到颜色映射 ==========
@@ -600,6 +656,58 @@ const FieldContour = (function() {
             ctx.lineWidth = 1.5;
             ctx.stroke();
         });
+    }
+    
+    // ========== 绘制等高线 ==========
+    function 绘制等高线(transform) {
+
+        if (!云图数据.contour_lines || 云图数据.contour_lines.length === 0) {
+
+            return;
+        }
+
+        const { scale, offsetX, offsetY } = transform;
+        
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';  // 加深颜色，更明显
+        ctx.lineWidth = 2;  // 加粗线条
+        ctx.setLineDash([]);  // 实线
+        
+        let totalPaths = 0;
+        
+        // 绘制每条等高线
+        云图数据.contour_lines.forEach((contour, idx) => {
+            const level = contour.level;
+            const paths = contour.paths;
+
+            paths.forEach((path, pathIdx) => {
+                if (path.length < 2) {
+                    return;
+                }
+                
+                totalPaths++;
+                
+                ctx.beginPath();
+                
+                // 绘制路径
+                path.forEach((point, index) => {
+                    const dataX = point[0];
+                    const dataY = point[1];
+                    
+                    // 转换坐标（Y轴翻转）
+                    const x = dataX * scale + offsetX;
+                    const y = offsetY - dataY * scale;
+                    
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                
+                ctx.stroke();
+            });
+        });
+
     }
     
     // ========== 绘制色标 ==========

@@ -916,6 +916,57 @@ class WebAPI:
         
         return self.contour_generator.get_colorbar_data(vmin, vmax, colormap)
     
+    def get_contour_lines(self, exp_id=None, levels=8):
+        """获取等高线数据
+        
+        Args:
+            exp_id: 实验ID (可选，默认当前实验)
+            levels: 等高线数量（默认8条）
+        
+        Returns:
+            {"success": bool, "contours": [...], "levels": [...]}
+        """
+        print(f"[等高线] 开始生成等高线, exp_id={exp_id}, levels={levels}")
+        
+        exp_id = exp_id or self.field_experiment.current_exp_id
+        if not exp_id:
+            print("[等高线] 错误: 没有当前实验")
+            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
+        
+        # 先获取云图数据
+        print(f"[等高线] 获取云图数据...")
+        contour_result = self.update_field_contour(exp_id)
+        
+        print(f"[等高线] 云图数据获取结果: success={contour_result.get('success')}, mode={contour_result.get('mode')}")
+        
+        if not contour_result.get('success') or contour_result.get('mode') == 'points_only':
+            print("[等高线] 错误: 没有足够的数据生成等高线")
+            return {"success": False, "message": "没有足够的数据生成等高线"}
+        
+        grid_data = contour_result.get('grid')
+        if not grid_data:
+            print("[等高线] 错误: 云图数据不完整")
+            return {"success": False, "message": "云图数据不完整"}
+        
+        print(f"[等高线] 网格数据: xi shape={len(grid_data.get('xi', []))}, yi shape={len(grid_data.get('yi', []))}, zi shape={len(grid_data.get('zi', []))}")
+        
+        # 生成等高线
+        if not self.contour_generator:
+            self.contour_generator = ContourGenerator(exp_id)
+        
+        print(f"[等高线] 调用 generate_contour_lines...")
+        result = self.contour_generator.generate_contour_lines(grid_data, levels=levels)
+        
+        print(f"[等高线] 生成结果: success={result.get('success')}")
+        if result.get('success'):
+            print(f"[等高线] 成功生成 {len(result.get('contours', []))} 条等高线")
+            for i, contour in enumerate(result.get('contours', [])[:3]):  # 只打印前3条
+                print(f"[等高线]   等高线 {i}: level={contour.get('level')}, paths={len(contour.get('paths', []))}")
+        else:
+            print(f"[等高线] 失败: {result.get('error', '未知错误')}")
+        
+        return result
+    
     def export_contour_image(self, exp_id=None, format='png', dpi=300, options=None):
         """导出云图图片
         
@@ -923,7 +974,7 @@ class WebAPI:
             exp_id: 实验ID
             format: 图片格式 ('png' | 'svg')
             dpi: 分辨率
-            options: 导出选项 {show_points, show_colorbar, title, output_path}
+            options: 导出选项 {show_points, show_colorbar, title, output_path, resolution}
         
         Returns:
             {"success": bool, "file_path": str}
@@ -932,8 +983,13 @@ class WebAPI:
         if not exp_id:
             return {"success": False, "error_code": 1021, "message": "没有当前实验"}
         
-        # 获取云图数据
-        contour_result = self.update_field_contour(exp_id)
+        options = options or {}
+        
+        # 🔧 导出时使用更高分辨率（默认300，比实时显示的100高3倍）
+        export_resolution = options.get('resolution', 300)
+        
+        # 获取云图数据（使用高分辨率重新生成）
+        contour_result = self.update_field_contour(exp_id, config={'resolution': export_resolution})
         if not contour_result['success'] or contour_result.get('mode') == 'points_only':
             return {"success": False, "message": "没有足够的数据生成云图"}
         
@@ -948,8 +1004,6 @@ class WebAPI:
         # 初始化云图生成器
         if not self.contour_generator:
             self.contour_generator = ContourGenerator(exp_id)
-        
-        options = options or {}
         
         # 🆕 如果没有指定输出路径，打开文件保存对话框
         output_path = options.get('output_path')
@@ -1092,7 +1146,8 @@ class WebAPI:
         elif format == 'excel':
             return self.data_exporter.export_to_excel(
                 exp_id,
-                output_path
+                output_path,
+                options.get('single_sheet', False)  # 支持单表/多表选项
             )
         elif format == 'hdf5':
             return self.data_exporter.export_to_hdf5(

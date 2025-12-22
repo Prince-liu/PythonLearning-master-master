@@ -1,4 +1,4 @@
-// ==================== 面板拖拽和折叠模块 ====================
+﻿// ==================== 面板拖拽和折叠模块 ====================
 // 功能：上下区域拖拽调节、左右区域拖拽调节、预览/云图折叠
 
 const FieldResizer = (function() {
@@ -44,8 +44,7 @@ const FieldResizer = (function() {
         
         // 应用初始比例
         应用比例();
-        
-        console.log('[面板调节] 模块初始化完成');
+
     }
     
     // ========== 拖拽事件 ==========
@@ -144,8 +143,7 @@ const FieldResizer = (function() {
                 contourObserver.observe(elements.contourContainer);
                 resizeObservers.push(contourObserver);
             }
-            
-            console.log('[面板调节] ResizeObserver 已启用，Canvas 将实时调整');
+
         } else {
             console.warn('[面板调节] 浏览器不支持 ResizeObserver，使用延迟刷新');
         }

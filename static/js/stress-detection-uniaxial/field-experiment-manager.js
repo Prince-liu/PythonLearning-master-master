@@ -1,4 +1,4 @@
-// ==================== 实验管理模块 ====================
+﻿// ==================== 实验管理模块 ====================
 // 功能：实验创建、加载、删除、导出
 
 const FieldExperimentManager = (function() {
@@ -14,7 +14,7 @@ const FieldExperimentManager = (function() {
         实验状态 = state;
         elements = els;
         callbacks = cbs;
-        console.log('[实验管理] 模块初始化完成');
+
     }
     
     // ========== 新建实验对话框 ==========

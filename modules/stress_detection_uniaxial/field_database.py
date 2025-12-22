@@ -185,11 +185,9 @@ class FieldDatabaseManager:
             for col_name, col_type in required_columns.items():
                 if col_name not in existing_columns:
                     cursor.execute(f'ALTER TABLE field_experiments ADD COLUMN {col_name} {col_type}')
-                    print(f"已添加缺失的列: {col_name}")
             
             self.conn.commit()
         except Exception as e:
-            print(f"检查列时出错: {str(e)}")
             self.conn.rollback()
     
     def _run_migrations(self, from_version: int):
@@ -351,9 +349,6 @@ class FieldDatabaseManager:
             
             # 转换为字典
             exp_data = dict(exp_row)
-            
-            # 调试：打印从数据库读取的baseline_point_id
-            print(f"[load_experiment] 从数据库读取 baseline_point_id={exp_data.get('baseline_point_id')}")
             
             # 添加 experiment_id 字段（与 get_experiment_list 保持一致）
             exp_data['experiment_id'] = exp_data['id']

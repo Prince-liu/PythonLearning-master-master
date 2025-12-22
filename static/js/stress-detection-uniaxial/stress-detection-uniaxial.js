@@ -1,4 +1,4 @@
-// ==================== 应力场测绘主模块 ====================
+﻿// ==================== 应力场测绘主模块 ====================
 // 功能：协调各子模块、状态管理、标签页切换、初始化
 
 const StressDetectionUniaxialModule = (function() {
@@ -52,8 +52,6 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 初始化 ==========
     function 初始化() {
-        console.log('[应力场测绘] 初始化主模块...');
-        
         // 缓存DOM元素
         缓存DOM元素();
         
@@ -62,8 +60,6 @@ const StressDetectionUniaxialModule = (function() {
         
         // 初始化子模块（按依赖顺序）
         初始化子模块();
-        
-        console.log('[应力场测绘] 主模块初始化完成');
     }
     
     // ========== DOM元素缓存 ==========
@@ -543,6 +539,35 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 导出面板事件绑定 ==========
     function 绑定导出面板事件() {
+        // 导出格式切换事件
+        const formatSelect = document.getElementById('field-export-format');
+        const excelOptions = document.getElementById('field-export-excel-options');
+        const hdf5Options = document.getElementById('field-export-hdf5-options');
+        
+        if (formatSelect && excelOptions && hdf5Options) {
+            // 格式切换事件处理
+            const handleFormatChange = function() {
+                const format = formatSelect.value;
+                
+                // 根据选择的格式显示对应的选项
+                if (format === 'excel') {
+                    excelOptions.style.display = 'block';
+                    hdf5Options.style.display = 'none';
+                } else if (format === 'hdf5') {
+                    excelOptions.style.display = 'none';
+                    hdf5Options.style.display = 'block';
+                } else {
+                    excelOptions.style.display = 'none';
+                    hdf5Options.style.display = 'none';
+                }
+            };
+            
+            formatSelect.addEventListener('change', handleFormatChange);
+            
+            // 初始化时检查一次（如果默认选中Excel或HDF5，立即显示选项）
+            handleFormatChange();
+        }
+        
         const exportBtn = document.getElementById('field-export-btn');
         if (exportBtn) {
             exportBtn.addEventListener('click', async () => {
@@ -556,6 +581,13 @@ const StressDetectionUniaxialModule = (function() {
                 const includeContour = document.getElementById('field-export-include-contour')?.checked || false;
                 const includeStats = document.getElementById('field-export-include-stats')?.checked || false;
                 
+                // 获取Excel格式选项
+                let singleSheet = false;
+                if (format === 'excel') {
+                    const excelFormat = document.querySelector('input[name="excel-format"]:checked')?.value || 'multi';
+                    singleSheet = (excelFormat === 'single');
+                }
+                
                 显示状态信息('⏳', '正在导出...', '', 'info', 0);
                 
                 try {
@@ -564,7 +596,8 @@ const StressDetectionUniaxialModule = (function() {
                         format, 
                         {
                             include_waveforms: includeWaveforms,
-                            include_stats: includeStats
+                            include_stats: includeStats,
+                            single_sheet: singleSheet  // 传递Excel格式选项
                         }
                     );
                     
@@ -815,7 +848,7 @@ const StressDetectionUniaxialModule = (function() {
                 // 手动输入的标定数据需要保存到数据库
                 const result = await pywebview.api.save_manual_calibration(data);
                 if (result.success) {
-                    console.log('[应力场] 手动标定数据已保存到数据库');
+
                     显示状态信息('✅', '标定数据已加载并保存', `K = ${data.k} MPa/ns`, 'success');
                 } else {
                     console.warn('[应力场] 保存标定数据失败:', result.message);
@@ -845,7 +878,7 @@ const StressDetectionUniaxialModule = (function() {
             try {
                 const result = await pywebview.api.save_shape_config(config);
                 if (result.success) {
-                    console.log('[应力场] 形状配置已保存到数据库');
+
                 } else {
                     console.warn('[应力场] 保存形状配置失败:', result.message);
                 }
@@ -1001,15 +1034,42 @@ const StressDetectionUniaxialModule = (function() {
             
             // 更新状态
             实验状态.当前实验 = data.experiment;
-            实验状态.标定数据 = data.experiment.config_snapshot?.calibration || null;
-            实验状态.标定系数 = 实验状态.标定数据?.k || 0;
+            
+            // 🔧 修复问题1：优先从数据库获取标定系数，其次从config_snapshot
+            const dbCalibrationK = data.experiment.calibration_k;
+            const snapshotCalibration = data.experiment.config_snapshot?.calibration || null;
+            
+            if (dbCalibrationK && dbCalibrationK > 0) {
+                // 数据库有标定系数（手动输入的情况）
+                实验状态.标定数据 = snapshotCalibration || { k: dbCalibrationK, source: 'manual' };
+                实验状态.标定数据.k = dbCalibrationK;  // 确保使用数据库的值
+                实验状态.标定系数 = dbCalibrationK;
+            } else if (snapshotCalibration && snapshotCalibration.k > 0) {
+                // 从config_snapshot获取
+                实验状态.标定数据 = snapshotCalibration;
+                实验状态.标定系数 = snapshotCalibration.k;
+            } else {
+                实验状态.标定数据 = null;
+                实验状态.标定系数 = 0;
+            }
+            
             实验状态.形状配置 = data.experiment.shape_config || null;
             // 使用 points 而不是 point_layout，因为 points 包含完整的测点信息（包括 point_index）
             实验状态.测点列表 = data.points || [];
             实验状态.已测点列表 = (data.points || [])
                 .filter(p => p.status === 'measured')
                 .map(p => p.point_index);
-            实验状态.当前测点索引 = 实验状态.已测点列表.length;
+            
+            // 🔧 修复问题3：正确计算当前测点索引（找到第一个未测量的测点）
+            const firstPendingIndex = 实验状态.测点列表.findIndex(p => p.status !== 'measured');
+            if (firstPendingIndex >= 0) {
+                实验状态.当前测点索引 = firstPendingIndex;
+            } else if (实验状态.测点列表.length > 0) {
+                // 所有测点都已测量，指向最后一个测点
+                实验状态.当前测点索引 = 实验状态.测点列表.length - 1;
+            } else {
+                实验状态.当前测点索引 = 0;
+            }
             
             // 🆕 更新工作流程状态
             实验状态.工作流程.已加载实验 = true;
@@ -1046,7 +1106,11 @@ const StressDetectionUniaxialModule = (function() {
             更新实验信息显示();
             子模块.标定面板?.更新显示(实验状态.标定数据);
             子模块.形状面板?.更新显示(实验状态.形状配置);
-            子模块.布点面板?.更新显示(实验状态.测点列表);
+            
+            // 🔧 修复问题2：恢复布点参数
+            const layoutConfig = data.experiment.config_snapshot?.layout || null;
+            子模块.布点面板?.恢复布点参数(layoutConfig, 实验状态.测点列表);
+            
             子模块.采集面板?.更新显示();
             子模块.预览画布?.刷新();
             刷新数据表格();
@@ -1109,8 +1173,7 @@ const StressDetectionUniaxialModule = (function() {
         子模块.采集面板?.清空();
         子模块.预览画布?.清空();
         子模块.云图显示?.清空();
-        
-        console.log('[主模块] 所有面板已清空');
+
     }
     
     // ========== 清空实验数据 ==========
@@ -1190,9 +1253,9 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 刷新云图 ==========
     async function 刷新云图() {
-        console.log('[应力场测绘] 刷新云图被调用');
+
         if (!实验状态.当前实验) {
-            console.log('[应力场测绘] 没有当前实验，跳过');
+
             return;
         }
         
@@ -1202,14 +1265,10 @@ const StressDetectionUniaxialModule = (function() {
             console.error('[应力场测绘] 无法获取实验ID');
             return;
         }
-        
-        console.log('[应力场测绘] 调用 update_field_contour, expId:', expId);
-        
+
         try {
             const result = await pywebview.api.update_field_contour(expId);
-            
-            console.log('[应力场测绘] 云图结果:', result?.success, result?.mode);
-            
+
             if (result.success) {
                 // update_field_contour 直接返回数据，不嵌套在 data 里
                 实验状态.云图数据 = result;
@@ -1279,8 +1338,7 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 标签页监控 ==========
     function 启动标签页监控() {
-        console.log('[应力场测绘] 标签页激活');
-        
+
         // 调整画布尺寸
         子模块.预览画布?.调整尺寸();
         子模块.云图显示?.调整尺寸();
@@ -1293,8 +1351,7 @@ const StressDetectionUniaxialModule = (function() {
     }
     
     function 停止标签页监控() {
-        console.log('[应力场测绘] 标签页离开');
-        
+
         // 暂停实时监控
         子模块.采集面板?.暂停监控();
     }

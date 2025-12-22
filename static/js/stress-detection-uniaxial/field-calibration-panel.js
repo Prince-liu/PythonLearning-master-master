@@ -1,4 +1,4 @@
-// ==================== 标定数据面板模块 ====================
+﻿// ==================== 标定数据面板模块 ====================
 // 功能：标定数据来源切换、加载、验证、显示
 
 const FieldCalibrationPanel = (function() {
@@ -20,8 +20,7 @@ const FieldCalibrationPanel = (function() {
         
         // 绑定事件
         绑定事件();
-        
-        console.log('[标定面板] 模块初始化完成');
+
     }
     
     // ========== 事件绑定 ==========
@@ -238,7 +237,41 @@ const FieldCalibrationPanel = (function() {
             return;
         }
         
+        // 🔧 修复：确保 k 值存在且有效
+        if (!data.k || data.k <= 0) {
+
+            清空();
+            return;
+        }
+        
         实验状态.标定数据 = data;
+        
+        // 🔧 修复：根据数据来源切换到对应的面板
+        const source = data.source || 'manual';
+        当前来源 = source;
+        
+        // 更新单选按钮
+        const sourceRadio = document.querySelector(`input[name="field-calib-source"][value="${source}"]`);
+        if (sourceRadio) {
+            sourceRadio.checked = true;
+        }
+        
+        // 切换面板显示
+        document.querySelectorAll('.field-calib-source-panel').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        const panel = document.getElementById(`field-calib-${source}-panel`);
+        if (panel) {
+            panel.style.display = 'block';
+        }
+        
+        // 🔧 修复：如果是手动输入，恢复输入框的值
+        if (source === 'manual') {
+            const kInput = document.getElementById('field-calib-manual-k');
+            if (kInput) {
+                kInput.value = data.k;
+            }
+        }
         
         // 更新信息显示
         const infoPanel = document.getElementById('field-calib-info');
@@ -262,7 +295,7 @@ const FieldCalibrationPanel = (function() {
                 ` : ''}
                 <div class="calib-info-item">
                     <span class="label">数据来源:</span>
-                    <span class="value">${sourceText[data.source] || data.source}</span>
+                    <span class="value">${sourceText[data.source] || data.source || '未知'}</span>
                 </div>
                 ${data.exp_id ? `
                 <div class="calib-info-item">
@@ -310,8 +343,7 @@ const FieldCalibrationPanel = (function() {
                 input.value = '';
             }
         });
-        
-        console.log('[标定面板] 已清空显示和输入表单');
+
     }
     
     // ========== 公共接口 ==========

@@ -6,3 +6,5 @@ scipy
 pywavelets
 shapely
 matplotlib
+openpyxl
+scikit-learn
