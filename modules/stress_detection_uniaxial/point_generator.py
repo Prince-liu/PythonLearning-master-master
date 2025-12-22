@@ -433,25 +433,31 @@ class PointGenerator:
                     "original_distance": 0
                 }
             
+            # 标准化点格式（支持 x/y 和 x_coord/y_coord）
+            normalized_points = PointGenerator._normalize_points(points)
+            
             # 计算原始顺序的总距离
-            original_distance = PointGenerator._calculate_total_distance(points)
+            original_distance = PointGenerator._calculate_total_distance(normalized_points)
             
             # 根据策略优化
             if strategy == 'zigzag':
-                optimized = PointGenerator._optimize_zigzag(points)
+                optimized = PointGenerator._optimize_zigzag(normalized_points)
             elif strategy == 'nearest':
-                optimized = PointGenerator._optimize_nearest_neighbor(points)
+                optimized = PointGenerator._optimize_nearest_neighbor(normalized_points)
             elif strategy == 'spiral':
-                optimized = PointGenerator._optimize_spiral(points)
+                optimized = PointGenerator._optimize_spiral(normalized_points)
             else:
-                optimized = points
+                optimized = normalized_points
             
             # 计算优化后的总距离
             optimized_distance = PointGenerator._calculate_total_distance(optimized)
             
+            # 恢复原始格式（保留数据库字段）
+            result_points = PointGenerator._restore_point_format(optimized, points)
+            
             return {
                 "success": True,
-                "points": optimized,
+                "points": result_points,
                 "total_distance": optimized_distance,
                 "original_distance": original_distance,
                 "improvement": (original_distance - optimized_distance) / original_distance * 100 if original_distance > 0 else 0
@@ -465,6 +471,60 @@ class PointGenerator:
                 "total_distance": 0,
                 "original_distance": 0
             }
+    
+    @staticmethod
+    def _normalize_points(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """标准化点格式，支持 x/y 和 x_coord/y_coord"""
+        normalized = []
+        for p in points:
+            point = {
+                'x': p.get('x', p.get('x_coord', 0)),
+                'y': p.get('y', p.get('y_coord', 0)),
+                '_original': p  # 保存原始数据
+            }
+            # 保留极坐标信息
+            if 'r' in p or 'r_coord' in p:
+                point['r'] = p.get('r', p.get('r_coord'))
+            if 'theta' in p or 'theta_coord' in p:
+                point['theta'] = p.get('theta', p.get('theta_coord'))
+            normalized.append(point)
+        return normalized
+    
+    @staticmethod
+    def _restore_point_format(optimized: List[Dict[str, Any]], 
+                             original: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """恢复原始点格式"""
+        result = []
+        for opt_point in optimized:
+            # 获取原始数据
+            orig = opt_point.get('_original', {})
+            
+            # 创建新点，保留所有原始字段
+            new_point = orig.copy()
+            
+            # 更新坐标（同时更新 x/y 和 x_coord/y_coord）
+            new_point['x'] = opt_point['x']
+            new_point['y'] = opt_point['y']
+            if 'x_coord' in orig:
+                new_point['x_coord'] = opt_point['x']
+            if 'y_coord' in orig:
+                new_point['y_coord'] = opt_point['y']
+            
+            # 更新极坐标
+            if 'r' in opt_point:
+                new_point['r'] = opt_point['r']
+                if 'r_coord' in orig:
+                    new_point['r_coord'] = opt_point['r']
+            if 'theta' in opt_point:
+                new_point['theta'] = opt_point['theta']
+                if 'theta_coord' in orig:
+                    new_point['theta_coord'] = opt_point['theta']
+            
+            # 移除临时字段
+            new_point.pop('_original', None)
+            
+            result.append(new_point)
+        return result
     
     @staticmethod
     def _calculate_total_distance(points: List[Dict[str, Any]]) -> float:

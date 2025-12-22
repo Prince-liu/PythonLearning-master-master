@@ -148,9 +148,49 @@ class FieldDatabaseManager:
             self.conn.commit()
             current_db_version = 1
         
+        # 检查并修复缺失的列（兼容旧数据库）
+        self._ensure_columns_exist()
+        
         # 执行待处理的迁移
         if current_db_version < self.CURRENT_VERSION:
             self._run_migrations(current_db_version)
+    
+    def _ensure_columns_exist(self):
+        """确保所有必需的列都存在（用于兼容旧数据库）"""
+        cursor = self.conn.cursor()
+        
+        try:
+            # 检查 field_experiments 表的列
+            cursor.execute('PRAGMA table_info(field_experiments)')
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            
+            # 需要的列及其定义
+            required_columns = {
+                'stress_direction': 'TEXT',
+                'calibration_exp_id': 'TEXT',
+                'calibration_direction': 'TEXT',
+                'calibration_k': 'REAL',  # 标定系数 (MPa/ns)
+                'test_purpose': 'TEXT',
+                'operator': 'TEXT',
+                'temperature': 'REAL',
+                'humidity': 'REAL',
+                'scope_model': 'TEXT',
+                'probe_model': 'TEXT',
+                'sample_material': 'TEXT',
+                'sample_thickness': 'REAL',
+                'config_snapshot': 'TEXT'
+            }
+            
+            # 添加缺失的列
+            for col_name, col_type in required_columns.items():
+                if col_name not in existing_columns:
+                    cursor.execute(f'ALTER TABLE field_experiments ADD COLUMN {col_name} {col_type}')
+                    print(f"已添加缺失的列: {col_name}")
+            
+            self.conn.commit()
+        except Exception as e:
+            print(f"检查列时出错: {str(e)}")
+            self.conn.rollback()
     
     def _run_migrations(self, from_version: int):
         """
@@ -234,17 +274,28 @@ class FieldDatabaseManager:
             exp_id = self.generate_experiment_id()
             created_at = datetime.now().isoformat()
             
+            # 验证必填字段
+            stress_direction = experiment_data.get('stress_direction', '').strip()
+            if not stress_direction:
+                return {
+                    "success": False,
+                    "error_code": 1014,
+                    "message": "应力方向不能为空",
+                    "data": None
+                }
+            
             cursor = self.conn.cursor()
             cursor.execute('''
                 INSERT INTO field_experiments (
                     id, name, stress_direction, status, created_at, 
                     test_purpose, sample_material, sample_thickness, 
                     operator, notes
-                ) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 exp_id,
                 experiment_data.get('name', f'实验 {exp_id}'),
-                experiment_data.get('stress_direction', ''),
+                stress_direction,
+                'planning',
                 created_at,
                 experiment_data.get('test_purpose', ''),
                 experiment_data.get('sample_material', ''),
@@ -300,6 +351,9 @@ class FieldDatabaseManager:
             
             # 转换为字典
             exp_data = dict(exp_row)
+            
+            # 调试：打印从数据库读取的baseline_point_id
+            print(f"[load_experiment] 从数据库读取 baseline_point_id={exp_data.get('baseline_point_id')}")
             
             # 添加 experiment_id 字段（与 get_experiment_list 保持一致）
             exp_data['experiment_id'] = exp_data['id']
@@ -533,17 +587,21 @@ class FieldDatabaseManager:
                     "message": f"实验 {exp_id} 不存在"
                 }
             
+            # 完成的实验只允许更新基准点相关字段（用于重新分析）
             if result[0] == 'completed':
-                return {
-                    "success": False,
-                    "error_code": 1007,
-                    "message": "实验已完成，无法修改"
-                }
+                allowed_for_completed = {'baseline_point_id', 'baseline_stress'}
+                update_keys = set(updates.keys())
+                if not update_keys.issubset(allowed_for_completed):
+                    return {
+                        "success": False,
+                        "error_code": 1007,
+                        "message": "实验已完成，只能修改基准点设置"
+                    }
             
             # 构建更新语句
             allowed_fields = [
-                'name', 'calibration_exp_id', 'calibration_direction', 'stress_direction',
-                'shape_config', 'point_layout', 'baseline_point_id',
+                'name', 'calibration_exp_id', 'calibration_direction', 'calibration_k',
+                'stress_direction', 'shape_config', 'point_layout', 'baseline_point_id',
                 'baseline_stress', 'status', 'notes', 'config_snapshot',
                 'operator', 'temperature', 'humidity', 'scope_model',
                 'probe_model', 'sample_material', 'sample_thickness', 'test_purpose'
@@ -713,8 +771,12 @@ class FieldDatabaseManager:
             if not result:
                 return {"success": False, "error_code": 1002, "message": f"实验 {exp_id} 不存在"}
             
+            # 完成的实验只允许更新应力相关字段（用于重新计算）
             if result[0] == 'completed':
-                return {"success": False, "error_code": 1007, "message": "实验已完成，无法修改"}
+                allowed_for_completed = {'time_diff', 'stress_value'}
+                update_keys = set(updates.keys())
+                if not update_keys.issubset(allowed_for_completed):
+                    return {"success": False, "error_code": 1007, "message": "实验已完成，只能更新应力值"}
             
             # 构建更新语句
             allowed_fields = [

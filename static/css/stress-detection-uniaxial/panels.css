@@ -201,6 +201,52 @@
 .calib-info-item .value { font-weight: 600; color: #333; }
 
 /* 基准波形管理面板样式 */
+.field-baseline-setting {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.field-baseline-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.field-baseline-input-row .field-input-label {
+    font-size: 12px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.field-baseline-input {
+    width: 60px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: center;
+}
+
+.field-baseline-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+#field-baseline-set-btn {
+    white-space: nowrap;
+}
+
+#field-baseline-set-btn.is-set {
+    background: #ff9800;
+    border-color: #ff9800;
+}
+
+#field-baseline-goto-btn {
+    white-space: nowrap;
+}
+
 .field-baseline-info {
     background: #f8f9fa;
     border-radius: 6px;

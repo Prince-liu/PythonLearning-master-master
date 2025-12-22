@@ -45,6 +45,7 @@ class FieldCapture:
         self.current_hdf5 = None
         self.baseline_waveform = None
         self.calibration_k = None
+        self.baseline_stress = 0.0  # 基准点应力值（绝对应力模式使用）
         
         # 降噪配置
         self.denoise_config = {
@@ -56,7 +57,7 @@ class FieldCapture:
             'threshold_rule': 'heursure'
         }
     
-    def set_experiment(self, exp_id: str, hdf5: FieldExperimentHDF5, k: float):
+    def set_experiment(self, exp_id: str, hdf5: FieldExperimentHDF5, k: float, baseline_stress: float = 0.0):
         """
         设置当前实验
         
@@ -64,15 +65,37 @@ class FieldCapture:
             exp_id: 实验ID
             hdf5: HDF5文件管理器
             k: 应力系数 (MPa/ns)
+            baseline_stress: 基准点应力值 (MPa)，绝对应力模式使用
         """
         self.current_exp_id = exp_id
         self.current_hdf5 = hdf5
         self.calibration_k = k
+        self.baseline_stress = baseline_stress
         
         # 加载基准波形
         baseline_result = hdf5.load_baseline()
         if baseline_result['success']:
             self.baseline_waveform = baseline_result['data']['waveform']
+    
+    def set_baseline_stress(self, stress: float) -> Dict[str, Any]:
+        """
+        设置基准点应力值（用于绝对应力模式）
+        
+        Args:
+            stress: 基准点应力值 (MPa)
+        
+        Returns:
+            dict: 操作结果
+        """
+        self.baseline_stress = stress
+        
+        # 更新数据库
+        if self.current_exp_id:
+            self.db.update_experiment(self.current_exp_id, {
+                'baseline_stress': stress
+            })
+        
+        return {"success": True, "message": f"基准点应力值已设置为 {stress} MPa"}
     
     def set_denoise_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -148,7 +171,7 @@ class FieldCapture:
                 # 设置为基准波形
                 self.baseline_waveform = waveform
                 time_diff = 0.0
-                stress = 0.0
+                stress = self.baseline_stress  # 基准点使用设定的基准应力值
                 
                 # 保存基准波形
                 self.current_hdf5.save_baseline(point_index, waveform)
@@ -156,14 +179,15 @@ class FieldCapture:
                 # 更新数据库
                 self.db.update_experiment(self.current_exp_id, {
                     'baseline_point_id': point_index,
-                    'baseline_stress': 0.0
+                    'baseline_stress': self.baseline_stress
                 })
             else:
                 # 计算时间差
                 time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
                 
-                # 计算应力值
-                stress = self.calibration_k * time_diff
+                # 计算应力值（支持绝对应力模式）
+                # σ = σ_基准 + k × Δt
+                stress = self.baseline_stress + self.calibration_k * time_diff
             
             # 验证数据
             is_suspicious = False
@@ -268,14 +292,22 @@ class FieldCapture:
             # 评估波形质量
             quality = self.evaluate_waveform_quality(waveform)
             
-            # 检查是否是第一个测点（自动设为基准）
-            is_baseline = self.baseline_waveform is None
+            # 获取用户指定的基准点ID
+            exp_result = self.db.load_experiment(self.current_exp_id)
+            designated_baseline_id = exp_result['data']['experiment'].get('baseline_point_id') if exp_result['success'] else None
+            
+            # 判断是否是基准点：
+            # 1. 如果用户指定了基准点，且当前测点就是指定的基准点，且基准波形还没采集
+            # 2. 如果没有指定基准点，且还没有基准波形（兼容旧逻辑）
+            is_designated_baseline = designated_baseline_id and point_index == designated_baseline_id
+            is_baseline = (is_designated_baseline and self.baseline_waveform is None) or \
+                         (not designated_baseline_id and self.baseline_waveform is None)
             
             if is_baseline:
                 # 设置为基准波形
                 self.baseline_waveform = waveform
                 time_diff = 0.0
-                stress = 0.0
+                stress = self.baseline_stress  # 基准点使用设定的基准应力值
                 
                 # 保存基准波形
                 self.current_hdf5.save_baseline(point_index, waveform)
@@ -283,14 +315,25 @@ class FieldCapture:
                 # 更新数据库
                 self.db.update_experiment(self.current_exp_id, {
                     'baseline_point_id': point_index,
-                    'baseline_stress': 0.0
+                    'baseline_stress': self.baseline_stress
                 })
             else:
+                # 检查是否有基准波形
+                if self.baseline_waveform is None:
+                    # 没有基准波形，提示用户先采集基准点
+                    baseline_hint = f"测点 {designated_baseline_id}" if designated_baseline_id else "第一个测点"
+                    return {
+                        "success": False,
+                        "error_code": 4022,
+                        "message": f"请先采集基准点（{baseline_hint}）"
+                    }
+                
                 # 计算时间差
                 time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
                 
-                # 计算应力值
-                stress = self.calibration_k * time_diff
+                # 计算应力值（支持绝对应力模式）
+                # σ = σ_基准 + k × Δt
+                stress = self.baseline_stress + self.calibration_k * time_diff
             
             # 验证数据
             is_suspicious = False
@@ -428,7 +471,7 @@ class FieldCapture:
     def _calculate_time_diff(self, waveform: Dict[str, Any], 
                             baseline: Dict[str, Any]) -> float:
         """
-        使用互相关计算时间差
+        使用互相关计算时间差（与应力标定模块一致的算法）
         
         Args:
             waveform: 当前波形
@@ -437,29 +480,43 @@ class FieldCapture:
         Returns:
             float: 时间差 (ns)
         """
-        from scipy import signal
+        from scipy.signal import correlate
         
-        v1 = np.array(baseline['voltage'])
-        v2 = np.array(waveform['voltage'])
+        基准 = np.array(baseline['voltage'])
+        测量 = np.array(waveform['voltage'])
         
         # 确保长度一致
-        min_len = min(len(v1), len(v2))
-        v1 = v1[:min_len]
-        v2 = v2[:min_len]
+        最小长度 = min(len(基准), len(测量))
+        基准 = 基准[:最小长度]
+        测量 = 测量[:最小长度]
         
-        # 互相关
-        correlation = signal.correlate(v2, v1, mode='full')
-        lags = signal.correlation_lags(len(v2), len(v1), mode='full')
+        # 频域互相关（使用 mode='same'，与标定模块一致）
+        相关 = correlate(测量, 基准, mode='same', method='fft')
         
-        # 找到最大相关的位置
-        max_idx = np.argmax(np.abs(correlation))
-        lag = lags[max_idx]
+        # 找到峰值位置（不用 abs，找最大正相关）
+        峰值索引 = np.argmax(相关)
         
-        # 转换为时间差 (ns)
+        # 抛物线插值（亚采样点精度）
+        if 1 < 峰值索引 < len(相关) - 2:
+            y1 = 相关[峰值索引 - 1]
+            y2 = 相关[峰值索引]
+            y3 = 相关[峰值索引 + 1]
+            
+            分母 = y1 - 2*y2 + y3
+            if abs(分母) > 1e-10:
+                精确偏移 = 峰值索引 + 0.5 * (y1 - y3) / 分母
+            else:
+                精确偏移 = 峰值索引
+        else:
+            精确偏移 = 峰值索引
+        
+        # 转换为时间偏移
+        中心索引 = len(基准) // 2
         sample_rate = waveform.get('sample_rate', 1e9)
-        time_diff = lag / sample_rate * 1e9  # 转换为ns
+        声时差_秒 = (精确偏移 - 中心索引) / sample_rate
+        声时差_纳秒 = 声时差_秒 * 1e9
         
-        return time_diff
+        return 声时差_纳秒
     
     # ==================== 质量评估 ====================
     
@@ -561,14 +618,36 @@ class FieldCapture:
         Returns:
             dict: 操作结果，包含重新计算的点数
         """
+        print(f"[set_baseline_point] 开始，point_index={point_index}, exp_id={self.current_exp_id}")
+        
         if not self.current_exp_id:
             return {"success": False, "error_code": 4001, "message": "没有设置当前实验"}
         
+        if not self.current_hdf5:
+            return {"success": False, "error_code": 4020, "message": "HDF5文件未初始化"}
+        
         try:
+            # 检查HDF5文件是否存在
+            if not self.current_hdf5.file_exists():
+                print(f"[set_baseline_point] HDF5文件不存在: {self.current_hdf5.file_path}")
+                return {
+                    "success": False,
+                    "error_code": 4021,
+                    "message": f"HDF5文件不存在: {self.current_hdf5.file_path}"
+                }
+            
+            print(f"[set_baseline_point] HDF5文件存在: {self.current_hdf5.file_path}")
+            
             # 加载该测点的波形
             waveform_result = self.current_hdf5.load_point_waveform(point_index)
+            print(f"[set_baseline_point] 加载波形结果: success={waveform_result.get('success')}, message={waveform_result.get('message')}")
+            
             if not waveform_result['success']:
-                return {"success": False, "error_code": 4010, "message": "无法加载该测点的波形"}
+                return {
+                    "success": False,
+                    "error_code": 4010,
+                    "message": f"无法加载该测点的波形: {waveform_result.get('message', '未知错误')}"
+                }
             
             # 验证波形质量
             waveform = waveform_result['data']['waveform']
@@ -589,9 +668,11 @@ class FieldCapture:
             self.current_hdf5.save_baseline(point_index, waveform)
             
             # 更新数据库
-            self.db.update_experiment(self.current_exp_id, {
+            print(f"[set_baseline_point] 更新数据库 baseline_point_id={point_index}")
+            update_result = self.db.update_experiment(self.current_exp_id, {
                 'baseline_point_id': point_index
             })
+            print(f"[set_baseline_point] 数据库更新结果: {update_result}")
             
             # 重新计算所有已测量点的应力值
             recalculated = self._recalculate_all_stress_values()
@@ -630,7 +711,8 @@ class FieldCapture:
             
             # 重新计算时间差和应力
             time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
-            stress = self.calibration_k * time_diff
+            # σ = σ_基准 + k × Δt
+            stress = self.baseline_stress + self.calibration_k * time_diff
             
             # 更新数据库
             self.db.update_point(self.current_exp_id, point_index, {

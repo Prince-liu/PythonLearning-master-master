@@ -365,23 +365,34 @@ class WebAPI:
         Returns:
             {"success": bool, "data": {...}}
         """
+        print(f"[加载实验] 开始加载实验 {exp_id}")
         result = self.field_experiment.load_experiment(exp_id)
         if result['success']:
             # 同步设置采集器的当前实验
             exp_data = result['data']['experiment']
             config_snapshot = result['data'].get('config_snapshot', {})
             calibration = config_snapshot.get('calibration', {})
-            k = calibration.get('k', 0)
+            
+            # 优先从数据库读取 k，其次从 config_snapshot
+            k = exp_data.get('calibration_k') or calibration.get('k', 0)
+            baseline_stress = exp_data.get('baseline_stress', 0) or 0
+            baseline_point_id = exp_data.get('baseline_point_id')
+            
+            print(f"[加载实验] baseline_point_id={baseline_point_id}, baseline_stress={baseline_stress}, k={k}")
             
             # 无论是否有标定数据，都设置采集器的当前实验
             self.field_capture.set_experiment(
                 exp_id, 
                 self.field_experiment.current_hdf5,
-                k if k > 0 else 1.0  # 如果没有标定数据，使用默认值1.0
+                k if k > 0 else 1.0,  # 如果没有标定数据，使用默认值1.0
+                baseline_stress  # 传递基准点应力值
             )
             
             # 初始化云图生成器
             self.contour_generator = ContourGenerator(exp_id)
+            print(f"[加载实验] 加载完成")
+        else:
+            print(f"[加载实验] 加载失败: {result.get('message')}")
         
         return result
     
@@ -654,7 +665,7 @@ class WebAPI:
         return self.field_capture.capture_point_with_waveform(point_index, waveform, auto_denoise)
     
     def set_baseline_point(self, point_index):
-        """设置基准测点
+        """设置基准测点（已采集的测点）
         
         Args:
             point_index: 测点索引
@@ -662,7 +673,44 @@ class WebAPI:
         Returns:
             {"success": bool, "message": str, "recalculated_points": int}
         """
-        return self.field_capture.set_baseline_point(point_index)
+        print(f"[更换基准点] 开始，point_index={point_index}")
+        result = self.field_capture.set_baseline_point(point_index)
+        print(f"[更换基准点] 结果: success={result.get('success')}, recalculated={result.get('recalculated_points')}")
+        return result
+    
+    def set_baseline_stress_value(self, stress_value):
+        """设置基准点应力值（用于绝对应力模式）
+        
+        Args:
+            stress_value: 基准点应力值 (MPa)
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_capture.set_baseline_stress(stress_value)
+    
+    def designate_baseline_point(self, point_index):
+        """预设基准点ID（在采集前指定）
+        
+        Args:
+            point_index: 测点索引
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        if not self.field_experiment.current_exp_id:
+            return {"success": False, "message": "没有当前实验"}
+        
+        # 更新数据库中的基准点ID
+        result = self.field_experiment.db.update_experiment(
+            self.field_experiment.current_exp_id,
+            {'baseline_point_id': point_index}
+        )
+        
+        if result['success']:
+            return {"success": True, "message": f"基准点已设置为测点 {point_index}"}
+        else:
+            return {"success": False, "message": result.get('message', '设置失败')}
     
     def validate_baseline_quality(self):
         """验证当前基准波形的质量

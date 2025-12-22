@@ -115,12 +115,6 @@ const FieldCapturePanel = (function() {
             denoiseBtn.addEventListener('click', 打开降噪设置);
         }
         
-        // 设为基准按钮
-        const baselineBtn = document.getElementById('field-capture-set-baseline');
-        if (baselineBtn) {
-            baselineBtn.addEventListener('click', 设为基准点);
-        }
-        
         // 全局控制按钮
         const startPauseBtn = document.getElementById('field-capture-start-pause');
         if (startPauseBtn) {
@@ -246,10 +240,25 @@ const FieldCapturePanel = (function() {
         waveformCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
     }
     
+    // 采集状态标志（防止重复点击）
+    let 正在采集 = false;
+    
     // ========== 测点采集 ==========
     async function 采集当前测点() {
+        // 防抖：如果正在采集，忽略新的点击
+        if (正在采集) {
+            callbacks?.显示状态信息('⚠️', '正在采集中，请稍候...', '', 'warning');
+            return;
+        }
+        
         if (!实验状态.当前实验) {
             callbacks?.显示状态信息('⚠️', '请先创建或加载实验', '', 'warning');
+            return;
+        }
+        
+        // 检查标定数据是否已加载
+        if (!实验状态.标定数据 || !实验状态.标定系数) {
+            callbacks?.显示状态信息('⚠️', '请先加载标定数据', '需要标定系数才能计算应力值', 'warning');
             return;
         }
         
@@ -281,12 +290,18 @@ const FieldCapturePanel = (function() {
             return;
         }
         
-        // 检查是否需要设置基准点
-        if (!实验状态.基准点ID && pointIndex === 0) {
-            callbacks?.显示状态信息('ℹ️', '第一个测点将自动设为基准点', '', 'info');
+        // 检查是否是用户指定的基准点
+        const isDesignatedBaseline = (pointIndex + 1) === 实验状态.基准点ID;
+        if (isDesignatedBaseline && !实验状态.基准点已采集) {
+            callbacks?.显示状态信息('ℹ️', `测点 ${pointIndex + 1} 是基准点，将设为基准波形`, '', 'info');
         }
         
         callbacks?.显示状态信息('⏳', `正在采集测点 ${pointIndex + 1}...`, '', 'info', 0);
+        
+        // 设置采集标志，禁用按钮
+        正在采集 = true;
+        const captureBtn = document.getElementById('field-capture-current');
+        if (captureBtn) captureBtn.disabled = true;
         
         try {
             // 从实时采集模块获取RAW模式数据（12bit精度）
@@ -316,26 +331,25 @@ const FieldCapturePanel = (function() {
                 // 更新测点状态（使用 pointIndex + 1）
                 callbacks?.更新测点状态(pointIndex + 1, 'measured', data);
                 
-                // 如果是第一个测点（基准点），更新实验状态为"采集中"
-                if (data.is_baseline) {
-                    实验状态.基准点ID = pointIndex + 1;
+                // 检查是否是用户指定的基准点
+                const isDesignatedBaseline = (pointIndex + 1) === 实验状态.基准点ID;
+                
+                // 如果是基准点，更新基准状态
+                if (data.is_baseline || isDesignatedBaseline) {
+                    实验状态.基准点已采集 = true;
+                    
                     // 后端已将状态更新为 collecting，前端同步更新
                     if (实验状态.当前实验) {
                         实验状态.当前实验.status = 'collecting';
                     }
-                    // 更新基准信息显示
+                    
+                    // 更新基准点UI
                     if (typeof StressDetectionUniaxialModule !== 'undefined') {
-                        StressDetectionUniaxialModule.更新基准信息显示({
-                            point_id: pointIndex + 1,
-                            point_index: pointIndex + 1,
+                        StressDetectionUniaxialModule.更新基准点UI(pointIndex + 1, true, {
                             snr: data.snr,
-                            quality_score: data.quality_score,
-                            capture_time: new Date().toLocaleTimeString()
+                            quality_score: data.quality_score
                         });
                     }
-                } else if (!实验状态.基准点ID) {
-                    // 兼容旧逻辑
-                    实验状态.基准点ID = pointIndex + 1;
                 }
                 
                 // 显示结果
@@ -389,6 +403,13 @@ const FieldCapturePanel = (function() {
         } catch (error) {
             console.error('[采集面板] 采集测点失败:', error);
             callbacks?.显示状态信息('❌', '采集失败', error.toString(), 'error');
+        } finally {
+            // 恢复采集标志，启用按钮
+            正在采集 = false;
+            const captureBtn = document.getElementById('field-capture-current');
+            if (captureBtn && 采集流程状态 === 'capturing') {
+                captureBtn.disabled = false;
+            }
         }
     }
     
@@ -574,6 +595,25 @@ const FieldCapturePanel = (function() {
             pointStatusEl.textContent = statusMap[point?.status] || '待测';
         }
         
+        // 更新测量结果（时间差、应力、质量、SNR）
+        const timeDiffEl = document.getElementById('field-capture-result-timediff');
+        const stressEl = document.getElementById('field-capture-result-stress');
+        const qualityEl = document.getElementById('field-capture-result-quality');
+        const snrEl = document.getElementById('field-capture-result-snr');
+        
+        if (point && point.status === 'measured') {
+            if (timeDiffEl) timeDiffEl.textContent = point.time_diff != null ? Number(point.time_diff).toFixed(2) : '--';
+            if (stressEl) stressEl.textContent = point.stress_value != null ? Number(point.stress_value).toFixed(1) : '--';
+            if (qualityEl) qualityEl.textContent = point.quality_score != null ? (Number(point.quality_score) * 100).toFixed(0) + '%' : '--';
+            if (snrEl) snrEl.textContent = point.snr != null ? Number(point.snr).toFixed(1) : '--';
+        } else {
+            // 未测量的点显示 --
+            if (timeDiffEl) timeDiffEl.textContent = '--';
+            if (stressEl) stressEl.textContent = '--';
+            if (qualityEl) qualityEl.textContent = '--';
+            if (snrEl) snrEl.textContent = '--';
+        }
+        
         // 更新跳转输入框的值
         const jumpInput = document.getElementById('field-capture-jump-input');
         if (jumpInput) {
@@ -739,13 +779,26 @@ const FieldCapturePanel = (function() {
             
             if (result.success) {
                 实验状态.基准点ID = pointIndex + 1;
+                实验状态.基准点已采集 = true;
+                
+                // 重新加载实验数据以获取更新后的应力值
+                const expId = 实验状态.当前实验?.id || 实验状态.当前实验?.experiment_id;
+                console.log('[采集面板] 更换基准点成功，准备重新加载实验数据, expId:', expId);
+                console.log('[采集面板] callbacks.加载实验数据 存在:', !!callbacks?.加载实验数据);
+                
+                if (expId && callbacks?.加载实验数据) {
+                    console.log('[采集面板] 调用 加载实验数据...');
+                    await callbacks.加载实验数据(expId);
+                    console.log('[采集面板] 加载实验数据 完成');
+                } else {
+                    console.log('[采集面板] 没有加载实验数据回调，使用备用刷新');
+                    // 如果没有加载实验数据的回调，至少刷新表格和云图
+                    callbacks?.刷新数据表格?.();
+                    callbacks?.刷新云图?.();
+                }
                 
                 callbacks?.显示状态信息('✅', '基准点已更换', 
-                    `重新计算了 ${result.recalculated_points || 0} 个测点`, 'success');
-                
-                // 刷新数据
-                callbacks?.刷新数据表格?.();
-                callbacks?.刷新云图?.();
+                    `测点 ${pointIndex + 1}，重新计算了 ${result.recalculated_points || 0} 个测点`, 'success');
             } else {
                 callbacks?.显示状态信息('❌', '更换基准点失败', result.message, 'error');
             }
@@ -881,6 +934,18 @@ const FieldCapturePanel = (function() {
     }
     
     function 开始采集流程() {
+        // 🆕 验证：必须先加载标定数据
+        if (!实验状态.工作流程.已加载标定 || !实验状态.标定数据 || !实验状态.标定系数) {
+            callbacks?.显示状态信息('⚠️', '请先加载标定数据', '必须先完成标定数据加载才能开始采集', 'warning');
+            return;
+        }
+        
+        // 🆕 验证：必须先生成测点
+        if (!实验状态.工作流程.已生成测点 || !实验状态.测点列表 || 实验状态.测点列表.length === 0) {
+            callbacks?.显示状态信息('⚠️', '请先生成测点布局', '必须先完成测点生成才能开始采集', 'warning');
+            return;
+        }
+        
         // 检查示波器连接状态
         if (typeof RealtimeCapture !== 'undefined' && !RealtimeCapture.获取连接状态()) {
             callbacks?.显示状态信息('⚠️', '请先连接示波器', '无法开始采集', 'warning');
@@ -1147,7 +1212,7 @@ const FieldCapturePanel = (function() {
         下一个测点,
         跳转到测点,
         更新当前测点,
-        设为基准点,
+        // 设为基准点功能已移除，请使用左侧"基准波形管理"面板
         打开降噪设置,
         保存降噪设置,
         接受低质量数据,

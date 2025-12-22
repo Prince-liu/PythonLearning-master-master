@@ -294,6 +294,24 @@ const FieldCalibrationPanel = (function() {
             statusBadge.textContent = '⚪ 未加载';
             statusBadge.className = 'status-badge';
         }
+        
+        // 🆕 清空手动输入表单
+        const manualInputs = [
+            'field-calib-manual-k',
+            'field-calib-manual-exp-id',
+            'field-calib-manual-direction',
+            'field-calib-manual-material',
+            'field-calib-manual-thickness'
+        ];
+        
+        manualInputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.value = '';
+            }
+        });
+        
+        console.log('[标定面板] 已清空显示和输入表单');
     }
     
     // ========== 公共接口 ==========

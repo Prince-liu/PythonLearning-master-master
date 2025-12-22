@@ -316,7 +316,21 @@ class FieldExperimentHDF5:
         try:
             point_key = f'point_{point_id:03d}'
             
+            # 验证波形数据
+            if not waveform or not waveform.get('voltage') or not waveform.get('time'):
+                return {"success": False, "message": f"测点 {point_id} 波形数据无效"}
+            
+            voltage_data = waveform.get('voltage', [])
+            time_data = waveform.get('time', [])
+            
+            if len(voltage_data) == 0 or len(time_data) == 0:
+                return {"success": False, "message": f"测点 {point_id} 波形数据为空"}
+            
             with h5py.File(self.file_path, 'a') as f:
+                # 确保 points 组存在
+                if 'points' not in f:
+                    f.create_group('points')
+                
                 points_grp = f['points']
                 
                 # 删除旧的测点数据
@@ -333,18 +347,18 @@ class FieldExperimentHDF5:
                 if metadata:
                     meta_grp.attrs['x_coord'] = metadata.get('x_coord', 0.0)
                     meta_grp.attrs['y_coord'] = metadata.get('y_coord', 0.0)
-                    if 'r_coord' in metadata:
+                    if 'r_coord' in metadata and metadata['r_coord'] is not None:
                         meta_grp.attrs['r_coord'] = metadata['r_coord']
-                    if 'theta_coord' in metadata:
+                    if 'theta_coord' in metadata and metadata['theta_coord'] is not None:
                         meta_grp.attrs['theta_coord'] = metadata['theta_coord']
                 
                 # 保存波形数据
                 wf_grp = point_grp.create_group('waveform')
-                time_data = np.array(waveform.get('time', []), dtype=np.float64)
-                voltage_data = np.array(waveform.get('voltage', []), dtype=np.float64)
+                time_arr = np.array(time_data, dtype=np.float64)
+                voltage_arr = np.array(voltage_data, dtype=np.float64)
                 
-                wf_grp.create_dataset('time', data=time_data, compression='gzip', compression_opts=6)
-                wf_grp.create_dataset('voltage', data=voltage_data, compression='gzip', compression_opts=6)
+                wf_grp.create_dataset('time', data=time_arr, compression='gzip', compression_opts=6)
+                wf_grp.create_dataset('voltage', data=voltage_arr, compression='gzip', compression_opts=6)
                 wf_grp.attrs['sample_rate'] = waveform.get('sample_rate', 1e9)
                 
                 # 保存分析结果
@@ -356,6 +370,8 @@ class FieldExperimentHDF5:
             
             return {"success": True, "message": f"测点 {point_id} 波形已保存"}
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return {"success": False, "message": f"保存测点波形失败: {str(e)}"}
     
     def load_point_waveform(self, point_id: int) -> Dict[str, Any]:
@@ -380,21 +396,32 @@ class FieldExperimentHDF5:
                 
                 point_grp = f['points'][point_key]
                 
+                # 检查波形数据是否存在
+                if 'waveform' not in point_grp:
+                    return {"success": False, "message": f"测点 {point_id} 的波形数据不存在（数据结构不完整）", "data": None}
+                
                 # 加载元数据
-                meta_grp = point_grp['metadata']
-                metadata = {
-                    'point_id': int(meta_grp.attrs.get('point_id', 0)),
-                    'x_coord': float(meta_grp.attrs.get('x_coord', 0)),
-                    'y_coord': float(meta_grp.attrs.get('y_coord', 0)),
-                    'measured_at': str(meta_grp.attrs.get('measured_at', ''))
-                }
-                if 'r_coord' in meta_grp.attrs:
-                    metadata['r_coord'] = float(meta_grp.attrs['r_coord'])
-                if 'theta_coord' in meta_grp.attrs:
-                    metadata['theta_coord'] = float(meta_grp.attrs['theta_coord'])
+                metadata = {'point_id': point_id, 'x_coord': 0, 'y_coord': 0, 'measured_at': ''}
+                if 'metadata' in point_grp:
+                    meta_grp = point_grp['metadata']
+                    metadata = {
+                        'point_id': int(meta_grp.attrs.get('point_id', point_id)),
+                        'x_coord': float(meta_grp.attrs.get('x_coord', 0)),
+                        'y_coord': float(meta_grp.attrs.get('y_coord', 0)),
+                        'measured_at': str(meta_grp.attrs.get('measured_at', ''))
+                    }
+                    if 'r_coord' in meta_grp.attrs:
+                        metadata['r_coord'] = float(meta_grp.attrs['r_coord'])
+                    if 'theta_coord' in meta_grp.attrs:
+                        metadata['theta_coord'] = float(meta_grp.attrs['theta_coord'])
                 
                 # 加载波形数据
                 wf_grp = point_grp['waveform']
+                
+                # 检查必要的数据集是否存在
+                if 'time' not in wf_grp or 'voltage' not in wf_grp:
+                    return {"success": False, "message": f"测点 {point_id} 的波形数据不完整", "data": None}
+                
                 waveform = {
                     'time': wf_grp['time'][:].tolist(),
                     'voltage': wf_grp['voltage'][:].tolist(),
@@ -402,13 +429,15 @@ class FieldExperimentHDF5:
                 }
                 
                 # 加载分析结果
-                analysis_grp = point_grp['analysis']
-                analysis = {
-                    'time_diff': float(analysis_grp.attrs.get('time_diff', 0)),
-                    'stress': float(analysis_grp.attrs.get('stress', 0)),
-                    'snr': float(analysis_grp.attrs.get('snr', 0)),
-                    'quality_score': float(analysis_grp.attrs.get('quality_score', 0))
-                }
+                analysis = {'time_diff': 0, 'stress': 0, 'snr': 0, 'quality_score': 0}
+                if 'analysis' in point_grp:
+                    analysis_grp = point_grp['analysis']
+                    analysis = {
+                        'time_diff': float(analysis_grp.attrs.get('time_diff', 0)),
+                        'stress': float(analysis_grp.attrs.get('stress', 0)),
+                        'snr': float(analysis_grp.attrs.get('snr', 0)),
+                        'quality_score': float(analysis_grp.attrs.get('quality_score', 0))
+                    }
                 
                 data = {
                     'metadata': metadata,

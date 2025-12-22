@@ -271,9 +271,11 @@ class FieldExperiment:
             # 保存到当前实验的配置快照
             if self.current_exp_id and self.current_hdf5:
                 self.current_hdf5.save_config_snapshot({'calibration': calibration_data})
+                # 同时保存 k 到数据库，确保加载时能获取到
                 self.db.update_experiment(self.current_exp_id, {
                     'calibration_exp_id': str(calib_exp_id),
-                    'calibration_direction': direction
+                    'calibration_direction': direction,
+                    'calibration_k': k
                 })
             
             return {
@@ -359,6 +361,10 @@ class FieldExperiment:
             # 保存到当前实验
             if self.current_exp_id and self.current_hdf5:
                 self.current_hdf5.save_config_snapshot({'calibration': calibration_data})
+                # 同时保存 k 到数据库
+                self.db.update_experiment(self.current_exp_id, {
+                    'calibration_k': k
+                })
             
             return {
                 "success": True,

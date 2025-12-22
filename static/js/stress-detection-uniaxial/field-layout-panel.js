@@ -927,6 +927,12 @@ const FieldLayoutPanel = (function() {
     
     // ========== 生成测点 ==========
     async function 生成测点() {
+        // 🆕 验证：必须先应用形状
+        if (!实验状态.工作流程.已应用形状) {
+            callbacks?.显示状态信息('⚠️', '请先应用试件形状', '必须先完成形状设置才能生成测点', 'warning');
+            return;
+        }
+        
         // 检查形状是否已设置
         if (!实验状态.形状配置) {
             callbacks?.显示状态信息('⚠️', '请先设置试件形状', '', 'warning');
@@ -966,10 +972,12 @@ const FieldLayoutPanel = (function() {
                 if (loadResult.success) {
                     // 使用数据库中的完整测点数据
                     实验状态.测点列表 = loadResult.data.points || [];
+                    实验状态.工作流程.已生成测点 = true;  // 🆕 标记已完成
                     callbacks?.更新测点列表(实验状态.测点列表);
                 } else {
                     // 如果加载失败，使用生成的测点（但可能缺少 point_index）
                     实验状态.测点列表 = points;
+                    实验状态.工作流程.已生成测点 = true;  // 🆕 标记已完成
                     callbacks?.更新测点列表(points);
                 }
                 
@@ -1135,27 +1143,55 @@ const FieldLayoutPanel = (function() {
         
         // 重置布点类型
         当前布点类型 = 'grid';
-        document.querySelectorAll('.field-layout-type-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.type === 'grid') {
-                btn.classList.add('active');
-            }
-        });
         
-        // 显示网格参数面板
+        // 重置布点类型单选按钮
+        const gridRadio = document.querySelector('input[name="field-layout-type"][value="grid"]');
+        if (gridRadio) gridRadio.checked = true;
+        
+        // 显示网格参数面板，隐藏其他
         document.querySelectorAll('.field-layout-params').forEach(panel => {
             panel.style.display = 'none';
         });
         const gridParams = document.getElementById('field-layout-grid-params');
         if (gridParams) gridParams.style.display = 'block';
         
-        // 重置网格参数
-        const rowsInput = document.getElementById('field-layout-rows');
-        const colsInput = document.getElementById('field-layout-cols');
-        const marginInput = document.getElementById('field-layout-margin');
+        // 🆕 重置网格参数（使用正确的ID）
+        const rowsInput = document.getElementById('field-layout-grid-rows');
+        const colsInput = document.getElementById('field-layout-grid-cols');
         if (rowsInput) rowsInput.value = '5';
         if (colsInput) colsInput.value = '5';
-        if (marginInput) marginInput.value = '10';
+        
+        // 重置边距设置
+        边距设置 = {
+            mode: 'uniform',
+            uniform: 10,
+            top: 10,
+            bottom: 10,
+            left: 10,
+            right: 10
+        };
+        更新边距隐藏字段();
+        更新边距显示();
+        
+        // 🆕 重置极坐标参数
+        const polarRcountInput = document.getElementById('field-layout-polar-rcount');
+        const polarRstartInput = document.getElementById('field-layout-polar-rstart');
+        const polarRstepInput = document.getElementById('field-layout-polar-rstep');
+        const polarPprInput = document.getElementById('field-layout-polar-ppr');
+        const polarAstartInput = document.getElementById('field-layout-polar-astart');
+        if (polarRcountInput) polarRcountInput.value = '4';
+        if (polarRstartInput) polarRstartInput.value = '0';
+        if (polarRstepInput) polarRstepInput.value = '10';
+        if (polarPprInput) polarPprInput.value = '8';
+        if (polarAstartInput) polarAstartInput.value = '0';
+        
+        // 🆕 重置自适应参数
+        const adaptiveTargetInput = document.getElementById('field-layout-adaptive-target');
+        const adaptiveMinInput = document.getElementById('field-layout-adaptive-min');
+        if (adaptiveTargetInput) adaptiveTargetInput.value = '50';
+        if (adaptiveMinInput) adaptiveMinInput.value = '5';
+        
+        console.log('[布点面板] 已清空所有输入');
     }
     
     // ========== 获取当前布点类型 ==========

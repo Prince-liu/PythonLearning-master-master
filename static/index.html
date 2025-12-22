@@ -868,14 +868,25 @@
                                 <span id="field-baseline-status" class="status-badge">⚪ 未设置</span>
                             </div>
                             <div class="field-panel-body">
+                                <!-- 基准点设置区域 -->
+                                <div class="field-baseline-setting">
+                                    <div class="field-baseline-input-row">
+                                        <label class="field-input-label">基准测点:</label>
+                                        <input type="number" id="field-baseline-point-input" value="1" min="1" step="1" class="field-baseline-input">
+                                        <button id="field-baseline-set-btn" class="btn btn-primary btn-sm">📌 设置基准</button>
+                                        <button id="field-baseline-goto-btn" class="btn btn-secondary btn-sm" title="跳转到基准点并采集">🎯 采集基准</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- 基准点信息显示 -->
                                 <div class="field-baseline-info">
                                     <div class="field-info-item">
                                         <span class="label">当前基准点:</span>
                                         <span id="field-baseline-point-id" class="value">--</span>
                                     </div>
                                     <div class="field-info-item">
-                                        <span class="label">采集时间:</span>
-                                        <span id="field-baseline-time" class="value">--</span>
+                                        <span class="label">采集状态:</span>
+                                        <span id="field-baseline-capture-status" class="value">⚪ 未采集</span>
                                     </div>
                                     <div class="field-info-item">
                                         <span class="label">信噪比:</span>
@@ -885,10 +896,6 @@
                                         <span class="label">质量评分:</span>
                                         <span id="field-baseline-quality" class="value">--</span>
                                     </div>
-                                </div>
-                                <div class="field-panel-actions">
-                                    <button id="field-baseline-view" class="btn btn-secondary btn-sm">👁️ 查看波形</button>
-                                    <button id="field-baseline-change" class="btn btn-primary btn-sm">🔄 更换基准点</button>
                                 </div>
                                 
                                 <!-- 应力计算模式 -->
@@ -982,7 +989,6 @@
                                     <div class="field-capture-secondary">
                                         <button id="field-capture-skip" class="btn btn-secondary btn-sm" disabled>跳过</button>
                                         <button id="field-capture-recapture" class="btn btn-secondary btn-sm" disabled>重测</button>
-                                        <button id="field-capture-set-baseline" class="btn btn-secondary btn-sm" disabled>设为基准</button>
                                     </div>
                                 </div>
                                 <div class="field-capture-options">

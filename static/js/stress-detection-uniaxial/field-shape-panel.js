@@ -34,11 +34,11 @@ const FieldShapePanel = (function() {
             });
         });
         
-        // 参数输入变化时实时预览
-        document.querySelectorAll('.field-shape-param').forEach(input => {
-            input.addEventListener('change', 实时预览);
-            input.addEventListener('input', debounce(实时预览, 300));
-        });
+        // 🆕 移除实时预览：参数输入变化时不再自动预览
+        // document.querySelectorAll('.field-shape-param').forEach(input => {
+        //     input.addEventListener('change', 实时预览);
+        //     input.addEventListener('input', debounce(实时预览, 300));
+        // });
         
         // 添加孔洞按钮
         const addHoleBtn = document.getElementById('field-shape-add-hole');
@@ -78,7 +78,8 @@ const FieldShapePanel = (function() {
         布尔运算列表 = [];
         刷新布尔运算列表();
         
-        实时预览();
+        // 🆕 移除自动预览：切换形状类型时不再自动预览
+        // 实时预览();
     }
     
     // ========== 获取形状配置 ==========
@@ -181,6 +182,12 @@ const FieldShapePanel = (function() {
     
     // ========== 应用形状 ==========
     async function 应用形状() {
+        // 🆕 验证：必须先加载标定数据
+        if (!实验状态.工作流程.已加载标定) {
+            callbacks?.显示状态信息('⚠️', '请先加载标定数据', '必须先完成标定数据加载才能应用形状', 'warning');
+            return;
+        }
+        
         const config = 获取形状配置();
         
         // 调试：在界面上显示配置
@@ -204,6 +211,7 @@ const FieldShapePanel = (function() {
             
             // 更新状态
             实验状态.形状配置 = config;
+            实验状态.工作流程.已应用形状 = true;  // 🆕 标记已完成
             callbacks?.更新形状配置(config);
             
             // 刷新预览画布
@@ -421,22 +429,34 @@ const FieldShapePanel = (function() {
         布尔运算列表 = [];
         刷新布尔运算列表();
         
-        // 重置形状参数输入框
-        const widthInput = document.getElementById('field-shape-width');
-        const heightInput = document.getElementById('field-shape-height');
-        const radiusInput = document.getElementById('field-shape-radius');
+        // 🆕 重置形状参数输入框（使用正确的ID）
+        // 矩形参数
+        const rectWidthInput = document.getElementById('field-shape-rect-width');
+        const rectHeightInput = document.getElementById('field-shape-rect-height');
+        if (rectWidthInput) rectWidthInput.value = '100';
+        if (rectHeightInput) rectHeightInput.value = '100';
         
-        if (widthInput) widthInput.value = '100';
-        if (heightInput) heightInput.value = '100';
-        if (radiusInput) radiusInput.value = '50';
+        // 圆形参数
+        const circleCxInput = document.getElementById('field-shape-circle-cx');
+        const circleCyInput = document.getElementById('field-shape-circle-cy');
+        const circleRadiusInput = document.getElementById('field-shape-circle-radius');
+        const circleInnerInput = document.getElementById('field-shape-circle-inner');
+        const circleStartInput = document.getElementById('field-shape-circle-start');
+        const circleEndInput = document.getElementById('field-shape-circle-end');
+        if (circleCxInput) circleCxInput.value = '50';
+        if (circleCyInput) circleCyInput.value = '50';
+        if (circleRadiusInput) circleRadiusInput.value = '50';
+        if (circleInnerInput) circleInnerInput.value = '0';
+        if (circleStartInput) circleStartInput.value = '0';
+        if (circleEndInput) circleEndInput.value = '360';
         
-        // 重置形状类型选择
-        document.querySelectorAll('.field-shape-type-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.type === 'rectangle') {
-                btn.classList.add('active');
-            }
-        });
+        // 多边形参数
+        const polygonVerticesInput = document.getElementById('field-shape-polygon-vertices');
+        if (polygonVerticesInput) polygonVerticesInput.value = '';
+        
+        // 重置形状类型单选按钮
+        const rectRadio = document.querySelector('input[name="field-shape-type"][value="rectangle"]');
+        if (rectRadio) rectRadio.checked = true;
         
         // 显示矩形参数面板，隐藏其他
         document.querySelectorAll('.field-shape-params').forEach(panel => {
@@ -450,6 +470,8 @@ const FieldShapePanel = (function() {
             statusBadge.textContent = '⚪ 未设置';
             statusBadge.className = 'status-badge';
         }
+        
+        console.log('[形状面板] 已清空所有输入');
     }
     
     // ========== 工具函数 ==========

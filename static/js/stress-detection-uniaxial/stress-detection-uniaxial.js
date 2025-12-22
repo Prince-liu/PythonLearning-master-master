@@ -13,13 +13,22 @@ const StressDetectionUniaxialModule = (function() {
         测点列表: [],             // 生成的测点
         已测点列表: [],           // 已采集的测点索引
         已测点数据: [],           // 已采集的测点数据（含应力值）
-        基准点ID: null,           // 基准测点ID
+        基准点ID: 1,              // 基准测点ID（默认为1）
+        基准点已采集: false,      // 基准点是否已采集
         当前测点索引: 0,          // 当前采集的测点索引
         实时监控中: false,        // 监控状态
         云图数据: null,           // 云图插值数据
         自动保存状态: 'idle',     // 'idle' | 'saving' | 'saved' | 'error'
         应力计算模式: 'relative', // 'relative' | 'absolute'
-        基准点应力值: 0           // 绝对应力模式下的基准点应力值 (MPa)
+        基准点应力值: 0,          // 绝对应力模式下的基准点应力值 (MPa)
+        
+        // 🆕 工作流程状态标志
+        工作流程: {
+            已加载实验: false,     // 步骤1：是否已新建或加载实验
+            已加载标定: false,     // 步骤2：是否已加载标定数据
+            已应用形状: false,     // 步骤3：是否已应用试件形状
+            已生成测点: false      // 步骤4：是否已生成测点布局
+        }
     };
     
     // DOM 元素缓存
@@ -144,29 +153,45 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 基准波形管理面板事件绑定 ==========
     function 绑定基准面板事件() {
-        // 查看波形按钮
-        const viewBtn = document.getElementById('field-baseline-view');
-        if (viewBtn) {
-            viewBtn.addEventListener('click', async () => {
-                if (!实验状态.基准点ID) {
-                    显示状态信息('⚠️', '未设置基准点', '', 'warning');
-                    return;
-                }
-                // TODO: 显示基准波形对话框
-                显示状态信息('ℹ️', '查看基准波形', `基准点: #${实验状态.基准点ID}`, 'info');
+        // 基准点输入框
+        const baselineInput = document.getElementById('field-baseline-point-input');
+        const setBtn = document.getElementById('field-baseline-set-btn');
+        const gotoBtn = document.getElementById('field-baseline-goto-btn');
+        
+        // 设置基准按钮
+        if (setBtn) {
+            setBtn.addEventListener('click', async () => {
+                const pointNum = parseInt(baselineInput?.value) || 1;
+                await 设置基准点(pointNum);
             });
         }
         
-        // 更换基准点按钮
-        const changeBtn = document.getElementById('field-baseline-change');
-        if (changeBtn) {
-            changeBtn.addEventListener('click', async () => {
-                if (实验状态.测点列表.length === 0) {
-                    显示状态信息('⚠️', '请先生成测点', '', 'warning');
-                    return;
+        // 采集基准按钮（跳转到基准点并采集）
+        if (gotoBtn) {
+            gotoBtn.addEventListener('click', async () => {
+                const pointNum = parseInt(baselineInput?.value) || 1;
+                await 跳转并采集基准点(pointNum);
+            });
+        }
+        
+        // 输入框回车事件
+        if (baselineInput) {
+            baselineInput.addEventListener('keypress', async (e) => {
+                if (e.key === 'Enter') {
+                    const pointNum = parseInt(baselineInput.value) || 1;
+                    await 设置基准点(pointNum);
                 }
-                // TODO: 打开基准点选择对话框
-                显示状态信息('ℹ️', '选择新的基准点', '请在预览画布中点击测点', 'info');
+            });
+            
+            // 输入框值变化时更新最大值
+            baselineInput.addEventListener('input', () => {
+                const max = 实验状态.测点列表?.length || 1;
+                if (baselineInput.value > max) {
+                    baselineInput.value = max;
+                }
+                if (baselineInput.value < 1) {
+                    baselineInput.value = 1;
+                }
             });
         }
         
@@ -176,7 +201,7 @@ const StressDetectionUniaxialModule = (function() {
         const baselineStressValue = document.getElementById('field-baseline-stress-value');
         
         stressModeRadios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
+            radio.addEventListener('change', async (e) => {
                 const mode = e.target.value;
                 实验状态.应力计算模式 = mode;
                 
@@ -188,10 +213,14 @@ const StressDetectionUniaxialModule = (function() {
                 // 更新应力值显示
                 if (mode === 'relative') {
                     实验状态.基准点应力值 = 0;
+                    // 同步到后端
+                    await pywebview.api.set_baseline_stress_value(0);
                     显示状态信息('✅', '已切换到相对应力模式', '基准点应力 = 0 MPa', 'success');
                 } else {
                     const value = parseFloat(baselineStressValue?.value) || 0;
                     实验状态.基准点应力值 = value;
+                    // 同步到后端
+                    await pywebview.api.set_baseline_stress_value(value);
                     显示状态信息('✅', '已切换到绝对应力模式', `基准点应力 = ${value} MPa`, 'success');
                 }
                 
@@ -202,16 +231,220 @@ const StressDetectionUniaxialModule = (function() {
         
         // 基准点应力值输入
         if (baselineStressValue) {
-            baselineStressValue.addEventListener('change', (e) => {
+            baselineStressValue.addEventListener('change', async (e) => {
                 const value = parseFloat(e.target.value) || 0;
                 实验状态.基准点应力值 = value;
                 
                 if (实验状态.应力计算模式 === 'absolute') {
+                    // 同步到后端
+                    await pywebview.api.set_baseline_stress_value(value);
                     显示状态信息('✅', '基准点应力值已更新', `${value} MPa`, 'success');
                     // 重新计算所有测点的应力值
                     重新计算应力值();
                 }
             });
+        }
+    }
+    
+    // ========== 设置基准点 ==========
+    async function 设置基准点(pointNum) {
+        if (!实验状态.当前实验) {
+            显示状态信息('⚠️', '请先加载实验', '', 'warning');
+            return;
+        }
+        
+        const totalPoints = 实验状态.测点列表?.length || 0;
+        if (totalPoints === 0) {
+            显示状态信息('⚠️', '请先生成测点', '', 'warning');
+            return;
+        }
+        
+        if (pointNum < 1 || pointNum > totalPoints) {
+            显示状态信息('⚠️', `测点编号无效，范围: 1-${totalPoints}`, '', 'warning');
+            return;
+        }
+        
+        // 检查该测点是否已采集
+        const point = 实验状态.测点列表.find(p => (p.point_index || p.id) === pointNum);
+        const isCollected = point && point.status === 'measured';
+        
+        if (isCollected) {
+            // 已采集，调用后端更换基准点
+            const confirmed = await 显示确认对话框(
+                '更换基准点',
+                `确定要将测点 ${pointNum} 设为新的基准点吗？\n\n所有已测量的应力值将重新计算。`
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                const result = await pywebview.api.set_baseline_point(pointNum);
+                
+                if (result.success) {
+                    实验状态.基准点ID = pointNum;
+                    实验状态.基准点已采集 = true;
+                    更新基准点UI(pointNum, true, result.quality);
+                    
+                    // 重新加载实验数据以更新应力值
+                    const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
+                    await 加载实验数据(expId);
+                    
+                    显示状态信息('✅', '基准点已更换', 
+                        `测点 ${pointNum}，重新计算了 ${result.recalculated_points || 0} 个测点`, 'success');
+                } else {
+                    显示状态信息('❌', '更换基准点失败', result.message, 'error');
+                }
+            } catch (error) {
+                console.error('[基准管理] 更换基准点失败:', error);
+                显示状态信息('❌', '更换基准点失败', error.toString(), 'error');
+            }
+        } else {
+            // 未采集，预设基准点（调用后端API保存到数据库）
+            try {
+                const result = await pywebview.api.designate_baseline_point(pointNum);
+                
+                if (result.success) {
+                    实验状态.基准点ID = pointNum;
+                    实验状态.基准点已采集 = false;
+                    更新基准点UI(pointNum, false);
+                    
+                    显示状态信息('✅', '基准点已设置', 
+                        `测点 ${pointNum}（待采集）\n采集该测点时将自动设为基准波形`, 'success');
+                } else {
+                    显示状态信息('❌', '设置基准点失败', result.message, 'error');
+                }
+            } catch (error) {
+                console.error('[基准管理] 设置基准点失败:', error);
+                显示状态信息('❌', '设置基准点失败', error.toString(), 'error');
+            }
+        }
+    }
+    
+    // ========== 跳转并采集基准点 ==========
+    async function 跳转并采集基准点(pointNum) {
+        if (!实验状态.当前实验) {
+            显示状态信息('⚠️', '请先加载实验', '', 'warning');
+            return;
+        }
+        
+        const totalPoints = 实验状态.测点列表?.length || 0;
+        if (pointNum < 1 || pointNum > totalPoints) {
+            显示状态信息('⚠️', `测点编号无效，范围: 1-${totalPoints}`, '', 'warning');
+            return;
+        }
+        
+        // 先设置基准点（调用后端API）
+        try {
+            const result = await pywebview.api.designate_baseline_point(pointNum);
+            
+            if (result.success) {
+                实验状态.基准点ID = pointNum;
+                实验状态.基准点已采集 = false;
+                更新基准点UI(pointNum, false);
+                
+                // 跳转到该测点
+                子模块.采集面板?.跳转到测点(pointNum - 1);  // 索引从0开始
+                
+                显示状态信息('ℹ️', '已跳转到基准点', `请采集测点 ${pointNum}`, 'info');
+            } else {
+                显示状态信息('❌', '设置基准点失败', result.message, 'error');
+            }
+        } catch (error) {
+            console.error('[基准管理] 跳转基准点失败:', error);
+            显示状态信息('❌', '操作失败', error.toString(), 'error');
+        }
+    }
+    
+    // ========== 更新基准点UI ==========
+    function 更新基准点UI(pointNum, isCollected, quality = null) {
+        const statusBadge = document.getElementById('field-baseline-status');
+        const pointIdEl = document.getElementById('field-baseline-point-id');
+        const captureStatusEl = document.getElementById('field-baseline-capture-status');
+        const snrEl = document.getElementById('field-baseline-snr');
+        const qualityEl = document.getElementById('field-baseline-quality');
+        const setBtn = document.getElementById('field-baseline-set-btn');
+        const inputEl = document.getElementById('field-baseline-point-input');
+        
+        // 更新输入框
+        if (inputEl) {
+            inputEl.value = pointNum;
+        }
+        
+        // 更新按钮文字
+        if (setBtn) {
+            if (isCollected) {
+                setBtn.textContent = '🔄 更换基准';
+                setBtn.classList.add('is-set');
+            } else {
+                setBtn.textContent = '📌 设置基准';
+                setBtn.classList.remove('is-set');
+            }
+        }
+        
+        // 更新状态徽章
+        if (statusBadge) {
+            if (isCollected) {
+                statusBadge.textContent = '✅ 已采集';
+                statusBadge.className = 'status-badge success';
+            } else {
+                statusBadge.textContent = '⏳ 待采集';
+                statusBadge.className = 'status-badge warning';
+            }
+        }
+        
+        // 更新基准点信息
+        if (pointIdEl) pointIdEl.textContent = `#${pointNum}`;
+        
+        if (captureStatusEl) {
+            if (isCollected) {
+                captureStatusEl.textContent = '✅ 已采集';
+                captureStatusEl.className = 'value good';
+            } else {
+                captureStatusEl.textContent = '⚪ 未采集';
+                captureStatusEl.className = 'value';
+            }
+        }
+        
+        // 更新质量信息
+        if (quality) {
+            if (snrEl) {
+                const snr = quality.snr || 0;
+                snrEl.textContent = `${snr.toFixed(1)} dB`;
+                snrEl.className = snr >= 20 ? 'value good' : (snr >= 15 ? 'value warning' : 'value bad');
+            }
+            if (qualityEl) {
+                const score = (quality.quality_score || quality.score || 0) * 100;
+                qualityEl.textContent = `${score.toFixed(0)}%`;
+                qualityEl.className = score >= 80 ? 'value good' : (score >= 60 ? 'value warning' : 'value bad');
+            }
+        } else if (!isCollected) {
+            if (snrEl) { snrEl.textContent = '--'; snrEl.className = 'value'; }
+            if (qualityEl) { qualityEl.textContent = '--'; qualityEl.className = 'value'; }
+        }
+    }
+    
+    // ========== 更新应力计算模式UI ==========
+    function 更新应力计算模式UI() {
+        const mode = 实验状态.应力计算模式;
+        const stressValue = 实验状态.基准点应力值;
+        
+        // 更新单选按钮
+        const relativeRadio = document.querySelector('input[name="field-stress-mode"][value="relative"]');
+        const absoluteRadio = document.querySelector('input[name="field-stress-mode"][value="absolute"]');
+        
+        if (relativeRadio) relativeRadio.checked = (mode === 'relative');
+        if (absoluteRadio) absoluteRadio.checked = (mode === 'absolute');
+        
+        // 更新绝对应力输入框的显示和值
+        const absoluteStressInput = document.getElementById('field-absolute-stress-input');
+        const baselineStressValue = document.getElementById('field-baseline-stress-value');
+        
+        if (absoluteStressInput) {
+            absoluteStressInput.style.display = (mode === 'absolute') ? 'block' : 'none';
+        }
+        
+        if (baselineStressValue) {
+            baselineStressValue.value = stressValue || 0;
         }
     }
     
@@ -408,7 +641,8 @@ const StressDetectionUniaxialModule = (function() {
                 更新测点状态,
                 刷新预览画布: () => 子模块.预览画布?.刷新(),
                 刷新云图: 刷新云图,  // 调用主模块的刷新云图函数，会从后端获取新数据
-                刷新数据表格
+                刷新数据表格,
+                加载实验数据  // 用于更换基准点后重新加载数据
             });
         }
         
@@ -572,6 +806,8 @@ const StressDetectionUniaxialModule = (function() {
     // ========== 数据更新回调 ==========
     function 更新标定数据(data) {
         实验状态.标定数据 = data;
+        实验状态.标定系数 = data.k || 0;
+        实验状态.工作流程.已加载标定 = true;  // 🆕 标记已完成
         显示状态信息('✅', '标定数据已加载', `K = ${data.k} MPa/ns`, 'success');
     }
     
@@ -732,6 +968,9 @@ const StressDetectionUniaxialModule = (function() {
         try {
             显示状态信息('⏳', '正在加载实验...', '', 'info', 0);
             
+            // 🆕 先清空所有面板（新建实验时数据为空，加载实验时会被覆盖）
+            清空所有面板();
+            
             const result = await pywebview.api.load_field_experiment(expId);
             
             if (!result.success) {
@@ -744,14 +983,45 @@ const StressDetectionUniaxialModule = (function() {
             // 更新状态
             实验状态.当前实验 = data.experiment;
             实验状态.标定数据 = data.experiment.config_snapshot?.calibration || null;
+            实验状态.标定系数 = 实验状态.标定数据?.k || 0;
             实验状态.形状配置 = data.experiment.shape_config || null;
             // 使用 points 而不是 point_layout，因为 points 包含完整的测点信息（包括 point_index）
             实验状态.测点列表 = data.points || [];
             实验状态.已测点列表 = (data.points || [])
                 .filter(p => p.status === 'measured')
                 .map(p => p.point_index);
-            实验状态.基准点ID = data.experiment.baseline_point_id;
             实验状态.当前测点索引 = 实验状态.已测点列表.length;
+            
+            // 🆕 更新工作流程状态
+            实验状态.工作流程.已加载实验 = true;
+            实验状态.工作流程.已加载标定 = !!实验状态.标定数据;
+            实验状态.工作流程.已应用形状 = !!实验状态.形状配置;
+            实验状态.工作流程.已生成测点 = 实验状态.测点列表.length > 0;
+            
+            // 处理基准点
+            const savedBaselineId = data.experiment.baseline_point_id;
+            if (savedBaselineId) {
+                实验状态.基准点ID = savedBaselineId;
+                实验状态.基准点已采集 = 实验状态.已测点列表.includes(savedBaselineId);
+            } else {
+                // 没有保存的基准点，默认为1
+                实验状态.基准点ID = 1;
+                实验状态.基准点已采集 = 实验状态.已测点列表.includes(1);
+            }
+            
+            // 恢复应力计算模式和基准点应力值
+            const savedBaselineStress = data.experiment.baseline_stress;
+            if (savedBaselineStress != null && savedBaselineStress !== 0) {
+                // 绝对应力模式
+                实验状态.应力计算模式 = 'absolute';
+                实验状态.基准点应力值 = savedBaselineStress;
+            } else {
+                // 相对应力模式
+                实验状态.应力计算模式 = 'relative';
+                实验状态.基准点应力值 = 0;
+            }
+            // 更新应力计算模式UI
+            更新应力计算模式UI();
             
             // 更新各面板显示
             更新实验信息显示();
@@ -782,12 +1052,9 @@ const StressDetectionUniaxialModule = (function() {
                 }
             }
             
-            // 更新基准信息
-            if (data.baseline_data) {
-                更新基准信息显示(data.baseline_data);
-            } else {
-                更新基准信息显示(null);
-            }
+            // 更新基准点UI
+            const baselineQuality = data.baseline_data?.quality || null;
+            更新基准点UI(实验状态.基准点ID, 实验状态.基准点已采集, baselineQuality);
             
             // 处理云图：先清空，然后根据测点数量决定是否加载
             if (实验状态.已测点列表.length >= 3) {
@@ -808,6 +1075,25 @@ const StressDetectionUniaxialModule = (function() {
         }
     }
     
+    // ========== 清空所有面板（用于新建/加载实验时）==========
+    function 清空所有面板() {
+        // 清空工作流程状态
+        实验状态.工作流程.已加载实验 = false;
+        实验状态.工作流程.已加载标定 = false;
+        实验状态.工作流程.已应用形状 = false;
+        实验状态.工作流程.已生成测点 = false;
+        
+        // 清空各面板
+        子模块.标定面板?.清空();
+        子模块.形状面板?.清空();
+        子模块.布点面板?.清空();
+        子模块.采集面板?.清空();
+        子模块.预览画布?.清空();
+        子模块.云图显示?.清空();
+        
+        console.log('[主模块] 所有面板已清空');
+    }
+    
     // ========== 清空实验数据 ==========
     function 清空实验数据() {
         实验状态.当前实验 = null;
@@ -817,14 +1103,16 @@ const StressDetectionUniaxialModule = (function() {
         实验状态.测点列表 = [];
         实验状态.已测点列表 = [];
         实验状态.已测点数据 = [];
-        实验状态.基准点ID = null;
+        实验状态.基准点ID = 1;
+        实验状态.基准点已采集 = false;
         实验状态.当前测点索引 = 0;
         实验状态.云图数据 = null;
         实验状态.应力计算模式 = 'relative';
         实验状态.基准点应力值 = 0;
         
         更新实验信息显示();
-        更新基准信息显示(null);
+        更新基准点UI(1, false);
+        更新应力计算模式UI();
         子模块.标定面板?.清空();
         子模块.形状面板?.清空();
         子模块.布点面板?.清空();
@@ -1018,7 +1306,7 @@ const StressDetectionUniaxialModule = (function() {
         显示确认对话框,
         加载实验数据,
         清空实验数据,
-        更新基准信息显示,
+        更新基准点UI,
         更新实验信息显示,
         启用重置按钮
     };
