@@ -57,6 +57,7 @@ class FieldDatabaseManager:
                 name TEXT NOT NULL,
                 calibration_exp_id TEXT,
                 calibration_direction TEXT,
+                stress_direction TEXT,
                 shape_config TEXT NOT NULL DEFAULT '{}',
                 point_layout TEXT NOT NULL DEFAULT '[]',
                 baseline_point_id INTEGER,
@@ -219,6 +220,7 @@ class FieldDatabaseManager:
         Args:
             experiment_data: 实验数据字典，包含:
                 - name: 实验名称
+                - stress_direction: 应力方向 (必填)
                 - test_purpose: 实验目的 (可选)
                 - sample_material: 试件材料 (可选)
                 - sample_thickness: 试件厚度 (可选)
@@ -235,13 +237,14 @@ class FieldDatabaseManager:
             cursor = self.conn.cursor()
             cursor.execute('''
                 INSERT INTO field_experiments (
-                    id, name, status, created_at, 
+                    id, name, stress_direction, status, created_at, 
                     test_purpose, sample_material, sample_thickness, 
                     operator, notes
-                ) VALUES (?, ?, 'planning', ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?)
             ''', (
                 exp_id,
                 experiment_data.get('name', f'实验 {exp_id}'),
+                experiment_data.get('stress_direction', ''),
                 created_at,
                 experiment_data.get('test_purpose', ''),
                 experiment_data.get('sample_material', ''),
@@ -297,6 +300,9 @@ class FieldDatabaseManager:
             
             # 转换为字典
             exp_data = dict(exp_row)
+            
+            # 添加 experiment_id 字段（与 get_experiment_list 保持一致）
+            exp_data['experiment_id'] = exp_data['id']
             
             # 解析JSON字段
             exp_data['shape_config'] = json.loads(exp_data['shape_config']) if exp_data['shape_config'] else {}
@@ -433,6 +439,75 @@ class FieldDatabaseManager:
                 "message": f"完成实验失败: {str(e)}"
             }
     
+    def reset_experiment(self, exp_id: str) -> Dict[str, Any]:
+        """
+        重置实验（清空所有测点数据，状态恢复为planning）
+        
+        Args:
+            exp_id: 实验ID
+        
+        Returns:
+            dict: 操作结果
+        """
+        try:
+            cursor = self.conn.cursor()
+            
+            # 检查实验是否存在
+            cursor.execute('SELECT id, status FROM field_experiments WHERE id = ?', (exp_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return {
+                    "success": False,
+                    "error_code": 1002,
+                    "message": f"实验 {exp_id} 不存在"
+                }
+            
+            # 重置所有测点状态和数据
+            cursor.execute('''
+                UPDATE field_points 
+                SET status = 'pending',
+                    time_diff = NULL,
+                    stress_value = NULL,
+                    measured_at = NULL,
+                    waveform_file = NULL,
+                    quality_score = NULL,
+                    snr = NULL,
+                    is_suspicious = 0,
+                    skip_reason = NULL
+                WHERE experiment_id = ?
+            ''', (exp_id,))
+            
+            # 重置实验状态
+            cursor.execute('''
+                UPDATE field_experiments 
+                SET status = 'planning',
+                    baseline_point_id = NULL,
+                    baseline_stress = NULL,
+                    completed_at = NULL
+                WHERE id = ?
+            ''', (exp_id,))
+            
+            # 清空云图元数据
+            cursor.execute('''
+                DELETE FROM field_metadata WHERE experiment_id = ?
+            ''', (exp_id,))
+            
+            self.conn.commit()
+            
+            return {
+                "success": True,
+                "error_code": 0,
+                "message": "实验已重置"
+            }
+        except Exception as e:
+            self.conn.rollback()
+            return {
+                "success": False,
+                "error_code": 1013,
+                "message": f"重置实验失败: {str(e)}"
+            }
+    
     def update_experiment(self, exp_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         更新实验数据
@@ -467,7 +542,7 @@ class FieldDatabaseManager:
             
             # 构建更新语句
             allowed_fields = [
-                'name', 'calibration_exp_id', 'calibration_direction',
+                'name', 'calibration_exp_id', 'calibration_direction', 'stress_direction',
                 'shape_config', 'point_layout', 'baseline_point_id',
                 'baseline_stress', 'status', 'notes', 'config_snapshot',
                 'operator', 'temperature', 'humidity', 'scope_model',

@@ -1,0 +1,453 @@
+/* ==================== 应力场测绘模块 - 面板样式 ==================== */
+/* 折叠面板、表单、单选组、状态徽章 */
+
+/* 折叠面板 */
+.field-panel {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    overflow: visible;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.field-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    user-select: none;
+}
+
+.field-panel-header span:first-child {
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+}
+
+.field-panel-header::after {
+    content: '▼';
+    font-size: 10px;
+    color: #999;
+    transition: transform 0.2s;
+}
+
+.field-panel.collapsed .field-panel-header::after {
+    transform: rotate(-90deg);
+}
+
+.field-panel.collapsed .field-panel-body {
+    display: none;
+}
+
+.field-panel-body {
+    padding: 12px;
+    padding-bottom: 14px;
+    overflow: visible;
+}
+
+/* 状态徽章 */
+.status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f0f0f0;
+    color: #666;
+}
+
+.status-badge.success { background: #d4edda; color: #155724; }
+.status-badge.warning { background: #fff3cd; color: #856404; }
+.status-badge.error { background: #f8d7da; color: #721c24; }
+
+/* 单选按钮组 */
+.field-radio-group {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.field-radio-group label {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* 表单样式 */
+.field-panel .form-group {
+    margin-bottom: 8px;
+}
+
+.field-panel .form-group label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.field-panel .form-control {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.field-panel .form-control:focus {
+    border-color: #4CAF50;
+    outline: none;
+}
+
+.field-panel .form-row {
+    display: flex;
+    gap: 8px;
+}
+
+.field-panel .form-row .form-group {
+    flex: 1;
+}
+
+/* 面板操作按钮 */
+.field-panel-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.field-panel-actions .btn {
+    flex: 1;
+}
+
+/* 布尔运算区域 */
+.field-modifiers-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+.field-modifiers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.field-modifiers-header span {
+    font-size: 12px;
+    color: #666;
+}
+
+.field-modifiers-list {
+    max-height: 80px;
+    overflow-y: auto;
+}
+
+.field-modifiers-list .empty {
+    font-size: 11px;
+    color: #999;
+    text-align: center;
+    padding: 8px;
+}
+
+.modifier-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+
+/* 布点信息 */
+.field-layout-info {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+}
+
+/* 信息框 */
+.field-info-box {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 10px;
+    font-size: 12px;
+}
+
+.field-info-box .empty {
+    color: #999;
+    text-align: center;
+}
+
+.calib-info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.calib-info-item .label { color: #666; }
+.calib-info-item .value { font-weight: 600; color: #333; }
+
+/* 基准波形管理面板样式 */
+.field-baseline-info {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.field-info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.field-info-item:last-child { margin-bottom: 0; }
+.field-info-item .label { color: #666; }
+.field-info-item .value { font-weight: 600; color: #333; }
+.field-info-item .value.good { color: #4CAF50; }
+.field-info-item .value.warning { color: #ff9800; }
+.field-info-item .value.bad { color: #f44336; }
+
+/* 云图设置和导出面板样式 */
+.field-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.field-checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
+}
+
+.field-checkbox-group input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}
+
+.field-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-input-row span { color: #666; }
+
+.field-input-sm {
+    width: 70px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.field-input-sm:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.field-input-sm::placeholder { color: #aaa; }
+
+.field-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    background: white;
+}
+
+.field-select:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.field-form-group {
+    margin-bottom: 12px;
+}
+
+.field-form-group label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+#field-contour-settings-panel .field-panel-body,
+#field-export-panel .field-panel-body {
+    padding: 12px;
+}
+
+/* 质量检查模式面板样式 */
+.field-quality-mode-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.field-quality-mode-card {
+    flex: 1;
+    padding: 12px 8px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fafafa;
+}
+
+.field-quality-mode-card:hover {
+    border-color: #4CAF50;
+    background: #f5fff5;
+}
+
+.field-quality-mode-card.selected {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+.field-quality-mode-card .mode-icon { font-size: 24px; margin-bottom: 4px; }
+.field-quality-mode-card .mode-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 2px; }
+.field-quality-mode-card .mode-desc { font-size: 11px; color: #666; }
+
+/* 禁用状态 */
+.field-quality-mode-card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.field-quality-mode-card.disabled:hover {
+    border-color: #e0e0e0;
+    background: #fafafa;
+}
+
+.field-quality-features {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.field-quality-features .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+.field-quality-features .feature-item:last-child { margin-bottom: 0; }
+.field-quality-features .feature-item .check { color: #4CAF50; font-weight: bold; }
+
+.field-quality-mode-description {
+    font-size: 11px;
+    color: #666;
+    text-align: center;
+    padding: 8px;
+    background: #fff8e1;
+    border-radius: 4px;
+    border-left: 3px solid #ff9800;
+}
+
+/* 应力计算模式样式 */
+.field-stress-mode-section {
+    margin-top: 12px;
+}
+
+.field-stress-mode-section .section-divider {
+    height: 1px;
+    background: #e0e0e0;
+    margin-bottom: 12px;
+}
+
+.field-stress-mode-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.field-stress-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.field-radio-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+}
+
+.field-radio-option input[type="radio"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: #4CAF50;
+}
+
+.field-radio-option .radio-label {
+    flex: 1;
+}
+
+.field-absolute-stress-input {
+    margin-top: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #2196F3;
+}
+
+.field-absolute-stress-input .field-input-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #555;
+}
+
+.field-absolute-stress-input input[type="number"] {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: right;
+}
+
+.field-absolute-stress-input input[type="number"]:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.field-input-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+}

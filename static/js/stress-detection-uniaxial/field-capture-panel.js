@@ -12,6 +12,9 @@ const FieldCapturePanel = (function() {
     // 监控状态（不再使用定时器，改为订阅模式）
     let 监控中 = false;
     
+    // 采集流程状态：'idle' | 'capturing' | 'paused' | 'finished'
+    let 采集流程状态 = 'idle';
+    
     // 波形画布
     let waveformCanvas = null;
     let waveformCtx = null;
@@ -34,6 +37,10 @@ const FieldCapturePanel = (function() {
         window.addEventListener('resize', 调整波形画布);
         
         绑定事件();
+        
+        // 初始化全局控制按钮状态
+        更新全局控制按钮();
+        
         console.log('[采集面板] 模块初始化完成');
     }
     
@@ -85,6 +92,23 @@ const FieldCapturePanel = (function() {
         if (prevBtn) prevBtn.addEventListener('click', 上一个测点);
         if (nextBtn) nextBtn.addEventListener('click', 下一个测点);
         
+        // 跳转按钮和输入框
+        const jumpBtn = document.getElementById('field-capture-jump-btn');
+        const jumpInput = document.getElementById('field-capture-jump-input');
+        if (jumpBtn) {
+            jumpBtn.addEventListener('click', 跳转到指定测点);
+        }
+        if (jumpInput) {
+            // 输入验证
+            jumpInput.addEventListener('input', 验证跳转输入);
+            // 按Enter也可以跳转
+            jumpInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    跳转到指定测点();
+                }
+            });
+        }
+        
         // 降噪设置按钮
         const denoiseBtn = document.getElementById('field-capture-denoise-settings');
         if (denoiseBtn) {
@@ -95,6 +119,17 @@ const FieldCapturePanel = (function() {
         const baselineBtn = document.getElementById('field-capture-set-baseline');
         if (baselineBtn) {
             baselineBtn.addEventListener('click', 设为基准点);
+        }
+        
+        // 全局控制按钮
+        const startPauseBtn = document.getElementById('field-capture-start-pause');
+        if (startPauseBtn) {
+            startPauseBtn.addEventListener('click', 切换采集状态);
+        }
+        
+        const finishBtn = document.getElementById('field-capture-finish');
+        if (finishBtn) {
+            finishBtn.addEventListener('click', 完成采集);
         }
     }
     
@@ -223,11 +258,26 @@ const FieldCapturePanel = (function() {
             return;
         }
         
+        // 检查是否所有测点都已采集完成
+        const totalPoints = 实验状态.测点列表.length;
+        const measuredCount = 实验状态.已测点列表?.length || 0;
+        if (measuredCount >= totalPoints) {
+            callbacks?.显示状态信息('🎉', '所有测点已采集完成', 
+                `共 ${totalPoints} 个测点，如需重新采集请点击"重测"`, 'success', 5000);
+            return;
+        }
+        
         const pointIndex = 实验状态.当前测点索引;
         const point = 实验状态.测点列表[pointIndex];
         
         if (!point) {
             callbacks?.显示状态信息('⚠️', '无效的测点索引', '', 'warning');
+            return;
+        }
+        
+        // 检查示波器连接状态
+        if (typeof RealtimeCapture !== 'undefined' && !RealtimeCapture.获取连接状态()) {
+            callbacks?.显示状态信息('⚠️', '请先连接示波器', '', 'warning');
             return;
         }
         
@@ -239,43 +289,97 @@ const FieldCapturePanel = (function() {
         callbacks?.显示状态信息('⏳', `正在采集测点 ${pointIndex + 1}...`, '', 'info', 0);
         
         try {
+            // 从实时采集模块获取RAW模式数据（12bit精度）
+            const raw_result = await RealtimeCapture.获取当前RAW波形();
+            
+            if (!raw_result.success) {
+                callbacks?.显示状态信息('❌', '波形采集失败', raw_result.message || '', 'error');
+                return;
+            }
+            
+            const 波形数据 = raw_result.data;
             const autoDenoise = document.getElementById('field-capture-auto-denoise')?.checked ?? true;
             
-            const result = await pywebview.api.capture_field_point(
-                point.id || pointIndex + 1,
+            // 使用 pointIndex + 1 作为 point_index（从1开始）
+            // 传递波形数据给后端处理
+            const result = await pywebview.api.capture_field_point_with_waveform(
+                pointIndex + 1,
+                波形数据.voltage,
+                波形数据.time,
+                波形数据.sample_rate || 1e9,
                 autoDenoise
             );
             
             if (result.success) {
                 const data = result.data;
                 
-                // 更新测点状态
-                callbacks?.更新测点状态(point.id || pointIndex + 1, 'measured', data);
+                // 更新测点状态（使用 pointIndex + 1）
+                callbacks?.更新测点状态(pointIndex + 1, 'measured', data);
                 
-                // 如果是第一个测点，设为基准
-                if (!实验状态.基准点ID) {
-                    实验状态.基准点ID = point.id || pointIndex + 1;
+                // 如果是第一个测点（基准点），更新实验状态为"采集中"
+                if (data.is_baseline) {
+                    实验状态.基准点ID = pointIndex + 1;
+                    // 后端已将状态更新为 collecting，前端同步更新
+                    if (实验状态.当前实验) {
+                        实验状态.当前实验.status = 'collecting';
+                    }
+                    // 更新基准信息显示
+                    if (typeof StressDetectionUniaxialModule !== 'undefined') {
+                        StressDetectionUniaxialModule.更新基准信息显示({
+                            point_id: pointIndex + 1,
+                            point_index: pointIndex + 1,
+                            snr: data.snr,
+                            quality_score: data.quality_score,
+                            capture_time: new Date().toLocaleTimeString()
+                        });
+                    }
+                } else if (!实验状态.基准点ID) {
+                    // 兼容旧逻辑
+                    实验状态.基准点ID = pointIndex + 1;
                 }
                 
                 // 显示结果
                 更新采集结果显示(data);
                 
-                // 检查质量
-                if (data.quality_score < 0.6) {
-                    显示质量警告(data);
-                } else {
-                    callbacks?.显示状态信息('✅', '采集成功', 
-                        `应力: ${data.stress?.toFixed(1)} MPa, 质量: ${(data.quality_score * 100).toFixed(0)}%`, 'success');
-                    
-                    // 自动跳转到下一个测点
-                    if (实验状态.当前测点索引 < 实验状态.测点列表.length - 1) {
-                        实验状态.当前测点索引++;
-                        更新当前测点显示();
+                // 获取质量检查模式
+                const qualityMode = typeof StressDetectionUniaxialModule !== 'undefined' 
+                    ? StressDetectionUniaxialModule.获取质量检查模式() 
+                    : 'strict';
+                
+                // 根据模式决定反馈方式
+                const qualityPercent = data.quality_score != null ? (Number(data.quality_score) * 100).toFixed(0) : '0';
+                const qualityStars = data.quality_score >= 0.9 ? '★★★★★' 
+                    : data.quality_score >= 0.7 ? '★★★★☆' 
+                    : data.quality_score >= 0.5 ? '★★★☆☆' 
+                    : '★★☆☆☆';
+                
+                if (qualityMode === 'strict') {
+                    // 严格模式：质量不合格时弹出警告对话框
+                    if (data.quality_score < 0.6) {
+                        显示质量警告(data);
+                    } else {
+                        callbacks?.显示状态信息('✅', '采集成功', 
+                            `应力: ${data.stress != null ? Number(data.stress).toFixed(1) : '--'} MPa, 质量: ${qualityPercent}%`, 'success');
+                        
+                        // 自动跳转到下一个测点
+                        自动跳转下一测点();
                     }
+                } else {
+                    // 快速模式：只显示简短提示，自动继续
+                    if (data.quality_score < 0.6) {
+                        callbacks?.显示状态信息('⚠️', `#${pointIndex + 1} ${qualityStars}`, '质量较差', 'warning');
+                    } else {
+                        callbacks?.显示状态信息('✅', `#${pointIndex + 1} ${qualityStars}`, '', 'success');
+                    }
+                    
+                    // 无论质量如何都自动跳转
+                    自动跳转下一测点();
                 }
                 
                 // 刷新云图
+                console.log('[采集面板] 已测点数:', 实验状态.已测点列表.length);
                 if (实验状态.已测点列表.length >= 3) {
+                    console.log('[采集面板] 调用刷新云图');
                     callbacks?.刷新云图?.();
                 }
                 
@@ -285,6 +389,21 @@ const FieldCapturePanel = (function() {
         } catch (error) {
             console.error('[采集面板] 采集测点失败:', error);
             callbacks?.显示状态信息('❌', '采集失败', error.toString(), 'error');
+        }
+    }
+    
+    // ========== 自动跳转下一测点 ==========
+    function 自动跳转下一测点() {
+        if (实验状态.当前测点索引 < 实验状态.测点列表.length - 1) {
+            实验状态.当前测点索引++;
+            更新当前测点显示();
+        } else {
+            // 所有测点已采集完成，提示用户可以点击"完成采集"
+            callbacks?.显示状态信息('🎉', '所有测点采集完成！', 
+                `共 ${实验状态.测点列表.length} 个测点，点击"完成采集"保存实验`, 'success', 5000);
+            
+            // 更新UI显示（不自动设置为completed，需要用户手动点击"完成采集"）
+            更新当前测点显示();
         }
     }
     
@@ -302,12 +421,12 @@ const FieldCapturePanel = (function() {
         
         try {
             const result = await pywebview.api.skip_field_point(
-                point.id || pointIndex + 1,
+                pointIndex + 1,
                 reason
             );
             
             if (result.success) {
-                callbacks?.更新测点状态(point.id || pointIndex + 1, 'skipped', null);
+                callbacks?.更新测点状态(pointIndex + 1, 'skipped', null);
                 
                 // 跳转到下一个测点
                 if (实验状态.当前测点索引 < 实验状态.测点列表.length - 1) {
@@ -373,6 +492,7 @@ const FieldCapturePanel = (function() {
         if (实验状态.当前测点索引 > 0) {
             实验状态.当前测点索引--;
             更新当前测点显示();
+            callbacks?.刷新预览画布?.();
         }
     }
     
@@ -380,6 +500,7 @@ const FieldCapturePanel = (function() {
         if (实验状态.当前测点索引 < 实验状态.测点列表.length - 1) {
             实验状态.当前测点索引++;
             更新当前测点显示();
+            callbacks?.刷新预览画布?.();
         }
     }
     
@@ -387,13 +508,52 @@ const FieldCapturePanel = (function() {
         if (index >= 0 && index < 实验状态.测点列表.length) {
             实验状态.当前测点索引 = index;
             更新当前测点显示();
+            callbacks?.刷新预览画布?.();
         }
+    }
+    
+    // ========== 跳转输入验证 ==========
+    function 验证跳转输入() {
+        const input = document.getElementById('field-capture-jump-input');
+        if (!input) return;
+        
+        const value = parseInt(input.value);
+        const total = 实验状态?.测点列表?.length || 0;
+        
+        if (isNaN(value) || value < 1 || value > total) {
+            input.classList.add('invalid');
+        } else {
+            input.classList.remove('invalid');
+        }
+    }
+    
+    // ========== 跳转到指定测点 ==========
+    function 跳转到指定测点() {
+        const input = document.getElementById('field-capture-jump-input');
+        if (!input) return;
+        
+        const value = parseInt(input.value);
+        const total = 实验状态?.测点列表?.length || 0;
+        
+        if (isNaN(value) || value < 1 || value > total) {
+            callbacks?.显示状态信息?.('⚠️', '跳转失败', `请输入1-${total}之间的数字`, 'warning');
+            input.classList.add('invalid');
+            return;
+        }
+        
+        // 跳转到指定测点 (索引 = value - 1)
+        实验状态.当前测点索引 = value - 1;
+        更新当前测点显示();
+        callbacks?.刷新预览画布?.();
+        
+        console.log(`[采集面板] 跳转到测点 #${value}`);
     }
     
     // ========== 更新当前测点显示 ==========
     function 更新当前测点显示() {
         const index = 实验状态.当前测点索引;
         const point = 实验状态.测点列表[index];
+        const total = 实验状态.测点列表.length;
         
         // 更新测点信息
         const pointIdEl = document.getElementById('field-capture-point-id');
@@ -401,9 +561,9 @@ const FieldCapturePanel = (function() {
         const pointYEl = document.getElementById('field-capture-point-y');
         const pointStatusEl = document.getElementById('field-capture-point-status');
         
-        if (pointIdEl) pointIdEl.textContent = point?.id || index + 1;
-        if (pointXEl) pointXEl.textContent = point?.x?.toFixed(1) || '--';
-        if (pointYEl) pointYEl.textContent = point?.y?.toFixed(1) || '--';
+        if (pointIdEl) pointIdEl.textContent = point?.point_index || index + 1;
+        if (pointXEl) pointXEl.textContent = point?.x_coord != null ? Number(point.x_coord).toFixed(1) : '--';
+        if (pointYEl) pointYEl.textContent = point?.y_coord != null ? Number(point.y_coord).toFixed(1) : '--';
         if (pointStatusEl) {
             const statusMap = {
                 'pending': '待测',
@@ -414,17 +574,39 @@ const FieldCapturePanel = (function() {
             pointStatusEl.textContent = statusMap[point?.status] || '待测';
         }
         
-        // 更新进度
-        const progressEl = document.getElementById('field-capture-progress');
-        if (progressEl) {
-            progressEl.textContent = `${index + 1} / ${实验状态.测点列表.length}`;
+        // 更新跳转输入框的值
+        const jumpInput = document.getElementById('field-capture-jump-input');
+        if (jumpInput) {
+            jumpInput.value = index + 1;
+            jumpInput.classList.remove('invalid');
+        }
+        
+        // 更新总数显示
+        const totalEl = document.getElementById('field-capture-total');
+        if (totalEl) {
+            totalEl.textContent = total;
+        }
+        
+        // 更新测点类型标识
+        const typeSpan = document.getElementById('field-capture-point-type');
+        if (typeSpan) {
+            // 判断是否为基准点：point_index 匹配基准点ID
+            const isBaseline = 实验状态.基准点ID && (index + 1) === 实验状态.基准点ID;
+            
+            if (isBaseline) {
+                typeSpan.textContent = '🔵 基准点';
+                typeSpan.className = 'baseline';
+            } else {
+                typeSpan.textContent = '⚪ 普通测点';
+                typeSpan.className = 'normal';
+            }
         }
         
         // 更新进度条
         const progressBar = document.getElementById('field-capture-progress-bar');
         if (progressBar) {
-            const percent = 实验状态.测点列表.length > 0 
-                ? (实验状态.已测点列表.length / 实验状态.测点列表.length) * 100 
+            const percent = total > 0 
+                ? (实验状态.已测点列表.length / total) * 100 
                 : 0;
             progressBar.style.width = `${percent}%`;
         }
@@ -447,10 +629,10 @@ const FieldCapturePanel = (function() {
         const qualityEl = document.getElementById('field-capture-result-quality');
         const snrEl = document.getElementById('field-capture-result-snr');
         
-        if (timeDiffEl) timeDiffEl.textContent = data.time_diff?.toFixed(2) || '--';
-        if (stressEl) stressEl.textContent = data.stress?.toFixed(1) || '--';
-        if (qualityEl) qualityEl.textContent = data.quality_score ? `${(data.quality_score * 100).toFixed(0)}%` : '--';
-        if (snrEl) snrEl.textContent = data.snr?.toFixed(1) || '--';
+        if (timeDiffEl) timeDiffEl.textContent = data.time_diff != null ? Number(data.time_diff).toFixed(2) : '--';
+        if (stressEl) stressEl.textContent = data.stress != null ? Number(data.stress).toFixed(1) : '--';
+        if (qualityEl) qualityEl.textContent = data.quality_score != null ? `${(Number(data.quality_score) * 100).toFixed(0)}%` : '--';
+        if (snrEl) snrEl.textContent = data.snr != null ? Number(data.snr).toFixed(1) : '--';
     }
     
     // ========== 质量警告 ==========
@@ -460,7 +642,7 @@ const FieldCapturePanel = (function() {
         overlay.id = 'field-quality-warning-modal';
         overlay.style.display = 'flex';
         
-        const qualityPercent = (data.quality_score * 100).toFixed(0);
+        const qualityPercent = data.quality_score != null ? (Number(data.quality_score) * 100).toFixed(0) : '0';
         
         overlay.innerHTML = `
             <div class="modal-content field-modal modal-sm">
@@ -482,15 +664,15 @@ const FieldCapturePanel = (function() {
                                 </div>
                                 <div class="quality-item">
                                     <span class="label">信噪比:</span>
-                                    <span class="value">${data.snr?.toFixed(1) || '--'} dB</span>
+                                    <span class="value">${data.snr != null ? Number(data.snr).toFixed(1) : '--'} dB</span>
                                 </div>
                                 <div class="quality-item">
                                     <span class="label">时间差:</span>
-                                    <span class="value">${data.time_diff?.toFixed(2) || '--'} ns</span>
+                                    <span class="value">${data.time_diff != null ? Number(data.time_diff).toFixed(2) : '--'} ns</span>
                                 </div>
                                 <div class="quality-item">
                                     <span class="label">应力值:</span>
-                                    <span class="value">${data.stress?.toFixed(1) || '--'} MPa</span>
+                                    <span class="value">${data.stress != null ? Number(data.stress).toFixed(1) : '--'} MPa</span>
                                 </div>
                             </div>
                             <div class="quality-warning-message" style="margin-top: 12px; padding: 10px; background: #fff8e1; border-radius: 6px; border-left: 3px solid #ff9800;">
@@ -552,11 +734,11 @@ const FieldCapturePanel = (function() {
         
         try {
             const result = await pywebview.api.set_baseline_point(
-                point.id || pointIndex + 1
+                pointIndex + 1
             );
             
             if (result.success) {
-                实验状态.基准点ID = point.id || pointIndex + 1;
+                实验状态.基准点ID = pointIndex + 1;
                 
                 callbacks?.显示状态信息('✅', '基准点已更换', 
                     `重新计算了 ${result.recalculated_points || 0} 个测点`, 'success');
@@ -652,35 +834,303 @@ const FieldCapturePanel = (function() {
     function 禁用采集() {
         停止监控();
         
+        // 设置采集流程状态为已完成
+        采集流程状态 = 'finished';
+        
+        // 更新全局控制按钮（开始采集/暂停按钮）
+        更新全局控制按钮();
+        
+        // 禁用采集相关按钮
         const captureBtn = document.getElementById('field-capture-current');
         const skipBtn = document.getElementById('field-capture-skip');
         const recaptureBtn = document.getElementById('field-capture-recapture');
+        const baselineBtn = document.getElementById('field-capture-set-baseline');
         
         if (captureBtn) captureBtn.disabled = true;
         if (skipBtn) skipBtn.disabled = true;
         if (recaptureBtn) recaptureBtn.disabled = true;
+        if (baselineBtn) baselineBtn.disabled = true;
+    }
+    
+    // ========== 全局采集控制 ==========
+    function 切换采集状态() {
+        if (!实验状态.当前实验) {
+            callbacks?.显示状态信息('⚠️', '请先创建或加载实验', '', 'warning');
+            return;
+        }
+        
+        if (!实验状态.测点列表 || 实验状态.测点列表.length === 0) {
+            callbacks?.显示状态信息('⚠️', '请先生成测点', '', 'warning');
+            return;
+        }
+        
+        switch (采集流程状态) {
+            case 'idle':
+                开始采集流程();
+                break;
+            case 'capturing':
+                暂停采集流程();
+                break;
+            case 'paused':
+                继续采集流程();
+                break;
+            case 'finished':
+                // 已完成状态不响应
+                break;
+        }
+    }
+    
+    function 开始采集流程() {
+        // 检查示波器连接状态
+        if (typeof RealtimeCapture !== 'undefined' && !RealtimeCapture.获取连接状态()) {
+            callbacks?.显示状态信息('⚠️', '请先连接示波器', '无法开始采集', 'warning');
+            return;
+        }
+        
+        采集流程状态 = 'capturing';
+        开始监控();
+        更新全局控制按钮();
+        启用采集按钮();
+        
+        // 禁用质量检查模式切换
+        if (typeof StressDetectionUniaxialModule !== 'undefined') {
+            StressDetectionUniaxialModule.禁用质量检查模式切换();
+        }
+        
+        callbacks?.显示状态信息('✅', '采集已开始', '可以开始采集测点', 'success');
+        console.log('[采集面板] 采集流程已开始');
+    }
+    
+    function 暂停采集流程() {
+        采集流程状态 = 'paused';
+        停止监控();
+        更新全局控制按钮();
+        禁用采集按钮();
+        callbacks?.显示状态信息('ℹ️', '采集已暂停', '点击继续恢复采集', 'info');
+        console.log('[采集面板] 采集流程已暂停');
+    }
+    
+    function 继续采集流程() {
+        采集流程状态 = 'capturing';
+        开始监控();
+        更新全局控制按钮();
+        启用采集按钮();
+        callbacks?.显示状态信息('✅', '采集已恢复', '', 'success');
+        console.log('[采集面板] 采集流程已恢复');
+    }
+    
+    async function 完成采集() {
+        if (!实验状态.当前实验) {
+            callbacks?.显示状态信息('⚠️', '没有进行中的实验', '', 'warning');
+            return;
+        }
+        
+        const 已测数量 = 实验状态.已测点列表?.length || 0;
+        const 总数量 = 实验状态.测点列表?.length || 0;
+        
+        if (已测数量 < 3) {
+            callbacks?.显示状态信息('⚠️', '至少需要3个测点', '才能生成云图', 'warning');
+            return;
+        }
+        
+        // 确认对话框
+        const confirmed = await StressDetectionUniaxialModule.显示确认对话框(
+            '完成采集',
+            `确定完成采集吗？\n\n已采集 ${已测数量}/${总数量} 个测点 (${Math.round(已测数量/总数量*100)}%)\n剩余 ${总数量 - 已测数量} 个测点将标记为未测`
+        );
+        
+        if (!confirmed) return;
+        
+        // 调用后端API保存完成状态到数据库
+        try {
+            const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
+            const result = await pywebview.api.complete_field_experiment(expId);
+            
+            if (!result.success) {
+                callbacks?.显示状态信息('❌', '保存状态失败', result.message, 'error');
+                return;
+            }
+        } catch (error) {
+            console.error('[采集面板] 保存完成状态失败:', error);
+            callbacks?.显示状态信息('❌', '保存状态失败', error.toString(), 'error');
+            return;
+        }
+        
+        采集流程状态 = 'finished';
+        停止监控();
+        更新全局控制按钮();
+        禁用采集按钮();
+        
+        // 启用质量检查模式切换
+        if (typeof StressDetectionUniaxialModule !== 'undefined') {
+            StressDetectionUniaxialModule.启用质量检查模式切换();
+            // 启用重置按钮
+            StressDetectionUniaxialModule.启用重置按钮();
+        }
+        
+        // 更新实验状态为已完成，并刷新左上角状态显示
+        if (实验状态.当前实验) {
+            实验状态.当前实验.status = 'completed';
+            // 调用主模块更新实验信息显示
+            if (typeof StressDetectionUniaxialModule !== 'undefined') {
+                StressDetectionUniaxialModule.更新实验信息显示?.();
+            }
+        }
+        
+        // 刷新云图
+        callbacks?.刷新云图?.();
+        
+        callbacks?.显示状态信息('✅', '采集完成', `共 ${已测数量} 个有效测点`, 'success');
+        console.log('[采集面板] 采集流程已完成');
+    }
+    
+    function 更新全局控制按钮() {
+        const btn = document.getElementById('field-capture-start-pause');
+        const finishBtn = document.getElementById('field-capture-finish');
+        
+        if (!btn) return;
+        
+        // 移除所有状态类
+        btn.classList.remove('btn-primary', 'btn-warning', 'btn-success', 'btn-secondary', 'btn-start', 'btn-pause', 'btn-resume');
+        
+        switch (采集流程状态) {
+            case 'idle':
+                btn.textContent = '▶️ 开始采集';
+                btn.classList.add('btn-primary', 'btn-start');
+                btn.disabled = false;
+                if (finishBtn) finishBtn.disabled = true;
+                break;
+            case 'capturing':
+                btn.textContent = '⏸️ 暂停';
+                btn.classList.add('btn-warning', 'btn-pause');
+                btn.disabled = false;
+                if (finishBtn) finishBtn.disabled = false;
+                break;
+            case 'paused':
+                btn.textContent = '▶️ 继续';
+                btn.classList.add('btn-success', 'btn-resume');
+                btn.disabled = false;
+                if (finishBtn) finishBtn.disabled = false;
+                break;
+            case 'finished':
+                btn.textContent = '已完成';
+                btn.classList.add('btn-secondary');
+                btn.disabled = true;
+                if (finishBtn) finishBtn.disabled = true;
+                break;
+        }
+    }
+    
+    function 启用采集按钮() {
+        const captureBtn = document.getElementById('field-capture-current');
+        const skipBtn = document.getElementById('field-capture-skip');
+        const recaptureBtn = document.getElementById('field-capture-recapture');
+        const baselineBtn = document.getElementById('field-capture-set-baseline');
+        
+        if (captureBtn) captureBtn.disabled = false;
+        if (skipBtn) skipBtn.disabled = false;
+        if (recaptureBtn) recaptureBtn.disabled = false;
+        if (baselineBtn) baselineBtn.disabled = false;
+    }
+    
+    function 禁用采集按钮() {
+        const captureBtn = document.getElementById('field-capture-current');
+        const skipBtn = document.getElementById('field-capture-skip');
+        const recaptureBtn = document.getElementById('field-capture-recapture');
+        const baselineBtn = document.getElementById('field-capture-set-baseline');
+        
+        if (captureBtn) captureBtn.disabled = true;
+        if (skipBtn) skipBtn.disabled = true;
+        if (recaptureBtn) recaptureBtn.disabled = true;
+        if (baselineBtn) baselineBtn.disabled = true;
+    }
+    
+    function 重置采集流程() {
+        采集流程状态 = 'idle';
+        停止监控();
+        更新全局控制按钮();
+        禁用采集按钮();
+        
+        // 启用质量检查模式切换
+        if (typeof StressDetectionUniaxialModule !== 'undefined') {
+            StressDetectionUniaxialModule.启用质量检查模式切换();
+        }
     }
     
     // ========== 更新显示 ==========
     function 更新显示() {
+        // 根据实验状态同步采集流程状态
+        同步采集流程状态();
+        
         更新当前测点显示();
         更新监控按钮状态();
+        更新全局控制按钮();
+    }
+    
+    // ========== 同步采集流程状态 ==========
+    function 同步采集流程状态() {
+        if (!实验状态?.当前实验) {
+            采集流程状态 = 'idle';
+            return;
+        }
+        
+        const expStatus = 实验状态.当前实验.status;
+        
+        switch (expStatus) {
+            case 'completed':
+                采集流程状态 = 'finished';
+                break;
+            case 'collecting':
+                // 如果实验状态是采集中，但监控未启动，则设为暂停状态
+                采集流程状态 = 监控中 ? 'capturing' : 'paused';
+                break;
+            case 'planning':
+            default:
+                采集流程状态 = 'idle';
+                break;
+        }
     }
     
     function 清空() {
         停止监控();
+        重置采集流程();
         
         // 清空显示
         const elements = ['field-capture-point-id', 'field-capture-point-x', 'field-capture-point-y', 
                          'field-capture-result-timediff', 'field-capture-result-stress', 
-                         'field-capture-result-quality', 'field-capture-result-snr'];
+                         'field-capture-result-quality', 'field-capture-result-snr',
+                         'field-capture-total'];
         elements.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.textContent = '--';
         });
         
+        // 重置进度条
         const progressBar = document.getElementById('field-capture-progress-bar');
         if (progressBar) progressBar.style.width = '0%';
+        
+        // 重置测点状态显示
+        const pointStatusEl = document.getElementById('field-capture-point-status');
+        if (pointStatusEl) pointStatusEl.textContent = '待测';
+        
+        // 重置测点类型标识
+        const typeSpan = document.getElementById('field-capture-point-type');
+        if (typeSpan) {
+            typeSpan.textContent = '⚪ 普通测点';
+            typeSpan.className = 'normal';
+        }
+        
+        // 重置跳转输入框
+        const jumpInput = document.getElementById('field-capture-jump-input');
+        if (jumpInput) {
+            jumpInput.value = '';
+            jumpInput.classList.remove('invalid');
+        }
+        
+        // 清空波形画布
+        if (waveformCanvas && waveformCtx) {
+            waveformCtx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+        }
     }
     
     // ========== 公共接口 ==========
@@ -706,6 +1156,11 @@ const FieldCapturePanel = (function() {
         禁用采集,
         更新显示,
         清空,
-        调整波形画布
+        调整波形画布,
+        // 全局控制
+        切换采集状态,
+        完成采集,
+        重置采集流程,
+        更新全局控制按钮
     };
 })();

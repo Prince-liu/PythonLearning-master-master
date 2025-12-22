@@ -70,7 +70,7 @@ const StressDetectionUniaxialModule = (function() {
             // 控制按钮
             newExperimentBtn: document.getElementById('field-new-experiment-btn'),
             manageExperimentsBtn: document.getElementById('field-manage-experiments-btn'),
-            completeExperimentBtn: document.getElementById('field-complete-experiment-btn'),
+            resetExperimentBtn: document.getElementById('field-reset-experiment-btn'),
             
             // 折叠面板
             calibrationPanel: document.getElementById('field-calibration-panel'),
@@ -117,9 +117,9 @@ const StressDetectionUniaxialModule = (function() {
             });
         }
         
-        // 完成实验按钮
-        if (elements.completeExperimentBtn) {
-            elements.completeExperimentBtn.addEventListener('click', 完成当前实验);
+        // 重置实验按钮
+        if (elements.resetExperimentBtn) {
+            elements.resetExperimentBtn.addEventListener('click', 重置当前实验);
         }
         
         // 折叠面板切换
@@ -248,14 +248,22 @@ const StressDetectionUniaxialModule = (function() {
     function 绑定质量检查面板事件() {
         const modeCards = document.querySelectorAll('.field-quality-mode-card');
         const modeDesc = document.getElementById('field-quality-mode-desc');
+        const featuresStrict = document.getElementById('field-quality-features-strict');
+        const featuresFast = document.getElementById('field-quality-features-fast');
         
         const modeDescriptions = {
             'strict': '适合正式实验和高精度测量',
-            'fast': '适合快速预览和粗略测量'
+            'fast': '适合快速预扫描和粗略测量'
         };
         
         modeCards.forEach(card => {
             card.addEventListener('click', () => {
+                // 检查是否被禁用
+                if (card.classList.contains('disabled')) {
+                    显示状态信息('⚠️', '采集进行中无法切换模式', '', 'warning');
+                    return;
+                }
+                
                 // 移除所有选中状态
                 modeCards.forEach(c => c.classList.remove('selected'));
                 // 添加当前选中状态
@@ -269,8 +277,34 @@ const StressDetectionUniaxialModule = (function() {
                     modeDesc.textContent = modeDescriptions[质量检查模式] || '';
                 }
                 
+                // 更新特性列表显示
+                if (featuresStrict && featuresFast) {
+                    if (质量检查模式 === 'strict') {
+                        featuresStrict.style.display = 'block';
+                        featuresFast.style.display = 'none';
+                    } else {
+                        featuresStrict.style.display = 'none';
+                        featuresFast.style.display = 'block';
+                    }
+                }
+                
                 显示状态信息('✅', `已切换到${质量检查模式 === 'strict' ? '严格' : '快速'}模式`, '', 'success');
             });
+        });
+    }
+    
+    // ========== 质量检查模式禁用/启用 ==========
+    function 禁用质量检查模式切换() {
+        const modeCards = document.querySelectorAll('.field-quality-mode-card');
+        modeCards.forEach(card => {
+            card.classList.add('disabled');
+        });
+    }
+    
+    function 启用质量检查模式切换() {
+        const modeCards = document.querySelectorAll('.field-quality-mode-card');
+        modeCards.forEach(card => {
+            card.classList.remove('disabled');
         });
     }
     
@@ -351,7 +385,7 @@ const StressDetectionUniaxialModule = (function() {
             子模块.形状面板.初始化(实验状态, elements, {
                 显示状态信息,
                 更新形状配置,
-                刷新预览画布: () => 子模块.预览画布?.刷新()
+                刷新预览画布: () => 子模块.预览画布?.重置视图()  // 形状改变时重置视图，自动适配
             });
         }
         
@@ -373,7 +407,7 @@ const StressDetectionUniaxialModule = (function() {
                 显示状态信息,
                 更新测点状态,
                 刷新预览画布: () => 子模块.预览画布?.刷新(),
-                刷新云图: () => 子模块.云图显示?.刷新(),
+                刷新云图: 刷新云图,  // 调用主模块的刷新云图函数，会从后端获取新数据
                 刷新数据表格
             });
         }
@@ -438,6 +472,8 @@ const StressDetectionUniaxialModule = (function() {
             if (elements.experimentName) elements.experimentName.textContent = '未加载实验';
             if (elements.experimentStatus) elements.experimentStatus.textContent = '--';
             if (elements.experimentProgress) elements.experimentProgress.textContent = '0/0';
+            const stressDirectionEl = document.getElementById('field-stress-direction');
+            if (stressDirectionEl) stressDirectionEl.textContent = '--';
             return;
         }
         
@@ -450,11 +486,22 @@ const StressDetectionUniaxialModule = (function() {
                 'completed': '已完成'
             };
             elements.experimentStatus.textContent = statusMap[exp.status] || exp.status;
+            // 设置状态样式类
+            elements.experimentStatus.className = 'field-status-badge';
+            if (exp.status) {
+                elements.experimentStatus.classList.add(`status-${exp.status}`);
+            }
         }
         if (elements.experimentProgress) {
             const total = 实验状态.测点列表.length;
             const measured = 实验状态.已测点列表.length;
             elements.experimentProgress.textContent = `${measured}/${total}`;
+        }
+        
+        // 显示应力方向
+        const stressDirectionEl = document.getElementById('field-stress-direction');
+        if (stressDirectionEl) {
+            stressDirectionEl.textContent = exp.stress_direction || '--';
         }
     }
     
@@ -498,14 +545,14 @@ const StressDetectionUniaxialModule = (function() {
         if (timeEl) timeEl.textContent = baselineData.capture_time || '--';
         if (snrEl) {
             const snr = baselineData.snr;
-            snrEl.textContent = snr !== undefined ? `${snr.toFixed(1)} dB` : '--';
+            snrEl.textContent = snr != null ? `${Number(snr).toFixed(1)} dB` : '--';
             snrEl.className = 'value ' + (snr >= 20 ? 'good' : snr >= 10 ? 'warning' : 'bad');
         }
         if (qualityEl) {
             const quality = baselineData.quality_score;
-            if (quality !== undefined) {
+            if (quality != null) {
                 const stars = quality >= 0.9 ? '★★★★★' : quality >= 0.7 ? '★★★★☆' : quality >= 0.5 ? '★★★☆☆' : '★★☆☆☆';
-                qualityEl.textContent = `${(quality * 100).toFixed(0)}% ${stars}`;
+                qualityEl.textContent = `${(Number(quality) * 100).toFixed(0)}% ${stars}`;
                 qualityEl.className = 'value ' + (quality >= 0.8 ? 'good' : quality >= 0.5 ? 'warning' : 'bad');
             } else {
                 qualityEl.textContent = '--';
@@ -528,37 +575,57 @@ const StressDetectionUniaxialModule = (function() {
         显示状态信息('✅', '标定数据已加载', `K = ${data.k} MPa/ns`, 'success');
     }
     
-    function 更新形状配置(config) {
+    async function 更新形状配置(config) {
         实验状态.形状配置 = config;
         // 清空测点（形状变化后需要重新生成）
         实验状态.测点列表 = [];
         实验状态.已测点列表 = [];
+        // 清空云图（测点清空后云图也应清空）
+        实验状态.云图数据 = null;
+        子模块.云图显示?.清空();
         刷新数据表格();
+        
+        // 保存形状配置到数据库
+        if (实验状态.当前实验) {
+            try {
+                const result = await pywebview.api.save_shape_config(config);
+                if (result.success) {
+                    console.log('[应力场] 形状配置已保存到数据库');
+                } else {
+                    console.warn('[应力场] 保存形状配置失败:', result.message);
+                }
+            } catch (error) {
+                console.error('[应力场] 保存形状配置异常:', error);
+            }
+        }
     }
     
     function 更新测点列表(points) {
         实验状态.测点列表 = points;
         实验状态.当前测点索引 = 0;
+        // 清空云图（测点重新生成后云图也应清空）
+        实验状态.云图数据 = null;
+        子模块.云图显示?.清空();
         刷新数据表格();
         更新实验信息显示();
     }
     
-    function 更新测点状态(pointId, status, data) {
-        // 更新测点状态
-        const point = 实验状态.测点列表.find(p => p.id === pointId);
+    function 更新测点状态(pointIndex, status, data) {
+        // 更新测点状态（使用 point_index 查找）
+        const point = 实验状态.测点列表.find(p => p.point_index === pointIndex);
         if (point) {
             point.status = status;
             if (data) {
-                point.timeDiff = data.time_diff;
-                point.stress = data.stress;
-                point.qualityScore = data.quality_score;
+                point.time_diff = data.time_diff;
+                point.stress_value = data.stress;
+                point.quality_score = data.quality_score;
                 point.snr = data.snr;
             }
         }
         
         // 更新已测点列表
-        if (status === 'measured' && !实验状态.已测点列表.includes(pointId)) {
-            实验状态.已测点列表.push(pointId);
+        if (status === 'measured' && !实验状态.已测点列表.includes(pointIndex)) {
+            实验状态.已测点列表.push(pointIndex);
         }
         
         刷新数据表格();
@@ -568,6 +635,36 @@ const StressDetectionUniaxialModule = (function() {
     // ========== 数据表格刷新 ==========
     function 刷新数据表格() {
         if (!elements.dataTableBody) return;
+        
+        // 获取当前布点类型
+        const 布点类型 = 子模块.布点面板?.获取当前布点类型?.() || 'grid';
+        const 是极坐标 = 布点类型 === 'polar';
+        
+        // 更新表头
+        const thead = elements.dataTable?.querySelector('thead tr');
+        if (thead) {
+            if (是极坐标) {
+                thead.innerHTML = `
+                    <th>编号</th>
+                    <th>r(mm)</th>
+                    <th>θ(°)</th>
+                    <th>Δt(ns)</th>
+                    <th>σ(MPa)</th>
+                    <th>质量</th>
+                    <th>操作</th>
+                `;
+            } else {
+                thead.innerHTML = `
+                    <th>编号</th>
+                    <th>X(mm)</th>
+                    <th>Y(mm)</th>
+                    <th>Δt(ns)</th>
+                    <th>σ(MPa)</th>
+                    <th>质量</th>
+                    <th>操作</th>
+                `;
+            }
+        }
         
         elements.dataTableBody.innerHTML = '';
         
@@ -593,13 +690,27 @@ const StressDetectionUniaxialModule = (function() {
             };
             const statusIcon = index === 实验状态.当前测点索引 ? '🟡' : (statusIcons[point.status] || '⚪');
             
+            // 根据布点类型显示不同的坐标列
+            let coord1, coord2;
+            if (是极坐标) {
+                const r = point.r_coord ?? point.r;
+                const theta = point.theta_coord ?? point.theta;
+                coord1 = (r != null) ? Number(r).toFixed(1) : '--';
+                coord2 = (theta != null) ? Number(theta).toFixed(1) : '--';
+            } else {
+                const x = point.x_coord ?? point.x;
+                const y = point.y_coord ?? point.y;
+                coord1 = (x != null) ? Number(x).toFixed(1) : '--';
+                coord2 = (y != null) ? Number(y).toFixed(1) : '--';
+            }
+            
             row.innerHTML = `
-                <td>${statusIcon} ${point.id || index + 1}</td>
-                <td>${(point.x || 0).toFixed(1)}</td>
-                <td>${(point.y || 0).toFixed(1)}</td>
-                <td>${point.timeDiff !== undefined ? point.timeDiff.toFixed(2) : '--'}</td>
-                <td>${point.stress !== undefined ? point.stress.toFixed(1) : '--'}</td>
-                <td>${point.qualityScore !== undefined ? (point.qualityScore * 100).toFixed(0) + '%' : '--'}</td>
+                <td>${statusIcon} ${point.point_index ?? point.id ?? (index + 1)}</td>
+                <td>${coord1}</td>
+                <td>${coord2}</td>
+                <td>${point.time_diff != null ? Number(point.time_diff).toFixed(2) : '--'}</td>
+                <td>${point.stress_value != null ? Number(point.stress_value).toFixed(1) : '--'}</td>
+                <td>${point.quality_score != null ? (Number(point.quality_score) * 100).toFixed(0) + '%' : '--'}</td>
                 <td>
                     <button class="btn btn-sm" onclick="StressDetectionUniaxialModule.跳转到测点(${index})" title="跳转">📍</button>
                 </td>
@@ -607,8 +718,8 @@ const StressDetectionUniaxialModule = (function() {
             
             // 点击行高亮测点
             row.addEventListener('click', () => {
-                子模块.预览画布?.高亮测点(point.id);
-                子模块.云图显示?.高亮测点(point.id);
+                子模块.预览画布?.高亮测点(point.point_index ?? point.id);
+                子模块.云图显示?.高亮测点(point.point_index ?? point.id);
             });
             
             elements.dataTableBody.appendChild(row);
@@ -631,12 +742,15 @@ const StressDetectionUniaxialModule = (function() {
             const data = result.data;
             
             // 更新状态
-            实验状态.当前实验 = data;
-            实验状态.标定数据 = data.config_snapshot?.calibration || null;
-            实验状态.形状配置 = data.shape_config || null;
-            实验状态.测点列表 = data.point_layout || [];
-            实验状态.已测点列表 = (data.measured_points || []).map(p => p.point_index);
-            实验状态.基准点ID = data.baseline_point_id;
+            实验状态.当前实验 = data.experiment;
+            实验状态.标定数据 = data.experiment.config_snapshot?.calibration || null;
+            实验状态.形状配置 = data.experiment.shape_config || null;
+            // 使用 points 而不是 point_layout，因为 points 包含完整的测点信息（包括 point_index）
+            实验状态.测点列表 = data.points || [];
+            实验状态.已测点列表 = (data.points || [])
+                .filter(p => p.status === 'measured')
+                .map(p => p.point_index);
+            实验状态.基准点ID = data.experiment.baseline_point_id;
             实验状态.当前测点索引 = 实验状态.已测点列表.length;
             
             // 更新各面板显示
@@ -648,6 +762,26 @@ const StressDetectionUniaxialModule = (function() {
             子模块.预览画布?.刷新();
             刷新数据表格();
             
+            // 根据实验状态更新按钮
+            const expStatus = data.experiment.status;
+            if (expStatus === 'completed') {
+                // 已完成实验：启用重置按钮，禁用采集按钮
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = false;
+                }
+                子模块.采集面板?.禁用采集();
+            } else if (expStatus === 'collecting') {
+                // 采集中实验：启用重置按钮
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = false;
+                }
+            } else {
+                // 规划中实验：禁用重置按钮
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = true;
+                }
+            }
+            
             // 更新基准信息
             if (data.baseline_data) {
                 更新基准信息显示(data.baseline_data);
@@ -655,9 +789,13 @@ const StressDetectionUniaxialModule = (function() {
                 更新基准信息显示(null);
             }
             
-            // 加载云图数据
+            // 处理云图：先清空，然后根据测点数量决定是否加载
             if (实验状态.已测点列表.length >= 3) {
                 await 刷新云图();
+            } else {
+                // 测点数不足，清空云图
+                实验状态.云图数据 = null;
+                子模块.云图显示?.清空();
             }
             
             显示状态信息('✅', '实验加载成功', data.name, 'success');
@@ -674,14 +812,19 @@ const StressDetectionUniaxialModule = (function() {
     function 清空实验数据() {
         实验状态.当前实验 = null;
         实验状态.标定数据 = null;
+        实验状态.标定系数 = 0;
         实验状态.形状配置 = null;
         实验状态.测点列表 = [];
         实验状态.已测点列表 = [];
+        实验状态.已测点数据 = [];
         实验状态.基准点ID = null;
         实验状态.当前测点索引 = 0;
         实验状态.云图数据 = null;
+        实验状态.应力计算模式 = 'relative';
+        实验状态.基准点应力值 = 0;
         
         更新实验信息显示();
+        更新基准信息显示(null);
         子模块.标定面板?.清空();
         子模块.形状面板?.清空();
         子模块.布点面板?.清空();
@@ -691,8 +834,8 @@ const StressDetectionUniaxialModule = (function() {
         刷新数据表格();
     }
     
-    // ========== 完成实验 ==========
-    async function 完成当前实验() {
+    // ========== 重置实验 ==========
+    async function 重置当前实验() {
         if (!实验状态.当前实验) {
             显示状态信息('⚠️', '没有正在进行的实验', '', 'warning');
             return;
@@ -700,39 +843,72 @@ const StressDetectionUniaxialModule = (function() {
         
         // 确认对话框
         const confirmed = await 显示确认对话框(
-            '完成实验',
-            `确定要完成实验"${实验状态.当前实验.name}"吗？\n\n完成后将无法继续采集数据。`
+            '重置实验',
+            `确定要重置实验"${实验状态.当前实验.name}"吗？\n\n这将清空所有已采集的数据，实验状态将恢复为"规划中"。`
         );
         
         if (!confirmed) return;
         
         try {
-            const result = await pywebview.api.complete_field_experiment(实验状态.当前实验.experiment_id);
+            const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
+            const result = await pywebview.api.reset_field_experiment(expId);
             
             if (result.success) {
-                实验状态.当前实验.status = 'completed';
-                更新实验信息显示();
-                子模块.采集面板?.禁用采集();
-                显示状态信息('✅', '实验已完成', '', 'success');
+                // 重新加载实验数据
+                await 加载实验数据(expId);
+                
+                // 重置采集面板状态（恢复开始采集按钮）
+                子模块.采集面板?.重置采集流程();
+                
+                // 禁用重置按钮
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = true;
+                }
+                
+                显示状态信息('✅', '实验已重置', '可以重新开始采集', 'success');
             } else {
-                显示状态信息('❌', '完成实验失败', result.message, 'error');
+                显示状态信息('❌', '重置实验失败', result.message, 'error');
             }
         } catch (error) {
-            显示状态信息('❌', '完成实验失败', error.toString(), 'error');
+            显示状态信息('❌', '重置实验失败', error.toString(), 'error');
+        }
+    }
+    
+    // ========== 启用重置按钮 ==========
+    function 启用重置按钮() {
+        if (elements.resetExperimentBtn) {
+            elements.resetExperimentBtn.disabled = false;
         }
     }
     
     // ========== 刷新云图 ==========
     async function 刷新云图() {
-        if (!实验状态.当前实验) return;
+        console.log('[应力场测绘] 刷新云图被调用');
+        if (!实验状态.当前实验) {
+            console.log('[应力场测绘] 没有当前实验，跳过');
+            return;
+        }
+        
+        // 获取实验ID（兼容不同字段名）
+        const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
+        if (!expId) {
+            console.error('[应力场测绘] 无法获取实验ID');
+            return;
+        }
+        
+        console.log('[应力场测绘] 调用 update_field_contour, expId:', expId);
         
         try {
-            const result = await pywebview.api.update_field_contour(实验状态.当前实验.experiment_id);
+            const result = await pywebview.api.update_field_contour(expId);
+            
+            console.log('[应力场测绘] 云图结果:', result?.success, result?.mode);
             
             if (result.success) {
                 // update_field_contour 直接返回数据，不嵌套在 data 里
                 实验状态.云图数据 = result;
                 子模块.云图显示?.更新数据(result);
+            } else {
+                console.error('[应力场测绘] 刷新云图失败:', result.message);
             }
         } catch (error) {
             console.error('[应力场测绘] 刷新云图失败:', error);
@@ -833,6 +1009,8 @@ const StressDetectionUniaxialModule = (function() {
         获取实验状态,
         获取当前实验,
         获取质量检查模式,
+        禁用质量检查模式切换,
+        启用质量检查模式切换,
         跳转到测点,
         刷新云图,
         刷新数据表格,
@@ -840,6 +1018,8 @@ const StressDetectionUniaxialModule = (function() {
         显示确认对话框,
         加载实验数据,
         清空实验数据,
-        更新基准信息显示
+        更新基准信息显示,
+        更新实验信息显示,
+        启用重置按钮
     };
 })();

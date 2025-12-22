@@ -407,6 +407,17 @@ class WebAPI:
         """
         return self.field_experiment.complete_experiment(exp_id)
     
+    def reset_field_experiment(self, exp_id=None):
+        """重置应力场实验（清空所有测点数据，状态恢复为planning）
+        
+        Args:
+            exp_id: 实验ID (可选，默认当前实验)
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_experiment.reset_experiment(exp_id)
+    
     def get_field_experiment_list(self):
         """获取所有应力场实验列表
         
@@ -516,6 +527,17 @@ class WebAPI:
         """
         return ShapeUtils.validate_shape(shape_config)
     
+    def get_effective_bounding_box(self, shape_config):
+        """获取布尔运算后形状的有效边界框
+        
+        Args:
+            shape_config: 形状配置字典（包含modifiers）
+        
+        Returns:
+            {"success": bool, "bounds": {"minX", "minY", "maxX", "maxY"}, "has_modifiers": bool}
+        """
+        return ShapeUtils.get_effective_bounding_box(shape_config)
+    
     def save_shape_config(self, shape_config):
         """保存形状配置到当前实验
         
@@ -600,7 +622,7 @@ class WebAPI:
     # ---------- 数据采集 ----------
     
     def capture_field_point(self, point_index, auto_denoise=True):
-        """采集单个测点
+        """采集单个测点（旧接口，保留兼容）
         
         Args:
             point_index: 测点索引
@@ -610,6 +632,26 @@ class WebAPI:
             {"success": bool, "data": {...}}
         """
         return self.field_capture.capture_point(point_index, auto_denoise)
+    
+    def capture_field_point_with_waveform(self, point_index, voltage_data, time_data, sample_rate, auto_denoise=True):
+        """采集单个测点（新接口，前端传入波形数据）
+        
+        Args:
+            point_index: 测点索引
+            voltage_data: 电压数据数组
+            time_data: 时间数据数组
+            sample_rate: 采样率
+            auto_denoise: 是否自动降噪
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        waveform = {
+            'time': time_data,
+            'voltage': voltage_data,
+            'sample_rate': sample_rate
+        }
+        return self.field_capture.capture_point_with_waveform(point_index, waveform, auto_denoise)
     
     def set_baseline_point(self, point_index):
         """设置基准测点
@@ -689,11 +731,12 @@ class WebAPI:
     
     # ---------- 云图生成 ----------
     
-    def update_field_contour(self, exp_id=None):
+    def update_field_contour(self, exp_id=None, config=None):
         """更新云图
         
         Args:
             exp_id: 实验ID (可选，默认当前实验)
+            config: 配置参数 (可选) {method, resolution, vmin, vmax}
         
         Returns:
             {"success": bool, "mode": str, "grid": {...}, "method": str, "confidence": str}
@@ -702,8 +745,14 @@ class WebAPI:
         if not exp_id:
             return {"success": False, "error_code": 1021, "message": "没有当前实验"}
         
+        # 解析配置参数
+        config = config or {}
+        method = config.get('method', 'auto')
+        resolution = config.get('resolution', 100)
+        
         # 获取已测量的测点
         measured_points = self.field_experiment.db.get_measured_points(exp_id)
+        print(f"[云图] 实验 {exp_id} 已测量测点数: {len(measured_points) if measured_points else 0}")
         
         if not measured_points:
             return {
@@ -715,9 +764,11 @@ class WebAPI:
         # 加载实验数据获取形状配置
         exp_result = self.field_experiment.db.load_experiment(exp_id)
         if not exp_result['success']:
+            print(f"[云图] 加载实验失败: {exp_result}")
             return exp_result
         
         shape_config = exp_result['data']['experiment'].get('shape_config', {})
+        print(f"[云图] 形状配置: {shape_config}")  # 打印完整配置
         
         # 转换测点格式
         points = [{
@@ -726,10 +777,15 @@ class WebAPI:
             'stress_value': p['stress_value']
         } for p in measured_points]
         
-        # 执行插值
+        print(f"[云图] 测点数据: {len(points)} 个, 应力值范围: {min(p['stress_value'] for p in points if p['stress_value'] is not None):.1f} ~ {max(p['stress_value'] for p in points if p['stress_value'] is not None):.1f}")
+        print(f"[云图] 插值参数: method={method}, resolution={resolution}")
+        
+        # 执行插值（传递配置参数）
         interp_result = StressFieldInterpolation.interpolate_stress_field(
-            points, shape_config
+            points, shape_config, resolution=resolution, method=method
         )
+        
+        print(f"[云图] 插值结果: success={interp_result.get('success')}, mode={interp_result.get('mode')}, method={interp_result.get('method')}")
         
         return interp_result
     

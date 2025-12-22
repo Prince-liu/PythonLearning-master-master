@@ -114,24 +114,9 @@ const WaveformProcessing = (function() {
     
     // ========== 加载小波类型列表 ==========
     async function 加载小波类型列表() {
-        try {
-            const result = await pywebview.api.获取可用小波类型();
-            if (result.success && result.wavelets && elements.waveletSelect) {
-                elements.waveletSelect.innerHTML = '';
-                
-                result.wavelets.forEach(wavelet => {
-                    const option = document.createElement('option');
-                    option.value = wavelet;
-                    option.textContent = wavelet;
-                    if (wavelet === 'sym6') {
-                        option.selected = true;
-                    }
-                    elements.waveletSelect.appendChild(option);
-                });
-            }
-        } catch (error) {
-            // 忽略加载错误
-        }
+        // 保持HTML中定义的默认选项（sym6, db4, db5, coif2）
+        // 不从后端加载完整列表，避免选项过多
+        // 如果需要更多小波类型，可以直接在HTML中添加
     }
     
     // ========== 小波降噪功能 ==========

@@ -1,0 +1,177 @@
+/* ==================== 应力场测绘模块 - 布局样式 ==================== */
+/* 主容器、左右分区、上下分区、拖拽分割条 */
+
+/* 主容器 */
+.field-mapping-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 12px;
+    padding: 12px;
+    background: #f0f2f5;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 左侧控制栏 */
+.field-control-panel {
+    width: 320px;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+    max-height: 100%;
+}
+
+/* 实验管理区（固定） */
+.field-experiment-section {
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    flex-shrink: 0;
+}
+
+.field-experiment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.field-experiment-header span:first-child {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.field-status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e0e0e0;
+    color: #666;
+}
+
+.field-status-badge.status-planning {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.field-status-badge.status-collecting {
+    background: #fff3e0;
+    color: #e65100;
+    animation: pulse-collecting 1.5s ease-in-out infinite;
+}
+
+.field-status-badge.status-completed {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+@keyframes pulse-collecting {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.field-experiment-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 10px;
+}
+
+.field-experiment-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.field-experiment-buttons .btn {
+    flex: 1;
+    font-size: 12px;
+    padding: 6px 8px;
+}
+
+/* 折叠面板容器 */
+.field-panels-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding-right: 4px;
+    padding-bottom: 10px;
+}
+
+.field-panels-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.field-panels-container::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 3px;
+}
+
+.field-panels-container::-webkit-scrollbar-thumb {
+    background: #c0c0c0;
+    border-radius: 3px;
+}
+
+.field-panels-container::-webkit-scrollbar-thumb:hover {
+    background: #a0a0a0;
+}
+
+/* 右侧显示区 */
+.field-display-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* 上半区 */
+.field-top-section {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+    min-height: 150px;
+    transition: flex 0.1s ease;
+}
+
+/* 下半区 */
+.field-bottom-section {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+    min-height: 150px;
+}
+
+/* 拖拽分割条 */
+.field-resize-handle {
+    background: #e0e0e0;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.field-resize-handle:hover {
+    background: #4CAF50;
+}
+
+.field-resize-handle.active {
+    background: #4CAF50;
+}
+
+/* 垂直拖拽条（上下调节） */
+.field-resize-vertical {
+    height: 6px;
+    cursor: ns-resize;
+    margin: 2px 0;
+    border-radius: 3px;
+}

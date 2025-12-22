@@ -53,6 +53,23 @@ const FieldExperimentManager = (function() {
                                     <input type="number" id="field-exp-thickness" class="form-input" value="10" min="0.1" step="0.1">
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <label>应力方向 <span class="required">*</span></label>
+                                <select id="field-exp-stress-direction" class="form-input">
+                                    <option value="">-- 请选择应力方向 --</option>
+                                    <option value="0°">0° (X方向)</option>
+                                    <option value="45°">45°</option>
+                                    <option value="90°">90° (Y方向)</option>
+                                    <option value="135°">135°</option>
+                                    <option value="custom">自定义...</option>
+                                </select>
+                                <input type="text" id="field-exp-stress-direction-custom" class="form-input" 
+                                       placeholder="输入自定义方向，例如：30°" 
+                                       style="display: none; margin-top: 8px;">
+                                <small style="color: #666; display: block; margin-top: 4px;">
+                                    ℹ️ 单轴应力方向，与标定实验方向一致
+                                </small>
+                            </div>
                         </div>
                     </div>
                     
@@ -94,6 +111,20 @@ const FieldExperimentManager = (function() {
         
         document.body.appendChild(overlay);
         
+        // 绑定应力方向选择事件
+        const directionSelect = document.getElementById('field-exp-stress-direction');
+        const customInput = document.getElementById('field-exp-stress-direction-custom');
+        if (directionSelect && customInput) {
+            directionSelect.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customInput.style.display = 'block';
+                    customInput.focus();
+                } else {
+                    customInput.style.display = 'none';
+                }
+            });
+        }
+        
         // 聚焦到名称输入框
         setTimeout(() => {
             document.getElementById('field-exp-name')?.focus();
@@ -113,6 +144,15 @@ const FieldExperimentManager = (function() {
         const name = document.getElementById('field-exp-name')?.value.trim();
         const material = document.getElementById('field-exp-material')?.value.trim();
         const thickness = parseFloat(document.getElementById('field-exp-thickness')?.value);
+        const directionSelect = document.getElementById('field-exp-stress-direction');
+        const customDirectionInput = document.getElementById('field-exp-stress-direction-custom');
+        
+        // 获取应力方向
+        let stressDirection = directionSelect?.value || '';
+        if (stressDirection === 'custom') {
+            stressDirection = customDirectionInput?.value.trim() || '';
+        }
+        
         const purpose = document.getElementById('field-exp-purpose')?.value.trim();
         const operator = document.getElementById('field-exp-operator')?.value.trim();
         const temperature = parseFloat(document.getElementById('field-exp-temperature')?.value);
@@ -134,12 +174,18 @@ const FieldExperimentManager = (function() {
             document.getElementById('field-exp-thickness')?.focus();
             return;
         }
+        if (!stressDirection) {
+            callbacks?.显示状态信息('⚠️', '请选择应力方向', '单轴应力检测需要明确应力方向', 'warning');
+            directionSelect?.focus();
+            return;
+        }
         
         try {
             const result = await pywebview.api.create_field_experiment({
                 name: name,
                 sample_material: material,
                 sample_thickness: thickness,
+                stress_direction: stressDirection,
                 test_purpose: purpose,
                 operator: operator,
                 temperature: temperature,
@@ -218,8 +264,12 @@ const FieldExperimentManager = (function() {
                 return;
             }
             
-            container.innerHTML = experiments.map(exp => `
-                <div class="experiment-item ${实验状态?.当前实验?.experiment_id === exp.experiment_id ? 'active' : ''}">
+            container.innerHTML = experiments.map(exp => {
+                // 兼容 id 和 experiment_id 两种字段名
+                const currentExpId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
+                const isActive = currentExpId === exp.experiment_id;
+                return `
+                <div class="experiment-item ${isActive ? 'active' : ''}">
                     <div class="experiment-info">
                         <div class="experiment-name">${exp.name || exp.experiment_id}</div>
                         <div class="experiment-meta">
@@ -240,7 +290,7 @@ const FieldExperimentManager = (function() {
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             
         } catch (error) {
             console.error('[实验管理] 加载实验列表失败:', error);
@@ -279,8 +329,9 @@ const FieldExperimentManager = (function() {
             if (result.success) {
                 callbacks?.显示状态信息('✅', '实验已删除', '', 'success');
                 
-                // 如果删除的是当前实验，清空数据
-                if (实验状态?.当前实验?.experiment_id === expId) {
+                // 如果删除的是当前实验，清空数据（兼容 id 和 experiment_id 两种字段名）
+                const currentExpId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
+                if (currentExpId === expId) {
                     callbacks?.清空实验数据();
                 }
                 

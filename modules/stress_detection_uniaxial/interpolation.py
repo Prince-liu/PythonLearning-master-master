@@ -116,9 +116,44 @@ class StressFieldInterpolation:
                     else:
                         raise interp_error
             
-            # 应用形状遮罩
-            mask = ShapeUtils.create_shape_mask(shape_config, xi_grid, yi_grid)
-            zi_grid = np.where(mask, zi_grid, np.nan)
+            # 应用形状遮罩（仅当形状配置有效时）
+            shape_type = shape_config.get('type')
+            has_valid_shape = False
+            
+            if shape_type == 'rectangle':
+                has_valid_shape = shape_config.get('width', 0) > 0 and shape_config.get('height', 0) > 0
+            elif shape_type == 'circle':
+                has_valid_shape = shape_config.get('outerRadius', shape_config.get('radius', 0)) > 0
+            elif shape_type == 'polygon':
+                has_valid_shape = len(shape_config.get('vertices', [])) >= 3
+            
+            if has_valid_shape:
+                mask = ShapeUtils.create_shape_mask(shape_config, xi_grid, yi_grid)
+                
+                # 调试：打印遮罩信息
+                mask_count = np.sum(mask)
+                total_count = mask.size
+                print(f"[插值] 形状遮罩: {mask_count}/{total_count} 个点在形状内 ({100*mask_count/total_count:.1f}%)")
+                print(f"[插值] 形状配置: type={shape_type}, width={shape_config.get('width')}, height={shape_config.get('height')}")
+                print(f"[插值] 网格范围: x=[{xi_grid.min():.1f}, {xi_grid.max():.1f}], y=[{yi_grid.min():.1f}, {yi_grid.max():.1f}]")
+                
+                zi_grid = np.where(mask, zi_grid, np.nan)
+            else:
+                print(f"[插值] 跳过形状遮罩: 形状配置无效 (type={shape_type})")
+            
+            # 将 NaN 转换为 None（JSON 兼容）
+            def nan_to_none(arr):
+                """将 numpy 数组中的 NaN 转换为 None"""
+                result = []
+                for row in arr:
+                    new_row = []
+                    for val in row:
+                        if np.isnan(val):
+                            new_row.append(None)
+                        else:
+                            new_row.append(float(val))
+                    result.append(new_row)
+                return result
             
             return {
                 "success": True,
@@ -126,7 +161,7 @@ class StressFieldInterpolation:
                 "grid": {
                     "xi": xi_grid.tolist(),
                     "yi": yi_grid.tolist(),
-                    "zi": zi_grid.tolist()
+                    "zi": nan_to_none(zi_grid)
                 },
                 "method": actual_method,
                 "confidence": confidence,

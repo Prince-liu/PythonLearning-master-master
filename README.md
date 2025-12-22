@@ -36,6 +36,20 @@
 - 自动应用标定系数计算应力
 - 记录和导出检测数据（CSV格式）
 
+### 5. 应力场测绘 ⭐
+完整的二维应力分布测量解决方案：
+
+- **试件形状定义**：支持矩形、圆形、多边形，支持布尔运算（挖孔）
+- **智能测点布局**：
+  - 网格布点（均匀/变间距，可设置边距）
+  - 极坐标布点（圆心自动判断，支持多层多点）
+  - 自定义布点（CSV导入）
+  - 路径优化（之字形/最近邻/螺旋）
+- **自动数据采集**：多点顺序采集，实时进度显示，质量检查
+- **空间插值**：IDW、Kriging、RBF 三种插值算法
+- **应力云图**：彩色等高线可视化，可调色阶，支持导出图片
+- **实验管理**：创建、加载、删除、导出实验数据
+
 ## 技术栈
 
 ### 后端
@@ -43,9 +57,11 @@
 - **pywebview** - 桌面应用框架
 - **pyvisa** - VISA 通信协议
 - **numpy** - 数值计算
-- **scipy** - 科学计算（小波降噪、Hilbert变换、互相关）
+- **scipy** - 科学计算（小波降噪、Hilbert变换、互相关、RBF插值）
 - **h5py** - HDF5 格式支持
 - **pywavelets** - 小波变换库
+- **shapely** - 几何运算（应力场测绘）
+- **scikit-learn** - Kriging 插值（应力场测绘）
 
 ### 前端
 - **纯原生 HTML/CSS/JavaScript** - 无框架依赖
@@ -56,6 +72,7 @@
 - **前后端分离** - pywebview 提供桥接层
 - **模块化设计** - 后端功能独立模块，前端 IIFE 封装
 - **路由层** - `WebAPI` 类统一管理所有后端接口
+- **双层存储** - SQLite 用于元数据，HDF5 用于波形数据
 
 ## 快速开始
 
@@ -93,11 +110,77 @@ python main.py
 - ✅ 本地缓存目录（`.webview_cache/`），后续启动更快
 - 💡 首次启动约 3 秒，后续启动约 2 秒
 
+## 项目结构
+
+```
+PythonLearning/
+├── main.py                      # 程序入口
+├── web_gui.py                   # 后端 API 路由层
+├── requirements.txt             # Python 依赖
+├── 项目文档.md                  # 完整项目文档
+│
+├── modules/                     # 后端功能模块
+│   ├── core/                    # 核心基础设施
+│   ├── realtime_capture/        # 实时采集
+│   ├── waveform_analysis/       # 波形分析
+│   ├── stress_calibration/      # 应力标定
+│   └── stress_detection_uniaxial/  # 单轴应力检测 + 应力场测绘
+│       ├── field_experiment.py   # 实验管理
+│       ├── field_database.py     # 数据库操作
+│       ├── field_hdf5.py         # HDF5存储
+│       ├── field_capture.py      # 数据采集
+│       ├── point_generator.py    # 测点生成
+│       ├── shape_utils.py        # 形状工具
+│       ├── interpolation.py      # 插值算法
+│       ├── contour_generator.py  # 云图生成
+│       ├── data_export.py        # 数据导出
+│       └── error_codes.py        # 错误码
+│
+├── static/                      # 前端资源
+│   ├── index.html               # 主界面
+│   ├── css/                     # 样式模块
+│   │   └── stress-detection-uniaxial/  # 应力场测绘样式
+│   └── js/                      # 前端模块
+│       └── stress-detection-uniaxial/  # 应力场测绘模块
+│           ├── field-experiment-manager.js
+│           ├── field-shape-panel.js
+│           ├── field-layout-panel.js
+│           ├── field-calibration-panel.js
+│           ├── field-capture-panel.js
+│           ├── field-canvas.js
+│           ├── field-contour.js
+│           └── field-resizer.js
+│
+└── data/                        # 数据目录
+    ├── experiments.db           # SQLite 数据库
+    ├── waveforms/               # 标定实验波形
+    └── uniaxial_field/          # 应力场测绘数据
+```
+
 ## 数据格式
 
 - **NPY 格式**：高精度，保留12bit原始数据，包含元数据
 - **CSV 格式**：通用性好，可用 Excel、MATLAB 等打开
 - **HDF5 格式**：适合大数据集，层次结构，压缩存储
+- **Excel 格式**：应力场测绘报告导出（含统计信息）
+
+## 数据存储
+
+```
+data/
+├── experiments.db              # SQLite 数据库（元数据）
+├── waveforms/                  # 标定实验波形数据
+│   └── EXP001/
+│       └── 0°/
+│           ├── baseline.h5
+│           └── stress_*.h5
+└── uniaxial_field/             # 应力场测绘数据
+    └── FLDXXX/
+        ├── shape.json          # 形状配置
+        ├── points.json         # 测点布局
+        ├── baseline.h5         # 基准波形
+        └── point_*.h5          # 各测点波形
+```
 
 ## 常见问题
 
@@ -118,6 +201,11 @@ python main.py
 - 检查是否安装了所有依赖
 - Windows 系统确认已安装 Edge WebView2 Runtime
 
+### 5. 应力场测绘问题
+- **测点生成失败**：检查形状是否有效（面积>0，无自相交）
+- **插值结果异常**：确保有足够的有效测点数据
+- **云图不显示**：检查是否已完成数据采集
+
 ## 完整文档
 
 详细的项目文档、代码规范、数据管理、UI设计模式等内容，请查看：
@@ -130,9 +218,10 @@ python main.py
 - ✅ **模块化设计**：前后端分离，职责清晰
 - ✅ **中文友好**：全中文命名和注释
 - ✅ **专业显示**：实时采集黑色背景，分析白色背景
-- ✅ **多格式支持**：NPY、CSV、HDF5 三种格式
+- ✅ **多格式支持**：NPY、CSV、HDF5、Excel 多种格式
 - ✅ **智能单位**：时间延迟自动选择 ns/μs/ms 显示
 - ✅ **高性能**：FFT 加速互相关计算
+- ⭐ **应力场测绘**：完整的二维应力分布测量解决方案
 
 ## 许可证
 

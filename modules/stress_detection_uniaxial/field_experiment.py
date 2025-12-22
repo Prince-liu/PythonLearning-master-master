@@ -155,6 +155,29 @@ class FieldExperiment:
         
         return self.db.complete_experiment(exp_id)
     
+    def reset_experiment(self, exp_id: str = None) -> Dict[str, Any]:
+        """
+        重置实验（清空所有测点数据，状态恢复为planning）
+        
+        Args:
+            exp_id: 实验ID (可选，默认当前实验)
+        
+        Returns:
+            dict: 操作结果
+        """
+        exp_id = exp_id or self.current_exp_id
+        if not exp_id:
+            return {"success": False, "error_code": 1021, "message": "没有指定实验"}
+        
+        # 重置数据库记录
+        result = self.db.reset_experiment(exp_id)
+        
+        if result['success'] and self.current_hdf5:
+            # 清空HDF5中的波形数据
+            self.current_hdf5.clear_waveforms()
+        
+        return result
+    
     def get_experiment_list(self) -> Dict[str, Any]:
         """获取所有应力场实验列表"""
         try:

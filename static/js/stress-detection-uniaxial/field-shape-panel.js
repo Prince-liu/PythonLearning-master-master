@@ -117,13 +117,26 @@ const FieldShapePanel = (function() {
     // ========== 解析顶点列表 ==========
     function 解析顶点列表(text) {
         const vertices = [];
+        
+        if (!text || typeof text !== 'string') {
+            return vertices;
+        }
+        
         const lines = text.trim().split('\n');
         
-        for (const line of lines) {
-            const parts = line.trim().split(/[,\s]+/);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // 跳过空行
+            if (!line) continue;
+            
+            // 分割坐标（支持中英文逗号、空格、制表符）
+            const parts = line.split(/[,，\s\t]+/).filter(p => p.length > 0);
+            
             if (parts.length >= 2) {
                 const x = parseFloat(parts[0]);
                 const y = parseFloat(parts[1]);
+                
                 if (!isNaN(x) && !isNaN(y)) {
                     vertices.push([x, y]);
                 }
@@ -150,7 +163,7 @@ const FieldShapePanel = (function() {
             
             if (result.success && result.is_valid) {
                 callbacks?.显示状态信息('✅', '形状验证通过', 
-                    `面积: ${result.area?.toFixed(2) || '--'} mm²`, 'success');
+                    `面积: ${result.area != null ? Number(result.area).toFixed(2) : '--'} mm²`, 'success');
                 
                 // 显示警告（如果有）
                 if (result.warnings && result.warnings.length > 0) {
@@ -170,13 +183,22 @@ const FieldShapePanel = (function() {
     async function 应用形状() {
         const config = 获取形状配置();
         
+        // 调试：在界面上显示配置
+        console.log('[形状面板] 应用形状配置:', JSON.stringify(config, null, 2));
+        
         // 先验证
         try {
             const result = await pywebview.api.validate_shape(config);
             
+            console.log('[形状面板] 验证结果:', result);
+            
             if (!result.success || !result.is_valid) {
                 const errorMsg = result.error || '形状无效，无法应用';
-                callbacks?.显示状态信息('❌', errorMsg, '', 'error');
+                // 显示详细错误信息
+                const detailMsg = `配置: ${JSON.stringify(config)}\n验证结果: ${JSON.stringify(result)}`;
+                callbacks?.显示状态信息('❌', errorMsg, detailMsg, 'error');
+                // 同时用alert显示，确保能看到
+                alert(`形状验证失败\n\n${errorMsg}\n\n顶点数: ${config.vertices?.length || 0}\n顶点: ${JSON.stringify(config.vertices)}`);
                 return;
             }
             
@@ -199,6 +221,7 @@ const FieldShapePanel = (function() {
         } catch (error) {
             console.error('[形状面板] 应用形状失败:', error);
             callbacks?.显示状态信息('❌', '应用失败', error.toString(), 'error');
+            alert(`应用形状失败\n\n${error.toString()}`);
         }
     }
     
@@ -248,11 +271,11 @@ const FieldShapePanel = (function() {
                             <div id="field-hole-rect-params" style="display:none;">
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>左上角X (mm)</label>
+                                        <label>左下角X (mm)</label>
                                         <input type="number" id="field-hole-rx" class="form-input" value="40">
                                     </div>
                                     <div class="form-group">
-                                        <label>左上角Y (mm)</label>
+                                        <label>左下角Y (mm)</label>
                                         <input type="number" id="field-hole-ry" class="form-input" value="40">
                                     </div>
                                 </div>
@@ -292,14 +315,21 @@ const FieldShapePanel = (function() {
         let hole = { op: 'subtract', shape: shape };
         
         if (shape === 'circle') {
-            hole.centerX = parseFloat(document.getElementById('field-hole-cx')?.value) || 50;
-            hole.centerY = parseFloat(document.getElementById('field-hole-cy')?.value) || 50;
-            hole.radius = parseFloat(document.getElementById('field-hole-radius')?.value) || 10;
+            const cx = parseFloat(document.getElementById('field-hole-cx')?.value);
+            const cy = parseFloat(document.getElementById('field-hole-cy')?.value);
+            const r = parseFloat(document.getElementById('field-hole-radius')?.value);
+            hole.centerX = isNaN(cx) ? 50 : cx;
+            hole.centerY = isNaN(cy) ? 50 : cy;
+            hole.radius = isNaN(r) ? 10 : r;
         } else {
-            hole.x = parseFloat(document.getElementById('field-hole-rx')?.value) || 40;
-            hole.y = parseFloat(document.getElementById('field-hole-ry')?.value) || 40;
-            hole.width = parseFloat(document.getElementById('field-hole-rw')?.value) || 20;
-            hole.height = parseFloat(document.getElementById('field-hole-rh')?.value) || 20;
+            const x = parseFloat(document.getElementById('field-hole-rx')?.value);
+            const y = parseFloat(document.getElementById('field-hole-ry')?.value);
+            const w = parseFloat(document.getElementById('field-hole-rw')?.value);
+            const h = parseFloat(document.getElementById('field-hole-rh')?.value);
+            hole.x = isNaN(x) ? 40 : x;
+            hole.y = isNaN(y) ? 40 : y;
+            hole.width = isNaN(w) ? 20 : w;
+            hole.height = isNaN(h) ? 20 : h;
         }
         
         布尔运算列表.push(hole);
@@ -390,6 +420,30 @@ const FieldShapePanel = (function() {
         当前形状类型 = 'rectangle';
         布尔运算列表 = [];
         刷新布尔运算列表();
+        
+        // 重置形状参数输入框
+        const widthInput = document.getElementById('field-shape-width');
+        const heightInput = document.getElementById('field-shape-height');
+        const radiusInput = document.getElementById('field-shape-radius');
+        
+        if (widthInput) widthInput.value = '100';
+        if (heightInput) heightInput.value = '100';
+        if (radiusInput) radiusInput.value = '50';
+        
+        // 重置形状类型选择
+        document.querySelectorAll('.field-shape-type-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.type === 'rectangle') {
+                btn.classList.add('active');
+            }
+        });
+        
+        // 显示矩形参数面板，隐藏其他
+        document.querySelectorAll('.field-shape-params').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        const rectParams = document.getElementById('field-shape-rect-params');
+        if (rectParams) rectParams.style.display = 'block';
         
         const statusBadge = document.getElementById('field-shape-status');
         if (statusBadge) {

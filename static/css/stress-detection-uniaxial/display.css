@@ -1,0 +1,301 @@
+/* ==================== 应力场测绘模块 - 显示区域样式 ==================== */
+/* 数据表格、波形容器、预览画布、云图容器 */
+
+/* 数据表格容器 */
+.field-data-table-container {
+    flex: 1;
+    min-height: 120px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.field-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+}
+
+.field-table-header span {
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+}
+
+.field-table-wrapper {
+    flex: 1;
+    overflow: auto;
+}
+
+#field-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#field-data-table thead {
+    position: sticky;
+    top: 0;
+    background: #f5f5f5;
+    z-index: 1;
+}
+
+#field-data-table th {
+    padding: 8px 6px;
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 2px solid #4CAF50;
+    white-space: nowrap;
+}
+
+#field-data-table td {
+    padding: 6px;
+    border-bottom: 1px solid #eee;
+}
+
+/* 空状态样式 */
+#field-data-table tbody tr td[colspan] {
+    padding: 20px;
+    font-size: 13px;
+}
+
+#field-data-table tbody tr:hover { background: #f9f9f9; }
+#field-data-table tbody tr.current { background: #fff8e1; }
+#field-data-table tbody tr.status-measured { background: #e8f5e9; }
+#field-data-table tbody tr.status-skipped { background: #fff3e0; }
+#field-data-table tbody tr.status-error { background: #ffebee; }
+
+/* 波形容器 */
+.field-waveform-container {
+    flex: 1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.field-waveform-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+}
+
+.field-waveform-container canvas {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    background: #1a1a2e;
+    display: block;
+}
+
+/* 预览画布容器 */
+.field-preview-container,
+.field-contour-container {
+    width: calc(50% - 5px);
+    flex: 0 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 折叠状态 - 水平收起 */
+.field-preview-container.collapsed,
+.field-contour-container.collapsed {
+    min-width: 40px;
+    max-width: 40px;
+}
+
+.field-preview-container.collapsed .field-canvas-header,
+.field-contour-container.collapsed .field-canvas-header {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 12px 10px;
+    height: 100%;
+    box-sizing: border-box;
+    justify-content: flex-start;
+    border-bottom: none;
+    border-right: 1px solid #eee;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.field-preview-container.collapsed canvas,
+.field-contour-container.collapsed canvas {
+    display: none;
+}
+
+/* 可折叠标题栏 */
+.field-collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s ease;
+}
+
+.field-collapsible-header:hover {
+    background: #f0f0f0;
+}
+
+.field-collapsible-header .collapse-icon {
+    font-size: 10px;
+    color: #999;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 预览面板折叠时图标向左 */
+.field-preview-container.collapsed .field-collapsible-header .collapse-icon {
+    transform: rotate(90deg);
+}
+
+/* 云图面板折叠时图标向右 */
+.field-contour-container.collapsed .field-collapsible-header .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.field-canvas-header {
+    padding: 10px 12px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.field-preview-container canvas,
+.field-contour-container canvas {
+    flex: 1;
+    width: 100%;
+    transition: opacity 0.25s ease;
+}
+
+/* 折叠动画时淡出画布 */
+.field-preview-container.collapsing canvas,
+.field-contour-container.collapsing canvas {
+    opacity: 0;
+}
+
+/* 画布提示框 */
+.canvas-tooltip {
+    position: fixed;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 200px;
+}
+
+/* 实验列表样式 */
+.experiment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.experiment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #eee;
+}
+
+.experiment-item.active {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+.experiment-info { flex: 1; }
+
+.experiment-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.experiment-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #666;
+}
+
+.experiment-meta .status {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.experiment-meta .status-planning { background: #e3f2fd; color: #1565c0; }
+.experiment-meta .status-collecting { background: #fff3e0; color: #e65100; }
+.experiment-meta .status-completed { background: #e8f5e9; color: #2e7d32; }
+
+.experiment-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* 标定选择列表 */
+.experiment-group {
+    margin-bottom: 12px;
+}
+
+.experiment-group-header {
+    font-weight: 600;
+    color: #333;
+    padding: 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    margin-bottom: 6px;
+}
+
+.calibration-item {
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.calibration-item:hover { background: #e8f5e9; }
+
+.calibration-item .direction-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.calibration-item .calibration-info {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #666;
+}

@@ -205,6 +205,137 @@ class FieldCapture:
                 'is_suspicious': 1 if is_suspicious else 0
             })
             
+            # 如果是第一个采集的测点，将实验状态改为"采集中"
+            if is_baseline:
+                self.db.update_experiment(self.current_exp_id, {'status': 'collecting'})
+            
+            return {
+                "success": True,
+                "error_code": 0,
+                "data": {
+                    "point_id": point_index,
+                    "time_diff": time_diff,
+                    "stress": stress,
+                    "quality_score": quality['score'],
+                    "snr": quality['snr'],
+                    "quality": quality,
+                    "is_baseline": is_baseline,
+                    "is_suspicious": is_suspicious,
+                    "validation_warnings": validation_warnings
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error_code": 4099,
+                "message": f"采集测点失败: {str(e)}"
+            }
+    
+    def capture_point_with_waveform(self, point_index: int, waveform: Dict[str, Any], 
+                                    auto_denoise: bool = True) -> Dict[str, Any]:
+        """
+        使用前端传入的波形数据采集测点
+        
+        Args:
+            point_index: 测点索引
+            waveform: 波形数据 {'time': [], 'voltage': [], 'sample_rate': float}
+            auto_denoise: 是否自动降噪
+        
+        Returns:
+            dict: 采集结果
+        """
+        if not self.current_exp_id:
+            return {"success": False, "error_code": 4001, "message": "没有设置当前实验"}
+        
+        if not self.calibration_k:
+            return {"success": False, "error_code": 4002, "message": "没有加载标定数据"}
+        
+        try:
+            # 获取测点信息
+            point = self.db.get_point(self.current_exp_id, point_index)
+            if not point:
+                return {"success": False, "error_code": 4003, "message": f"测点 {point_index} 不存在"}
+            
+            # 验证波形数据
+            if not waveform or not waveform.get('voltage') or not waveform.get('time'):
+                return {"success": False, "error_code": 4004, "message": "波形数据无效"}
+            
+            # 降噪处理
+            if auto_denoise and self.denoise_config.get('enabled', True):
+                waveform = self._apply_denoise(waveform)
+            
+            # 评估波形质量
+            quality = self.evaluate_waveform_quality(waveform)
+            
+            # 检查是否是第一个测点（自动设为基准）
+            is_baseline = self.baseline_waveform is None
+            
+            if is_baseline:
+                # 设置为基准波形
+                self.baseline_waveform = waveform
+                time_diff = 0.0
+                stress = 0.0
+                
+                # 保存基准波形
+                self.current_hdf5.save_baseline(point_index, waveform)
+                
+                # 更新数据库
+                self.db.update_experiment(self.current_exp_id, {
+                    'baseline_point_id': point_index,
+                    'baseline_stress': 0.0
+                })
+            else:
+                # 计算时间差
+                time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
+                
+                # 计算应力值
+                stress = self.calibration_k * time_diff
+            
+            # 验证数据
+            is_suspicious = False
+            validation_warnings = []
+            
+            if not (self.STRESS_MIN <= stress <= self.STRESS_MAX):
+                is_suspicious = True
+                validation_warnings.append(f"应力值 {stress:.1f} MPa 超出正常范围")
+            
+            if not (self.TIME_DIFF_MIN <= time_diff <= self.TIME_DIFF_MAX):
+                is_suspicious = True
+                validation_warnings.append(f"时间差 {time_diff:.2f} ns 超出正常范围")
+            
+            # 保存波形数据
+            analysis = {
+                'time_diff': time_diff,
+                'stress': stress,
+                'snr': quality['snr'],
+                'quality_score': quality['score']
+            }
+            
+            metadata = {
+                'x_coord': point['x_coord'],
+                'y_coord': point['y_coord'],
+                'r_coord': point.get('r_coord'),
+                'theta_coord': point.get('theta_coord')
+            }
+            
+            self.current_hdf5.save_point_waveform(point_index, waveform, analysis, metadata)
+            
+            # 更新数据库
+            self.db.update_point(self.current_exp_id, point_index, {
+                'time_diff': time_diff,
+                'stress_value': stress,
+                'status': 'measured',
+                'measured_at': datetime.now().isoformat(),
+                'quality_score': quality['score'],
+                'snr': quality['snr'],
+                'is_suspicious': 1 if is_suspicious else 0
+            })
+            
+            # 如果是第一个采集的测点，将实验状态改为"采集中"
+            if is_baseline:
+                self.db.update_experiment(self.current_exp_id, {'status': 'collecting'})
+            
             return {
                 "success": True,
                 "error_code": 0,
@@ -230,26 +361,25 @@ class FieldCapture:
     
     def _acquire_waveform(self) -> Optional[Dict[str, Any]]:
         """从示波器采集波形"""
-        if self.oscilloscope:
-            try:
-                result = self.oscilloscope.get_waveform()
-                if result.get('success'):
-                    return {
-                        'time': result['data']['time'],
-                        'voltage': result['data']['data'],
-                        'sample_rate': result['data'].get('sample_rate', 1e9)
-                    }
-            except Exception:
-                pass
+        if not self.oscilloscope:
+            # 没有示波器连接，返回None
+            return None
         
-        # 如果没有示波器或采集失败，返回模拟数据（仅用于测试）
-        t = np.linspace(0, 1e-6, 10000)
-        v = np.sin(2 * np.pi * 5e6 * t) * np.exp(-t * 1e6) + np.random.normal(0, 0.1, len(t))
-        return {
-            'time': t.tolist(),
-            'voltage': v.tolist(),
-            'sample_rate': 1e10
-        }
+        try:
+            # 使用 RAW 模式获取高精度波形数据
+            result = self.oscilloscope.获取波形数据_RAW模式_屏幕范围(1)
+            if result.get('success'):
+                data = result['data']
+                return {
+                    'time': data['time'],
+                    'voltage': data['data'],
+                    'sample_rate': data.get('sample_rate', 1e9)
+                }
+        except Exception:
+            pass
+        
+        # 采集失败
+        return None
     
     def _apply_denoise(self, waveform: Dict[str, Any]) -> Dict[str, Any]:
         """应用降噪处理"""

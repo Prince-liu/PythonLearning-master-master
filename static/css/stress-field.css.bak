@@ -307,7 +307,58 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+}
+
+/* 测点跳转输入框 */
+.point-jump-input {
+    width: 45px;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 4px 6px;
+    transition: all 0.2s;
+}
+
+/* 隐藏数字输入框的上下箭头 */
+.point-jump-input::-webkit-outer-spin-button,
+.point-jump-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.point-jump-input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.point-jump-input:focus {
+    border-color: #4CAF50;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.point-jump-input.invalid {
+    border-color: #f44336;
+    background: #ffebee;
+}
+
+/* 测点类型标识 */
+#field-capture-point-type {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+}
+
+#field-capture-point-type.baseline {
+    background: #2196F3;
+    color: white;
+}
+
+#field-capture-point-type.normal {
+    background: #e0e0e0;
+    color: #666;
 }
 
 .field-capture-actions {
@@ -398,6 +449,7 @@
 /* 数据表格容器 */
 .field-data-table-container {
     flex: 1;
+    min-height: 120px; /* 设置最小高度，避免空表格占用太多空间 */
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -453,6 +505,12 @@
     border-bottom: 1px solid #eee;
 }
 
+/* 空状态样式 */
+#field-data-table tbody tr td[colspan] {
+    padding: 20px;
+    font-size: 13px;
+}
+
 #field-data-table tbody tr:hover { background: #f9f9f9; }
 #field-data-table tbody tr.current { background: #fff8e1; }
 #field-data-table tbody tr.status-measured { background: #e8f5e9; }
@@ -495,7 +553,7 @@
 .field-bottom-section {
     flex: 1;
     display: flex;
-    gap: 0;
+    gap: 10px;
     min-height: 150px;
 }
 
@@ -522,18 +580,12 @@
     border-radius: 3px;
 }
 
-/* 水平拖拽条（左右调节） */
-.field-resize-horizontal {
-    width: 6px;
-    cursor: ew-resize;
-    margin: 0 2px;
-    border-radius: 3px;
-}
-
 /* 预览画布容器 */
 .field-preview-container,
 .field-contour-container {
-    flex: 1;
+    /* 使用固定 width 而不是 flex 自动分配 */
+    width: calc(50% - 5px);  /* 默认各占50%，减去一半间距 */
+    flex: 0 0 auto;  /* 不自动伸缩，由 width 控制 */
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -541,13 +593,13 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
-    transition: flex 0.3s ease;
+    /* width 过渡效果 */
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 折叠状态 - 水平收起 */
 .field-preview-container.collapsed,
 .field-contour-container.collapsed {
-    flex: 0 0 40px !important;
     min-width: 40px;
     max-width: 40px;
 }
@@ -562,6 +614,7 @@
     justify-content: flex-start;
     border-bottom: none;
     border-right: 1px solid #eee;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .field-preview-container.collapsed canvas,
@@ -576,6 +629,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    transition: background 0.2s ease;
 }
 
 .field-collapsible-header:hover {
@@ -585,7 +639,7 @@
 .field-collapsible-header .collapse-icon {
     font-size: 10px;
     color: #999;
-    transition: transform 0.3s;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 预览面板折叠时图标向左 */
@@ -605,12 +659,20 @@
     font-weight: 600;
     font-size: 13px;
     color: #333;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .field-preview-container canvas,
 .field-contour-container canvas {
     flex: 1;
     width: 100%;
+    transition: opacity 0.25s ease;
+}
+
+/* 折叠动画时淡出画布 */
+.field-preview-container.collapsing canvas,
+.field-contour-container.collapsing canvas {
+    opacity: 0;
 }
 
 /* 状态栏 */

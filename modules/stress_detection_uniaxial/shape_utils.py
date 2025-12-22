@@ -362,23 +362,25 @@ class ShapeUtils:
     
     @staticmethod
     def _is_point_in_modifier(x: float, y: float, modifier: Dict[str, Any]) -> bool:
-        """判断点是否在修改器（孔洞）内"""
+        """判断点是否在修改器（孔洞）内或边界上"""
         shape_type = modifier.get('shape', 'circle')
+        tolerance = 1e-6  # 小容差处理浮点精度问题
         
         if shape_type == 'circle':
             cx = modifier.get('centerX', 0)
             cy = modifier.get('centerY', 0)
             radius = modifier.get('radius', 0)
             dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-            return dist <= radius
+            return dist <= radius + tolerance  # 包含边界，加容差
         
         elif shape_type == 'rectangle':
             mx = modifier.get('x', modifier.get('centerX', 0))
             my = modifier.get('y', modifier.get('centerY', 0))
             width = modifier.get('width', 0)
             height = modifier.get('height', 0)
-            # 假设x,y是左下角坐标
-            return mx <= x <= mx + width and my <= y <= my + height
+            # x,y是左下角坐标，包含边界，加容差
+            return (mx - tolerance <= x <= mx + width + tolerance and 
+                    my - tolerance <= y <= my + height + tolerance)
         
         return False
     
@@ -506,6 +508,204 @@ class ShapeUtils:
             return (min(xs), min(ys), max(xs), max(ys))
         
         return (0, 0, 0, 0)
+    
+    @staticmethod
+    def get_effective_bounding_box(shape_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        获取布尔运算后形状的有效边界框
+        
+        使用Shapely计算布尔运算后的实际几何边界，而不是原始形状的边界框。
+        
+        Args:
+            shape_config: 形状配置，包含modifiers（布尔运算修改器）
+        
+        Returns:
+            dict: {
+                "success": bool,
+                "bounds": {"minX": float, "minY": float, "maxX": float, "maxY": float},
+                "has_modifiers": bool
+            }
+        """
+        try:
+            shape_type = shape_config.get('type', 'rectangle')
+            modifiers = shape_config.get('modifiers', [])
+            
+            # 如果没有修改器，直接返回原始边界
+            if not modifiers:
+                min_x, min_y, max_x, max_y = ShapeUtils.get_bounding_box(shape_config)
+                return {
+                    "success": True,
+                    "bounds": {"minX": min_x, "minY": min_y, "maxX": max_x, "maxY": max_y},
+                    "has_modifiers": False
+                }
+            
+            # 需要Shapely来计算布尔运算后的边界
+            if not SHAPELY_AVAILABLE:
+                # 没有Shapely，返回原始边界
+                min_x, min_y, max_x, max_y = ShapeUtils.get_bounding_box(shape_config)
+                return {
+                    "success": True,
+                    "bounds": {"minX": min_x, "minY": min_y, "maxX": max_x, "maxY": max_y},
+                    "has_modifiers": True,
+                    "warning": "Shapely未安装，无法计算精确边界"
+                }
+            
+            # 创建基础形状的Shapely几何对象
+            base_geom = ShapeUtils._create_shapely_geometry(shape_config)
+            if base_geom is None or base_geom.is_empty:
+                min_x, min_y, max_x, max_y = ShapeUtils.get_bounding_box(shape_config)
+                return {
+                    "success": True,
+                    "bounds": {"minX": min_x, "minY": min_y, "maxX": max_x, "maxY": max_y},
+                    "has_modifiers": True
+                }
+            
+            # 应用布尔运算
+            result_geom = base_geom
+            for modifier in modifiers:
+                if modifier.get('op') == 'subtract':
+                    hole_geom = ShapeUtils._create_modifier_geometry(modifier)
+                    if hole_geom is not None and not hole_geom.is_empty:
+                        result_geom = result_geom.difference(hole_geom)
+            
+            # 获取结果几何的边界
+            if result_geom.is_empty:
+                return {
+                    "success": False,
+                    "message": "布尔运算后形状为空"
+                }
+            
+            min_x, min_y, max_x, max_y = result_geom.bounds
+            
+            return {
+                "success": True,
+                "bounds": {"minX": min_x, "minY": min_y, "maxX": max_x, "maxY": max_y},
+                "has_modifiers": True
+            }
+            
+        except Exception as e:
+            # 出错时返回原始边界
+            min_x, min_y, max_x, max_y = ShapeUtils.get_bounding_box(shape_config)
+            return {
+                "success": True,
+                "bounds": {"minX": min_x, "minY": min_y, "maxX": max_x, "maxY": max_y},
+                "has_modifiers": bool(modifiers),
+                "warning": f"计算有效边界时出错: {str(e)}"
+            }
+    
+    @staticmethod
+    def _create_shapely_geometry(shape_config: Dict[str, Any]):
+        """
+        根据形状配置创建Shapely几何对象
+        
+        Args:
+            shape_config: 形状配置
+        
+        Returns:
+            Shapely几何对象或None
+        """
+        if not SHAPELY_AVAILABLE:
+            return None
+        
+        shape_type = shape_config.get('type', 'rectangle')
+        
+        try:
+            if shape_type == 'rectangle':
+                width = shape_config.get('width', 0)
+                height = shape_config.get('height', 0)
+                return Polygon([(0, 0), (width, 0), (width, height), (0, height)])
+            
+            elif shape_type == 'circle':
+                cx = shape_config.get('centerX', 0)
+                cy = shape_config.get('centerY', 0)
+                outer_r = shape_config.get('outerRadius', shape_config.get('radius', 0))
+                inner_r = shape_config.get('innerRadius', 0)
+                start_angle = shape_config.get('startAngle', 0)
+                end_angle = shape_config.get('endAngle', 360)
+                
+                # 生成圆弧/扇形的点
+                num_points = 64
+                angle_range = end_angle - start_angle
+                
+                if abs(angle_range) >= 360:
+                    # 完整圆
+                    angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+                    outer_points = [(cx + outer_r * np.cos(a), cy + outer_r * np.sin(a)) for a in angles]
+                    
+                    if inner_r > 0:
+                        # 环形
+                        inner_points = [(cx + inner_r * np.cos(a), cy + inner_r * np.sin(a)) for a in angles[::-1]]
+                        return Polygon(outer_points, [inner_points])
+                    else:
+                        return Polygon(outer_points)
+                else:
+                    # 扇形
+                    start_rad = np.radians(start_angle)
+                    end_rad = np.radians(end_angle)
+                    angles = np.linspace(start_rad, end_rad, num_points)
+                    
+                    points = [(cx, cy)]  # 圆心
+                    points.extend([(cx + outer_r * np.cos(a), cy + outer_r * np.sin(a)) for a in angles])
+                    
+                    if inner_r > 0:
+                        # 扇环
+                        inner_points = [(cx + inner_r * np.cos(a), cy + inner_r * np.sin(a)) for a in angles[::-1]]
+                        points = []
+                        points.extend([(cx + outer_r * np.cos(a), cy + outer_r * np.sin(a)) for a in angles])
+                        points.extend(inner_points)
+                    
+                    return Polygon(points)
+            
+            elif shape_type == 'polygon':
+                vertices = shape_config.get('vertices', [])
+                if len(vertices) >= 3:
+                    return Polygon(vertices)
+            
+            return None
+            
+        except Exception:
+            return None
+    
+    @staticmethod
+    def _create_modifier_geometry(modifier: Dict[str, Any]):
+        """
+        根据修改器配置创建Shapely几何对象
+        
+        Args:
+            modifier: 修改器配置
+        
+        Returns:
+            Shapely几何对象或None
+        """
+        if not SHAPELY_AVAILABLE:
+            return None
+        
+        shape_type = modifier.get('shape', 'circle')
+        
+        try:
+            if shape_type == 'circle':
+                cx = modifier.get('centerX', 0)
+                cy = modifier.get('centerY', 0)
+                radius = modifier.get('radius', 0)
+                
+                # 生成圆的点
+                num_points = 64
+                angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+                points = [(cx + radius * np.cos(a), cy + radius * np.sin(a)) for a in angles]
+                return Polygon(points)
+            
+            elif shape_type == 'rectangle':
+                x = modifier.get('x', modifier.get('centerX', 0))
+                y = modifier.get('y', modifier.get('centerY', 0))
+                width = modifier.get('width', 0)
+                height = modifier.get('height', 0)
+                # x, y 是左下角坐标
+                return Polygon([(x, y), (x + width, y), (x + width, y + height), (x, y + height)])
+            
+            return None
+            
+        except Exception:
+            return None
     
     @staticmethod
     def get_shape_center(shape_config: Dict[str, Any]) -> Tuple[float, float]:

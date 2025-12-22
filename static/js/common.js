@@ -461,3 +461,108 @@ CommonUtils.customConfirm = function(message, title = '确认') {
         modal.style.display = 'flex';
     });
 };
+
+// ========== 弹窗拖拽功能 ==========
+CommonUtils.makeModalDraggable = function(modalContent, dragHandle) {
+    // modalContent: 弹窗内容元素（要移动的元素）
+    // dragHandle: 拖拽手柄元素（通常是标题栏）
+    
+    let isDragging = false;
+    let startX, startY;
+    let initialLeft, initialTop;
+    let initialized = false;
+    
+    // 设置拖拽手柄样式
+    dragHandle.style.cursor = 'move';
+    dragHandle.style.userSelect = 'none';
+    
+    dragHandle.addEventListener('mousedown', function(e) {
+        // 忽略关闭按钮等子元素的点击
+        if (e.target.classList.contains('close-btn') || 
+            e.target.classList.contains('modal-close') ||
+            e.target.tagName === 'BUTTON') {
+            return;
+        }
+        
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        // 获取当前位置
+        const rect = modalContent.getBoundingClientRect();
+        
+        // 首次拖拽时，将弹窗从flex布局改为fixed定位
+        if (!initialized) {
+            modalContent.style.position = 'fixed';
+            modalContent.style.left = rect.left + 'px';
+            modalContent.style.top = rect.top + 'px';
+            modalContent.style.margin = '0';
+            initialized = true;
+        }
+        
+        initialLeft = parseFloat(modalContent.style.left) || rect.left;
+        initialTop = parseFloat(modalContent.style.top) || rect.top;
+        
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        let newLeft = initialLeft + deltaX;
+        let newTop = initialTop + deltaY;
+        
+        // 限制在窗口范围内
+        const rect = modalContent.getBoundingClientRect();
+        const maxLeft = window.innerWidth - rect.width;
+        const maxTop = window.innerHeight - rect.height;
+        
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+        
+        modalContent.style.left = newLeft + 'px';
+        modalContent.style.top = newTop + 'px';
+    });
+    
+    document.addEventListener('mouseup', function() {
+        isDragging = false;
+    });
+};
+
+// 自动为新添加的弹窗启用拖拽
+CommonUtils.enableModalDrag = function(modalContent) {
+    // 查找标题栏作为拖拽手柄
+    const header = modalContent.querySelector('.modal-header, .field-margin-modal-header');
+    if (header) {
+        CommonUtils.makeModalDraggable(modalContent, header);
+    }
+};
+
+// 使用MutationObserver自动监听新弹窗
+(function() {
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1) {  // Element node
+                    // 检查是否是弹窗遮罩层（匹配各种弹窗类名）
+                    if (node.classList && (
+                        node.classList.contains('modal') ||
+                        node.classList.contains('field-spacing-modal') ||
+                        node.classList.contains('field-margin-modal')
+                    )) {
+                        // 找到弹窗内容
+                        const content = node.querySelector('.modal-content, .field-modal, .field-margin-modal-content');
+                        if (content) {
+                            CommonUtils.enableModalDrag(content);
+                        }
+                    }
+                }
+            });
+        });
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+})();

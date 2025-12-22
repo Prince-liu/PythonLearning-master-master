@@ -7,8 +7,13 @@
     <link rel="stylesheet" href="style.css">
     <!-- 应力模块样式（拆分后） -->
     <link rel="stylesheet" href="css/stress-calibration.css">
-    <link rel="stylesheet" href="css/stress-field.css">
     <link rel="stylesheet" href="css/stress-common.css">
+    <!-- 应力场测绘模块样式（按功能拆分） -->
+    <link rel="stylesheet" href="css/stress-detection-uniaxial/layout.css">
+    <link rel="stylesheet" href="css/stress-detection-uniaxial/panels.css">
+    <link rel="stylesheet" href="css/stress-detection-uniaxial/capture.css">
+    <link rel="stylesheet" href="css/stress-detection-uniaxial/display.css">
+    <link rel="stylesheet" href="css/stress-detection-uniaxial/modals.css">
     <style>
         /* 开屏画面样式 */
         #splashScreen {
@@ -663,12 +668,13 @@
                         </div>
                         <div class="field-experiment-info">
                             <span>进度: <span id="field-experiment-progress">0/0</span></span>
+                            <span>方向: <span id="field-stress-direction">--</span></span>
                             <span id="field-autosave-status"></span>
                         </div>
                         <div class="field-experiment-buttons">
                             <button id="field-new-experiment-btn" class="btn btn-primary btn-sm">📋 新建</button>
                             <button id="field-manage-experiments-btn" class="btn btn-secondary btn-sm">📁 管理</button>
-                            <button id="field-complete-experiment-btn" class="btn btn-success btn-sm" disabled>✅ 完成</button>
+                            <button id="field-reset-experiment-btn" class="btn btn-danger btn-sm" disabled>🔄 重置</button>
                         </div>
                     </div>
                     
@@ -770,6 +776,22 @@
                                         <div class="form-group"><label>行数</label><input type="number" id="field-layout-grid-rows" class="form-control" value="5" min="1"></div>
                                         <div class="form-group"><label>列数</label><input type="number" id="field-layout-grid-cols" class="form-control" value="5" min="1"></div>
                                     </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>行间距(mm)</label>
+                                            <div class="field-margin-display">
+                                                <span id="field-layout-row-spacing-display">--</span>
+                                                <button type="button" id="field-layout-row-spacing-btn" class="btn btn-secondary btn-xs">变距</button>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>列间距(mm)</label>
+                                            <div class="field-margin-display">
+                                                <span id="field-layout-col-spacing-display">--</span>
+                                                <button type="button" id="field-layout-col-spacing-btn" class="btn btn-secondary btn-xs">变距</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="form-group">
                                         <label>边距(mm)</label>
                                         <div class="field-margin-display">
@@ -783,6 +805,13 @@
                                     <input type="hidden" id="field-layout-grid-margin-left" value="10">
                                     <input type="hidden" id="field-layout-grid-margin-right" value="10">
                                     <input type="hidden" id="field-layout-margin-mode" value="uniform">
+                                    <!-- 隐藏的间距值存储 -->
+                                    <input type="hidden" id="field-layout-row-spacing-mode" value="uniform">
+                                    <input type="hidden" id="field-layout-row-spacing-value" value="10">
+                                    <input type="hidden" id="field-layout-row-spacing-array" value="">
+                                    <input type="hidden" id="field-layout-col-spacing-mode" value="uniform">
+                                    <input type="hidden" id="field-layout-col-spacing-value" value="10">
+                                    <input type="hidden" id="field-layout-col-spacing-array" value="">
                                 </div>
                                 <!-- 极坐标参数 -->
                                 <div id="field-layout-polar-params" class="field-layout-params" style="display:none;">
@@ -791,12 +820,32 @@
                                         <div class="form-group"><label>圆心Y</label><input type="number" id="field-layout-polar-cy" class="form-control" value="50"></div>
                                     </div>
                                     <div class="form-row">
-                                        <div class="form-group"><label>最小半径</label><input type="number" id="field-layout-polar-rmin" class="form-control" value="10"></div>
-                                        <div class="form-group"><label>最大半径</label><input type="number" id="field-layout-polar-rmax" class="form-control" value="40"></div>
+                                        <div class="form-group"><label>起始半径</label><input type="number" id="field-layout-polar-rstart" class="form-control" value="0" min="0"></div>
+                                        <div class="form-group">
+                                            <label>半径步长</label>
+                                            <div style="display:flex;gap:5px;">
+                                                <input type="number" id="field-layout-polar-rstep" class="form-control" value="10" min="1">
+                                                <button id="field-layout-polar-rstep-btn" class="btn btn-secondary btn-sm" title="每层不同半径步长">变</button>
+                                            </div>
+                                            <input type="hidden" id="field-layout-polar-rstep-mode" value="uniform">
+                                            <input type="hidden" id="field-layout-polar-rstep-array" value="">
+                                        </div>
                                     </div>
                                     <div class="form-row">
                                         <div class="form-group"><label>层数</label><input type="number" id="field-layout-polar-rcount" class="form-control" value="4" min="1"></div>
-                                        <div class="form-group"><label>每层点数</label><input type="number" id="field-layout-polar-ppr" class="form-control" value="8" min="1"></div>
+                                        <div class="form-group">
+                                            <label>每层点数</label>
+                                            <div style="display:flex;gap:5px;">
+                                                <input type="number" id="field-layout-polar-ppr" class="form-control" value="8" min="1">
+                                                <button id="field-layout-polar-ppr-btn" class="btn btn-secondary btn-sm" title="每层不同点数">变</button>
+                                            </div>
+                                            <input type="hidden" id="field-layout-polar-ppr-mode" value="uniform">
+                                            <input type="hidden" id="field-layout-polar-ppr-array" value="">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label>起始角度</label><input type="number" id="field-layout-polar-astart" class="form-control" value="0"></div>
+                                        <div class="form-group"><label>结束角度</label><input type="number" id="field-layout-polar-aend" class="form-control" value="360"></div>
                                     </div>
                                 </div>
                                 <!-- 自定义参数 -->
@@ -885,10 +934,15 @@
                                         <div class="mode-desc">粗略测量</div>
                                     </div>
                                 </div>
-                                <div class="field-quality-features">
+                                <div id="field-quality-features-strict" class="field-quality-features">
                                     <div class="feature-item"><span class="check">✓</span> 实时质量评估</div>
                                     <div class="feature-item"><span class="check">✓</span> 质量不合格时弹出警告</div>
                                     <div class="feature-item"><span class="check">✓</span> 可选择重测或跳过</div>
+                                </div>
+                                <div id="field-quality-features-fast" class="field-quality-features" style="display: none;">
+                                    <div class="feature-item"><span class="check">✓</span> 实时质量评估</div>
+                                    <div class="feature-item"><span class="check">✓</span> 仅显示简短提示</div>
+                                    <div class="feature-item"><span class="check">✓</span> 自动继续下一测点</div>
                                 </div>
                                 <div id="field-quality-mode-desc" class="field-quality-mode-description">
                                     适合正式实验和高精度测量
@@ -900,30 +954,35 @@
                         <div class="field-panel" id="field-capture-panel">
                             <div class="field-panel-header">
                                 <span>📸 数据采集</span>
-                                <span id="field-capture-monitor-status" class="status-indicator">⚪ 已停止</span>
                             </div>
                             <div class="field-panel-body">
-                                <div class="field-capture-controls">
-                                    <button id="field-capture-start-monitor" class="btn btn-success btn-sm">▶️ 开始监控</button>
-                                    <button id="field-capture-stop-monitor" class="btn btn-warning btn-sm" disabled>⏸️ 停止</button>
+                                <div class="field-capture-global-controls">
+                                    <button id="field-capture-start-pause" class="btn btn-primary">▶️ 开始采集</button>
+                                    <button id="field-capture-finish" class="btn btn-secondary">✅ 完成采集</button>
+                                </div>
+                                <div class="field-progress-bar-container">
+                                    <div id="field-capture-progress-bar" class="field-progress-bar"></div>
                                 </div>
                                 <div class="field-current-point">
                                     <div class="field-point-info">
-                                        <span>当前测点: <strong id="field-capture-point-id">--</strong></span>
+                                        <span>当前测点: <strong id="field-capture-point-id">--</strong> <span id="field-capture-point-type"></span></span>
                                         <span>位置: (<span id="field-capture-point-x">--</span>, <span id="field-capture-point-y">--</span>)</span>
                                     </div>
                                     <div class="field-point-nav">
                                         <button id="field-capture-prev" class="btn btn-sm">◀</button>
-                                        <span id="field-capture-progress">0 / 0</span>
+                                        <input type="number" id="field-capture-jump-input" class="point-jump-input" min="1" value="0" />
+                                        <span> / </span>
+                                        <span id="field-capture-total">0</span>
                                         <button id="field-capture-next" class="btn btn-sm">▶</button>
+                                        <button id="field-capture-jump-btn" class="btn btn-sm" title="跳转到指定测点">🔍</button>
                                     </div>
                                 </div>
                                 <div class="field-capture-actions">
-                                    <button id="field-capture-current" class="btn btn-primary btn-block">📸 采集当前测点</button>
+                                    <button id="field-capture-current" class="btn btn-primary btn-block" disabled>📸 采集当前测点</button>
                                     <div class="field-capture-secondary">
-                                        <button id="field-capture-skip" class="btn btn-secondary btn-sm">跳过</button>
-                                        <button id="field-capture-recapture" class="btn btn-secondary btn-sm">重测</button>
-                                        <button id="field-capture-set-baseline" class="btn btn-secondary btn-sm">设为基准</button>
+                                        <button id="field-capture-skip" class="btn btn-secondary btn-sm" disabled>跳过</button>
+                                        <button id="field-capture-recapture" class="btn btn-secondary btn-sm" disabled>重测</button>
+                                        <button id="field-capture-set-baseline" class="btn btn-secondary btn-sm" disabled>设为基准</button>
                                     </div>
                                 </div>
                                 <div class="field-capture-options">
@@ -935,9 +994,6 @@
                                     <div class="result-item"><span>应力:</span><span id="field-capture-result-stress">--</span> MPa</div>
                                     <div class="result-item"><span>质量:</span><span id="field-capture-result-quality">--</span></div>
                                     <div class="result-item"><span>SNR:</span><span id="field-capture-result-snr">--</span> dB</div>
-                                </div>
-                                <div class="field-progress-bar-container">
-                                    <div id="field-capture-progress-bar" class="field-progress-bar"></div>
                                 </div>
                             </div>
                         </div>
@@ -1069,8 +1125,6 @@
                             </div>
                             <canvas id="field-preview-canvas"></canvas>
                         </div>
-                        <!-- 左右拖拽分割条 -->
-                        <div class="field-resize-handle field-resize-horizontal" id="field-resize-horizontal"></div>
                         <!-- 云图显示 -->
                         <div class="field-contour-container" id="field-contour-container">
                             <div class="field-canvas-header field-collapsible-header" data-target="contour">

@@ -553,3 +553,34 @@ class FieldExperimentHDF5:
             return info
         except Exception as e:
             return {"exists": False, "error": str(e)}
+    
+    def clear_waveforms(self) -> Dict[str, Any]:
+        """
+        清空所有波形数据（基准波形和测点波形），用于实验重置
+        
+        Returns:
+            dict: {"success": bool, "message": str}
+        """
+        try:
+            if not self.file_exists():
+                return {"success": True, "message": "HDF5文件不存在，无需清空"}
+            
+            with h5py.File(self.file_path, 'a') as f:
+                # 清空基准波形
+                if 'baseline' in f:
+                    del f['baseline']
+                    f.create_group('baseline')
+                
+                # 清空所有测点波形
+                if 'points' in f:
+                    del f['points']
+                    f.create_group('points')
+                
+                # 清空云图数据
+                if 'contour' in f:
+                    del f['contour']
+                    f.create_group('contour')
+            
+            return {"success": True, "message": "波形数据已清空"}
+        except Exception as e:
+            return {"success": False, "message": f"清空波形数据失败: {str(e)}"}

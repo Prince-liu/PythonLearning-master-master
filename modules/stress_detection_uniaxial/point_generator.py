@@ -135,16 +135,13 @@ class PointGenerator:
             params: 布点参数
                 - center_x: 极坐标中心X (默认形状中心)
                 - center_y: 极坐标中心Y (默认形状中心)
-                - r_start: 起始半径
-                - r_end: 结束半径
+                - r_start: 起始半径 (mm)
+                - r_step: 半径步长 (mm)
                 - r_count: 径向层数
                 - angle_start: 起始角度 (度)
                 - angle_end: 结束角度 (度)
-                - angle_mode: 'fixed_step' | 'fixed_count' | 'variable'
-                - angle_step: 角度步长 (fixed_step模式)
-                - angle_count: 每层点数 (fixed_count模式)
-                - points_per_ring: 每层点数数组 (variable模式)
-                - include_center: 是否包含中心点
+                - points_per_ring: 每层点数，可以是整数或数组
+                - include_center: 是否包含中心点 (当r_start=0时)
         
         Returns:
             dict: {"success": bool, "points": list, "total_count": int, "valid_count": int}
@@ -155,15 +152,42 @@ class PointGenerator:
             center_x = params.get('center_x', default_cx)
             center_y = params.get('center_y', default_cy)
             
-            # 径向参数
+            # 径向参数 - 支持新格式（起始+步长）和旧格式（最小+最大）
             r_start = params.get('r_start', params.get('r_min', 0))
-            r_end = params.get('r_end', params.get('r_max', 50))
-            r_count = params.get('r_count', 5)
+            r_step = params.get('r_step', None)
+            r_count = params.get('r_count', 4)
+            
+            # 计算各层半径
+            if r_step is not None:
+                if isinstance(r_step, list):
+                    # 变半径步长：r_step 是数组，每个元素是该层到下一层的步长
+                    r_values = [r_start]
+                    current_r = r_start
+                    for i in range(r_count - 1):
+                        step = r_step[i] if i < len(r_step) else r_step[-1]
+                        current_r += step
+                        r_values.append(current_r)
+                else:
+                    # 等半径步长：起始半径 + 固定步长
+                    r_values = [r_start + i * r_step for i in range(r_count)]
+            else:
+                # 旧格式：最小半径 + 最大半径（均匀分布）
+                r_end = params.get('r_end', params.get('r_max', 50))
+                r_values = np.linspace(r_start, r_end, r_count).tolist()
             
             # 角度参数
             angle_start = params.get('angle_start', 0)
             angle_end = params.get('angle_end', 360)
-            angle_mode = params.get('angle_mode', 'fixed_count')
+            
+            # 每层点数 - 支持整数或数组
+            points_per_ring = params.get('points_per_ring', 8)
+            if isinstance(points_per_ring, int):
+                points_per_ring_list = [points_per_ring] * r_count
+            else:
+                points_per_ring_list = list(points_per_ring)
+                # 如果数组长度不够，用最后一个值填充
+                while len(points_per_ring_list) < r_count:
+                    points_per_ring_list.append(points_per_ring_list[-1] if points_per_ring_list else 8)
             
             all_points = []
             
@@ -171,8 +195,8 @@ class PointGenerator:
             include_center = params.get('include_center', True)
             center_is_valid = ShapeUtils.is_point_inside(center_x, center_y, shape_config, check_modifiers=True)
             
-            # 如果圆心可设点，添加圆心点
-            if include_center and center_is_valid:
+            # 如果起始半径为0且圆心可设点，添加圆心点
+            if r_start == 0 and include_center and center_is_valid:
                 all_points.append({
                     'x': center_x,
                     'y': center_y,
@@ -180,26 +204,21 @@ class PointGenerator:
                     'theta': 0
                 })
             
-            # 生成径向层的半径值
-            r_values = np.linspace(r_start, r_end, r_count)
-            
             # 生成每层的点
-            points_per_ring = params.get('points_per_ring', [])
-            
             for ring_idx, r in enumerate(r_values):
                 if r == 0:
-                    continue
+                    continue  # 圆心已单独处理
                 
-                # 确定该层的角度分布
-                if angle_mode == 'fixed_step':
-                    angle_step = params.get('angle_step', 30)
-                    angles = np.arange(angle_start, angle_end, angle_step)
-                elif angle_mode == 'variable' and ring_idx < len(points_per_ring):
-                    n_points = points_per_ring[ring_idx]
+                # 当前层点数
+                n_points = points_per_ring_list[ring_idx] if ring_idx < len(points_per_ring_list) else 8
+                
+                # 生成角度（不包含结束角度，避免重复）
+                if angle_end - angle_start >= 360:
+                    # 完整圆，不包含结束点
                     angles = np.linspace(angle_start, angle_end, n_points, endpoint=False)
-                else:  # fixed_count
-                    n_points = params.get('angle_count', 8)
-                    angles = np.linspace(angle_start, angle_end, n_points, endpoint=False)
+                else:
+                    # 扇形，包含结束点
+                    angles = np.linspace(angle_start, angle_end, n_points, endpoint=True)
                 
                 for theta in angles:
                     # 转换为笛卡尔坐标
@@ -517,7 +536,7 @@ class PointGenerator:
     
     @staticmethod
     def _optimize_spiral(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """螺旋扫描优化（适合极坐标布点）"""
+        """螺旋扫描优化（适合极坐标布点）- 切换顺逆时针方向"""
         if not points:
             return points
         
@@ -525,8 +544,33 @@ class PointGenerator:
         has_polar = all('r' in p and 'theta' in p for p in points)
         
         if has_polar:
-            # 按半径和角度排序（从内到外，逆时针）
-            return sorted(points, key=lambda p: (p['r'], p['theta']))
+            # 检测当前是顺时针还是逆时针（通过比较同一半径层的角度顺序）
+            # 按半径分组
+            rings = {}
+            for p in points:
+                r_key = round(p['r'], 1)
+                if r_key not in rings:
+                    rings[r_key] = []
+                rings[r_key].append(p)
+            
+            # 找一个有多个点的层来判断方向
+            is_clockwise = False
+            for r_key in sorted(rings.keys()):
+                ring = rings[r_key]
+                if len(ring) >= 2:
+                    # 检查角度是递增还是递减
+                    thetas = [p['theta'] for p in ring]
+                    if thetas[0] > thetas[-1]:
+                        is_clockwise = True  # 当前是顺时针（角度递减）
+                    break
+            
+            # 切换方向：如果当前是逆时针，改为顺时针；反之亦然
+            if is_clockwise:
+                # 当前顺时针，改为逆时针（角度从小到大）
+                return sorted(points, key=lambda p: (p['r'], p['theta']))
+            else:
+                # 当前逆时针，改为顺时针（角度从大到小）
+                return sorted(points, key=lambda p: (p['r'], -p['theta']))
         else:
             # 计算到中心的距离和角度
             xs = [p['x'] for p in points]

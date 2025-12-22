@@ -99,7 +99,7 @@ const FieldContour = (function() {
                 }
                 
                 try {
-                    const expId = 实验状态?.当前实验?.experiment_id;
+                    const expId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
                     if (!expId) {
                         callbacks?.显示状态信息?.('⚠️', '请先加载实验', '', 'warning');
                         return;
@@ -147,7 +147,26 @@ const FieldContour = (function() {
         }
         
         try {
-            // 创建高分辨率画布
+            // 尝试使用后端导出高清图（300 DPI）
+            const expId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
+            if (expId && typeof pywebview !== 'undefined') {
+                callbacks?.显示状态信息?.('⏳', '正在生成高清云图...', '', 'info', 0);
+                
+                const result = await pywebview.api.export_contour_image(expId, 'png', 300, {
+                    show_points: true,
+                    show_colorbar: true,
+                    title: 实验状态?.当前实验?.name || ''
+                });
+                
+                if (result.success) {
+                    callbacks?.显示状态信息?.('✅', '高清云图已导出', result.file_path, 'success', 5000);
+                    return;
+                }
+                // 如果后端导出失败，回退到前端导出
+                console.warn('[云图显示] 后端导出失败，使用前端导出:', result.error || result.message);
+            }
+            
+            // 前端导出（备用方案）
             const exportCanvas = document.createElement('canvas');
             const scale = 2;  // 2倍分辨率
             exportCanvas.width = canvas.width * scale / (window.devicePixelRatio || 1);
@@ -206,6 +225,9 @@ const FieldContour = (function() {
     
     // ========== 更新数据 ==========
     function 更新数据(data) {
+        console.log('[云图显示] 收到数据:', data);
+        console.log('[云图显示] mode:', data?.mode);
+        console.log('[云图显示] grid:', data?.grid ? '有数据' : '无数据');
         云图数据 = data;
         刷新();
     }
@@ -244,7 +266,7 @@ const FieldContour = (function() {
         ctx.fillStyle = '#f8f9fa';
         ctx.fillRect(0, 0, width, height);
         
-        if (!云图数据) {
+        if (!云图数据 || !云图数据.success) {
             绘制空状态(width, height);
             return;
         }
@@ -252,13 +274,23 @@ const FieldContour = (function() {
         // 计算变换参数
         const transform = 计算变换参数(width, height);
         
+        // 先绘制形状轮廓（底层）
+        绘制形状轮廓(transform);
+        
         // 绘制云图
+        console.log('[云图显示] 准备绘制云图, mode:', 云图数据?.mode, 'grid:', 云图数据?.grid ? '有' : '无');
         if (云图数据.mode === 'contour' && 云图数据.grid) {
+            console.log('[云图显示] 开始绘制云图');
             绘制云图(transform);
+        } else {
+            console.log('[云图显示] 跳过云图绘制, mode:', 云图数据?.mode);
         }
         
+        // 再次绘制形状轮廓边框（确保边框在云图上方）
+        绘制形状边框(transform);
+        
         // 绘制测点
-        if (显示设置.显示测点 && 云图数据.points) {
+        if (显示设置.显示测点) {
             绘制测点(transform);
         }
         
@@ -279,10 +311,121 @@ const FieldContour = (function() {
         ctx.fillText('采集3个以上测点后自动生成', width / 2, height / 2 + 10);
     }
     
+    // ========== 绘制形状轮廓（填充背景）==========
+    function 绘制形状轮廓(transform) {
+        const config = 实验状态?.形状配置;
+        if (!config) return;
+        
+        const { scale, offsetX, offsetY } = transform;
+        
+        ctx.save();
+        ctx.beginPath();
+        
+        switch (config.type) {
+            case 'rectangle':
+                const w = (config.width || 100) * scale;
+                const h = (config.height || 100) * scale;
+                // Y轴翻转：从 offsetY - h 开始绘制
+                ctx.rect(offsetX, offsetY - h, w, h);
+                break;
+                
+            case 'circle':
+                const cx = (config.centerX || 50) * scale + offsetX;
+                const cy = offsetY - (config.centerY || 50) * scale;  // Y轴翻转
+                const outerR = (config.outerRadius || 50) * scale;
+                ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+                
+                // 如果有内圆（环形），需要反向绘制
+                if (config.innerRadius && config.innerRadius > 0) {
+                    const innerR = config.innerRadius * scale;
+                    ctx.moveTo(cx + innerR, cy);
+                    ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+                }
+                break;
+                
+            case 'polygon':
+                if (config.vertices?.length > 2) {
+                    const vertices = config.vertices;
+                    ctx.moveTo(
+                        vertices[0][0] * scale + offsetX, 
+                        offsetY - vertices[0][1] * scale  // Y轴翻转
+                    );
+                    for (let i = 1; i < vertices.length; i++) {
+                        ctx.lineTo(
+                            vertices[i][0] * scale + offsetX, 
+                            offsetY - vertices[i][1] * scale  // Y轴翻转
+                        );
+                    }
+                    ctx.closePath();
+                }
+                break;
+        }
+        
+        // 填充浅灰色背景
+        ctx.fillStyle = '#e9ecef';
+        ctx.fill();
+        ctx.restore();
+    }
+    
+    // ========== 绘制形状边框 ==========
+    function 绘制形状边框(transform) {
+        const config = 实验状态?.形状配置;
+        if (!config) return;
+        
+        const { scale, offsetX, offsetY } = transform;
+        
+        ctx.save();
+        ctx.strokeStyle = '#495057';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        switch (config.type) {
+            case 'rectangle':
+                const w = (config.width || 100) * scale;
+                const h = (config.height || 100) * scale;
+                // Y轴翻转
+                ctx.rect(offsetX, offsetY - h, w, h);
+                break;
+                
+            case 'circle':
+                const cx = (config.centerX || 50) * scale + offsetX;
+                const cy = offsetY - (config.centerY || 50) * scale;  // Y轴翻转
+                const outerR = (config.outerRadius || 50) * scale;
+                ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+                
+                // 绘制内圆边框
+                if (config.innerRadius && config.innerRadius > 0) {
+                    ctx.moveTo(cx + config.innerRadius * scale, cy);
+                    ctx.arc(cx, cy, config.innerRadius * scale, 0, Math.PI * 2);
+                }
+                break;
+                
+            case 'polygon':
+                if (config.vertices?.length > 2) {
+                    const vertices = config.vertices;
+                    ctx.moveTo(
+                        vertices[0][0] * scale + offsetX, 
+                        offsetY - vertices[0][1] * scale  // Y轴翻转
+                    );
+                    for (let i = 1; i < vertices.length; i++) {
+                        ctx.lineTo(
+                            vertices[i][0] * scale + offsetX, 
+                            offsetY - vertices[i][1] * scale  // Y轴翻转
+                        );
+                    }
+                    ctx.closePath();
+                }
+                break;
+        }
+        
+        ctx.stroke();
+        ctx.restore();
+    }
+    
     // ========== 计算变换参数 ==========
     function 计算变换参数(canvasWidth, canvasHeight) {
-        const padding = 60;  // 留出色标空间
-        const colorbarWidth = 60;
+        const padding = 40;  // 左边距
+        const colorbarWidth = 80;  // 右边色标区域宽度（增加以容纳刻度文字）
         const availableWidth = canvasWidth - padding - colorbarWidth;
         const availableHeight = canvasHeight - padding * 2;
         
@@ -301,9 +444,10 @@ const FieldContour = (function() {
         const scale = Math.min(scaleX, scaleY) * 0.9;
         
         const offsetX = padding + (availableWidth - dataWidth * scale) / 2 - bounds.minX * scale;
-        const offsetY = padding + (availableHeight - dataHeight * scale) / 2 - bounds.minY * scale;
+        // Y轴翻转：Canvas Y轴向下，数据Y轴向上
+        const offsetY = padding + (availableHeight + dataHeight * scale) / 2 + bounds.minY * scale;
         
-        return { scale, offsetX, offsetY, bounds };
+        return { scale, offsetX, offsetY, bounds, flipY: true };
     }
     
     function 获取形状边界(config) {
@@ -337,21 +481,35 @@ const FieldContour = (function() {
     // ========== 绘制云图 ==========
     function 绘制云图(transform) {
         const grid = 云图数据.grid;
-        if (!grid || !grid.xi || !grid.yi || !grid.zi) return;
+        if (!grid || !grid.xi || !grid.yi || !grid.zi) {
+            console.log('[云图显示] 绘制云图: grid数据不完整');
+            return;
+        }
         
         const { scale, offsetX, offsetY } = transform;
-        const vmin = 云图数据.metadata?.vmin ?? Math.min(...grid.zi.flat().filter(v => v !== null));
-        const vmax = 云图数据.metadata?.vmax ?? Math.max(...grid.zi.flat().filter(v => v !== null));
+        const vmin = 云图数据.stats?.vmin ?? 云图数据.metadata?.vmin ?? Math.min(...grid.zi.flat().filter(v => v !== null));
+        const vmax = 云图数据.stats?.vmax ?? 云图数据.metadata?.vmax ?? Math.max(...grid.zi.flat().filter(v => v !== null));
         const vrange = vmax - vmin || 1;
+        
+        console.log('[云图显示] 绘制云图: vmin=', vmin, 'vmax=', vmax, 'vrange=', vrange);
         
         const rows = grid.zi.length;
         const cols = grid.zi[0]?.length || 0;
         
-        if (rows === 0 || cols === 0) return;
+        if (rows === 0 || cols === 0) {
+            console.log('[云图显示] 绘制云图: rows或cols为0');
+            return;
+        }
         
         // 计算像素大小
-        const dx = (grid.xi[0][1] - grid.xi[0][0]) * scale;
-        const dy = (grid.yi[1]?.[0] - grid.yi[0][0]) * scale;
+        const dx = Math.abs((grid.xi[0][1] - grid.xi[0][0]) * scale);
+        const dy = Math.abs((grid.yi[1]?.[0] - grid.yi[0][0]) * scale);
+        
+        console.log('[云图显示] 绘制云图: rows=', rows, 'cols=', cols, 'dx=', dx, 'dy=', dy, 'scale=', scale);
+        
+        // 统计有效点数
+        let validCount = 0;
+        let drawnCount = 0;
         
         // 绘制每个网格单元
         for (let i = 0; i < rows; i++) {
@@ -359,8 +517,14 @@ const FieldContour = (function() {
                 const z = grid.zi[i][j];
                 if (z === null || z === undefined || isNaN(z)) continue;
                 
-                const x = grid.xi[i][j] * scale + offsetX;
-                const y = grid.yi[i][j] * scale + offsetY;
+                validCount++;
+                
+                const dataX = grid.xi[i][j];
+                const dataY = grid.yi[i][j];
+                
+                // 转换坐标（Y轴翻转）
+                const x = dataX * scale + offsetX;
+                const y = offsetY - dataY * scale;  // Y轴翻转
                 
                 // 计算颜色
                 const normalized = (z - vmin) / vrange;
@@ -368,8 +532,11 @@ const FieldContour = (function() {
                 
                 ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${显示设置.透明度})`;
                 ctx.fillRect(x - dx/2, y - dy/2, dx + 1, dy + 1);
+                drawnCount++;
             }
         }
+        
+        console.log('[云图显示] 绘制完成: validCount=', validCount, 'drawnCount=', drawnCount);
     }
     
     // ========== 值到颜色映射 ==========
@@ -396,26 +563,40 @@ const FieldContour = (function() {
     
     // ========== 绘制测点 ==========
     function 绘制测点(transform) {
-        const points = 云图数据.points || 实验状态?.已测点列表?.map(id => {
-            return 实验状态.测点列表.find(p => p.id === id);
-        }).filter(Boolean);
+        // 从实验状态获取已测点数据
+        const 已测点列表 = 实验状态?.已测点列表 || [];
+        const 测点列表 = 实验状态?.测点列表 || [];
         
-        if (!points || points.length === 0) return;
+        if (测点列表.length === 0) return;
         
         const { scale, offsetX, offsetY } = transform;
         
-        points.forEach(point => {
+        测点列表.forEach(point => {
             if (!point) return;
             
-            const x = point.x * scale + offsetX;
-            const y = point.y * scale + offsetY;
+            // 获取坐标（兼容不同字段名）
+            const dataX = point.x_coord ?? point.x ?? 0;
+            const dataY = point.y_coord ?? point.y ?? 0;
+            
+            // 转换坐标（Y轴翻转）
+            const x = dataX * scale + offsetX;
+            const y = offsetY - dataY * scale;  // Y轴翻转
+            
+            const pointIndex = point.point_index ?? point.id;
+            const isMeasured = 已测点列表.includes(pointIndex) || point.status === 'measured';
             
             // 绘制测点标记
             ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#fff';
+            ctx.arc(x, y, isMeasured ? 5 : 3, 0, Math.PI * 2);
+            
+            if (isMeasured) {
+                ctx.fillStyle = '#28a745';  // 绿色表示已测
+            } else {
+                ctx.fillStyle = '#6c757d';  // 灰色表示未测
+            }
             ctx.fill();
-            ctx.strokeStyle = '#333';
+            
+            ctx.strokeStyle = '#fff';
             ctx.lineWidth = 1.5;
             ctx.stroke();
         });
@@ -423,14 +604,14 @@ const FieldContour = (function() {
     
     // ========== 绘制色标 ==========
     function 绘制色标(width, height) {
-        const barWidth = 20;
-        const barHeight = height - 100;
-        const barX = width - 50;
-        const barY = 50;
+        const barWidth = 15;
+        const barHeight = height - 80;
+        const barX = width - 70;  // 往左移，给刻度文字留空间
+        const barY = 40;
         
         // 获取值范围
-        const vmin = 云图数据?.metadata?.vmin ?? 0;
-        const vmax = 云图数据?.metadata?.vmax ?? 100;
+        const vmin = 云图数据?.stats?.vmin ?? 云图数据?.metadata?.vmin ?? 0;
+        const vmax = 云图数据?.stats?.vmax ?? 云图数据?.metadata?.vmax ?? 100;
         
         // 绘制色标条
         const gradient = ctx.createLinearGradient(barX, barY + barHeight, barX, barY);
@@ -462,7 +643,7 @@ const FieldContour = (function() {
             ctx.lineTo(barX + barWidth + 5, y);
             ctx.stroke();
             
-            ctx.fillText(value.toFixed(0), barX + barWidth + 8, y + 3);
+            ctx.fillText(value != null ? Number(value).toFixed(0) : '--', barX + barWidth + 8, y + 3);
         }
         
         // 绘制单位
@@ -476,7 +657,7 @@ const FieldContour = (function() {
     
     // ========== 绘制置信度标签 ==========
     function 绘制置信度标签(width, height) {
-        const confidence = 云图数据?.metadata?.confidence || 'low';
+        const confidence = 云图数据?.confidence || 云图数据?.metadata?.confidence || 'low';
         const method = 云图数据?.method || '--';
         
         const confidenceText = {
@@ -563,7 +744,7 @@ const FieldContour = (function() {
             document.body.appendChild(tooltip);
         }
         
-        tooltip.innerHTML = `应力: ${value.toFixed(1)} MPa`;
+        tooltip.innerHTML = `应力: ${value != null ? Number(value).toFixed(1) : '--'} MPa`;
         tooltip.style.left = (x + 15) + 'px';
         tooltip.style.top = (y + 15) + 'px';
         tooltip.style.display = 'block';
