@@ -403,37 +403,6 @@ class ContourGenerator:
                 "error": f"获取色标数据失败: {str(e)}"
             }
     
-    def needs_full_regeneration(self, new_stats: Dict[str, float], 
-                               threshold: float = 0.3) -> bool:
-        """
-        检查是否需要完全重新生成云图
-        
-        Args:
-            new_stats: 新的统计信息
-            threshold: 变化阈值
-        
-        Returns:
-            bool: 是否需要完全重新生成
-        """
-        if self.last_stats is None:
-            return True
-        
-        old_range = self.last_stats.get('vmax', 0) - self.last_stats.get('vmin', 0)
-        new_range = new_stats.get('vmax', 0) - new_stats.get('vmin', 0)
-        
-        if old_range == 0:
-            return True
-        
-        change_ratio = abs(new_range - old_range) / old_range
-        return change_ratio > threshold
-    
-    def clear_cache(self):
-        """清除缓存"""
-        self.cache = None
-        self.last_stats = None
-
-
-    
     def generate_contour_lines(self, grid_data: Dict[str, Any], 
                                levels: int = 8) -> Dict[str, Any]:
         """
@@ -467,57 +436,3 @@ class ContourGenerator:
                 "success": False,
                 "error": f"生成等高线失败: {str(e)}"
             }
-
-
-class ContourCache:
-    """云图缓存管理类"""
-    
-    def __init__(self, max_size: int = 10):
-        """
-        初始化缓存
-        
-        Args:
-            max_size: 最大缓存数量
-        """
-        self.max_size = max_size
-        self.cache = {}
-        self.access_order = []
-    
-    def get(self, key: str) -> Optional[Dict[str, Any]]:
-        """获取缓存"""
-        if key in self.cache:
-            # 更新访问顺序
-            self.access_order.remove(key)
-            self.access_order.append(key)
-            return self.cache[key]
-        return None
-    
-    def set(self, key: str, value: Dict[str, Any]):
-        """设置缓存"""
-        if key in self.cache:
-            self.access_order.remove(key)
-        elif len(self.cache) >= self.max_size:
-            # 移除最旧的缓存
-            oldest = self.access_order.pop(0)
-            del self.cache[oldest]
-        
-        self.cache[key] = value
-        self.access_order.append(key)
-    
-    def invalidate(self, key: str = None):
-        """
-        使缓存失效
-        
-        Args:
-            key: 指定key，如果为None则清除所有缓存
-        """
-        if key is None:
-            self.cache.clear()
-            self.access_order.clear()
-        elif key in self.cache:
-            del self.cache[key]
-            self.access_order.remove(key)
-    
-    def generate_key(self, exp_id: str, n_points: int, method: str) -> str:
-        """生成缓存key"""
-        return f"{exp_id}_{n_points}_{method}"

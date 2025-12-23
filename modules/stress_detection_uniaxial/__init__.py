@@ -8,7 +8,7 @@ from .field_hdf5 import FieldExperimentHDF5
 from .shape_utils import ShapeUtils
 from .point_generator import PointGenerator
 from .interpolation import StressFieldInterpolation
-from .contour_generator import ContourGenerator, ContourCache
+from .contour_generator import ContourGenerator
 from .field_experiment import FieldExperiment
 from .field_capture import FieldCapture
 from .data_export import DataValidator, DataExporter
@@ -24,7 +24,6 @@ __all__ = [
     'PointGenerator',
     'StressFieldInterpolation',
     'ContourGenerator',
-    'ContourCache',
     
     # 业务逻辑
     'FieldExperiment',

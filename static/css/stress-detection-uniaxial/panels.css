@@ -339,6 +339,26 @@
     margin-bottom: 4px;
 }
 
+/* 色标样式选择器行 */
+.field-colormap-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.field-colormap-row .field-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.field-colormap-preview {
+    width: 80px;
+    height: 24px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
 #field-contour-settings-panel .field-panel-body,
 #field-export-panel .field-panel-body {
     padding: 12px;

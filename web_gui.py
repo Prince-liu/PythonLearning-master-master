@@ -13,7 +13,7 @@ import os
 from modules import OscilloscopeBase, RealtimeCapture, WaveformAnalysis, StressCalibration, SignalProcessingWrapper
 from modules.stress_detection_uniaxial import (
     FieldDatabaseManager, FieldExperimentHDF5, ShapeUtils, PointGenerator,
-    StressFieldInterpolation, ContourGenerator, ContourCache,
+    StressFieldInterpolation, ContourGenerator,
     FieldExperiment, FieldCapture, DataValidator, DataExporter,
     ErrorCode, APIResponse, FieldLogger
 )
@@ -31,7 +31,6 @@ class WebAPI:
         self.field_experiment = None  # 应力场实验管理器
         self.field_capture = None  # 应力场数据采集器
         self.contour_generator = None  # 云图生成器
-        self.contour_cache = ContourCache()  # 云图缓存
         self.data_exporter = None  # 数据导出器
         self.signal_proc = SignalProcessingWrapper()  # 信号处理包装
         self.window = None

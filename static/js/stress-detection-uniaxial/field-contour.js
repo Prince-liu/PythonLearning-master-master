@@ -16,7 +16,7 @@ const FieldContour = (function() {
     // 显示设置
     let 显示设置 = {
         显示测点: true,
-        显示等高线: true,
+        显示等高线: false,
         色图名称: 'jet',
         透明度: 0.8
     };
@@ -27,17 +27,20 @@ const FieldContour = (function() {
             [0, 0, 0.5], [0, 0, 1], [0, 0.5, 1], [0, 1, 1],
             [0.5, 1, 0.5], [1, 1, 0], [1, 0.5, 0], [1, 0, 0], [0.5, 0, 0]
         ],
-        hot: [
-            [0, 0, 0], [0.5, 0, 0], [1, 0, 0], [1, 0.5, 0], [1, 1, 0], [1, 1, 1]
+        turbo: [
+            [0.19, 0.07, 0.48], [0.03, 0.32, 0.70], [0.03, 0.57, 0.82],
+            [0.13, 0.74, 0.76], [0.42, 0.87, 0.56], [0.73, 0.93, 0.35],
+            [0.94, 0.89, 0.26], [0.99, 0.72, 0.22], [0.96, 0.47, 0.18],
+            [0.84, 0.19, 0.15], [0.60, 0.04, 0.13]
         ],
-        cool: [
-            [0, 1, 1], [1, 0, 1]
+        plasma: [
+            [0.05, 0.03, 0.53], [0.28, 0.01, 0.63], [0.49, 0.01, 0.66],
+            [0.66, 0.13, 0.59], [0.80, 0.28, 0.47], [0.90, 0.44, 0.32],
+            [0.97, 0.61, 0.19], [0.99, 0.80, 0.14], [0.94, 0.98, 0.23]
         ],
-        viridis: [
-            [0.267, 0.004, 0.329], [0.282, 0.140, 0.458], [0.253, 0.265, 0.530],
-            [0.206, 0.372, 0.553], [0.163, 0.471, 0.558], [0.127, 0.566, 0.551],
-            [0.134, 0.658, 0.518], [0.267, 0.749, 0.441], [0.478, 0.821, 0.318],
-            [0.741, 0.873, 0.150], [0.993, 0.906, 0.144]
+        rainbow: [
+            [0.5, 0, 0.5], [0, 0, 1], [0, 0.5, 1], [0, 1, 1],
+            [0, 1, 0], [0.5, 1, 0], [1, 1, 0], [1, 0.5, 0], [1, 0, 0]
         ]
     };
     
@@ -95,6 +98,19 @@ const FieldContour = (function() {
             });
         }
         
+        // 色标样式下拉框
+        const colormapSelect = document.getElementById('field-contour-colormap');
+        if (colormapSelect) {
+            colormapSelect.addEventListener('change', (e) => {
+                显示设置.色图名称 = e.target.value;
+                更新色标预览();
+                刷新();
+            });
+        }
+        
+        // 初始化色标预览
+        更新色标预览();
+        
         // 刷新云图按钮
         const refreshBtn = document.getElementById('field-contour-refresh');
         if (refreshBtn) {
@@ -113,14 +129,12 @@ const FieldContour = (function() {
                     // 获取设置参数
                     const interpolation = document.getElementById('field-contour-interpolation')?.value || 'auto';
                     const resolution = parseInt(document.getElementById('field-contour-resolution')?.value || '100');
-                    const minVal = document.getElementById('field-contour-min')?.value;
-                    const maxVal = document.getElementById('field-contour-max')?.value;
                     
                     const result = await pywebview.api.update_field_contour(expId, {
                         method: interpolation,
                         resolution: resolution,
-                        vmin: minVal ? parseFloat(minVal) : null,
-                        vmax: maxVal ? parseFloat(maxVal) : null
+                        vmin: null,
+                        vmax: null
                     });
                     
                     if (result.success) {
@@ -142,6 +156,31 @@ const FieldContour = (function() {
         if (exportBtn) {
             exportBtn.addEventListener('click', 导出云图图片);
         }
+    }
+    
+    // ========== 更新色标预览 ==========
+    function 更新色标预览() {
+        const previewCanvas = document.getElementById('field-colormap-preview');
+        if (!previewCanvas) return;
+        
+        const ctx = previewCanvas.getContext('2d');
+        const width = previewCanvas.width = 80;
+        const height = previewCanvas.height = 24;
+        
+        const colormap = 色图[显示设置.色图名称] || 色图.jet;
+        
+        // 绘制渐变色条
+        for (let x = 0; x < width; x++) {
+            const normalized = x / (width - 1);
+            const color = 值到颜色(normalized);
+            ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            ctx.fillRect(x, 0, 1, height);
+        }
+        
+        // 绘制边框
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, 0, width, height);
     }
     
     // ========== 导出云图图片 ==========
@@ -485,10 +524,12 @@ const FieldContour = (function() {
     
     // ========== 计算变换参数 ==========
     function 计算变换参数(canvasWidth, canvasHeight) {
-        const padding = 40;  // 左边距
+        const paddingLeft = 40;  // 左边距
+        const paddingTop = 20;   // 顶部边距（减小）
+        const paddingBottom = 60; // 底部边距（增大，给置信度标签留空间）
         const colorbarWidth = 80;  // 右边色标区域宽度（增加以容纳刻度文字）
-        const availableWidth = canvasWidth - padding - colorbarWidth;
-        const availableHeight = canvasHeight - padding * 2;
+        const availableWidth = canvasWidth - paddingLeft - colorbarWidth;
+        const availableHeight = canvasHeight - paddingTop - paddingBottom;
         
         // 获取数据边界
         let bounds = { minX: 0, maxX: 100, minY: 0, maxY: 100 };
@@ -504,9 +545,9 @@ const FieldContour = (function() {
         const scaleY = availableHeight / dataHeight;
         const scale = Math.min(scaleX, scaleY) * 0.9;
         
-        const offsetX = padding + (availableWidth - dataWidth * scale) / 2 - bounds.minX * scale;
+        const offsetX = paddingLeft + (availableWidth - dataWidth * scale) / 2 - bounds.minX * scale;
         // Y轴翻转：Canvas Y轴向下，数据Y轴向上
-        const offsetY = padding + (availableHeight + dataHeight * scale) / 2 + bounds.minY * scale;
+        const offsetY = paddingTop + (availableHeight + dataHeight * scale) / 2 + bounds.minY * scale;
         
         return { scale, offsetX, offsetY, bounds, flipY: true };
     }
@@ -713,9 +754,11 @@ const FieldContour = (function() {
     // ========== 绘制色标 ==========
     function 绘制色标(width, height) {
         const barWidth = 15;
-        const barHeight = height - 80;
+        const paddingTop = 20;    // 与云图顶部padding一致
+        const paddingBottom = 60; // 与云图底部padding一致
+        const barHeight = height - paddingTop - paddingBottom;
         const barX = width - 70;  // 往左移，给刻度文字留空间
-        const barY = 40;
+        const barY = paddingTop;
         
         // 获取值范围
         const vmin = 云图数据?.stats?.vmin ?? 云图数据?.metadata?.vmin ?? 0;
@@ -775,10 +818,13 @@ const FieldContour = (function() {
             'high': '高置信度'
         };
         
+        const paddingBottom = 60;
+        
         ctx.fillStyle = '#666';
         ctx.font = '11px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(`插值: ${method} | ${confidenceText[confidence] || confidence}`, 10, height - 10);
+        // 从底部往上45px，确保可见
+        ctx.fillText(`插值: ${method} | ${confidenceText[confidence] || confidence}`, 10, height - paddingBottom + 45);
     }
     
     // ========== 交互处理 ==========

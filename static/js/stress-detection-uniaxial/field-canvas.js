@@ -166,9 +166,9 @@ const FieldCanvas = (function() {
     
     // ========== 计算变换参数 ==========
     function 计算变换参数(canvasWidth, canvasHeight, bounds) {
-        const paddingTop = 40;
+        const paddingTop = 20;     // 减小顶部padding
         const paddingRight = 40;
-        const paddingBottom = 50;  // 增加底部padding，给X轴刻度留空间
+        const paddingBottom = 60;  // 增加底部padding，给X轴刻度和标签留更多空间
         const paddingLeft = 50;    // 增加左侧padding，给Y轴刻度留空间
         
         const availableWidth = canvasWidth - paddingLeft - paddingRight;
@@ -435,6 +435,9 @@ const FieldCanvas = (function() {
             ctx.setLineDash([]);
         }
         
+        // 计算是否显示编号（基于测点密度）
+        const shouldShowLabels = 计算是否显示编号(points, scale, offsetX, offsetY);
+        
         // 绘制测点
         points.forEach((point, index) => {
             const px = point.x_coord ?? point.x ?? 0;
@@ -480,14 +483,44 @@ const FieldCanvas = (function() {
             ctx.lineWidth = isHighlighted ? 3 : 2;
             ctx.stroke();
             
-            // 绘制编号
-            if (显示设置.显示测点编号) {
+            // 绘制编号（根据密度和高亮状态决定是否显示）
+            if (显示设置.显示测点编号 && (shouldShowLabels || isHighlighted)) {
                 ctx.fillStyle = '#333';
                 ctx.font = '10px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText(point.point_index ?? point.id ?? (index + 1), x, y - radius - 4);
             }
         });
+    }
+    
+    // ========== 计算是否显示编号 ==========
+    // 根据测点在屏幕上的密度决定是否显示编号
+    function 计算是否显示编号(points, scale, offsetX, offsetY) {
+        if (!points || points.length === 0) return true;
+        if (points.length === 1) return true;  // 只有一个点，总是显示
+        
+        // 计算所有测点的屏幕坐标
+        const screenPoints = points.map(p => ({
+            x: (p.x_coord ?? p.x ?? 0) * scale + offsetX,
+            y: offsetY - (p.y_coord ?? p.y ?? 0) * scale
+        }));
+        
+        // 计算最小距离
+        let minDistance = Infinity;
+        for (let i = 0; i < screenPoints.length; i++) {
+            for (let j = i + 1; j < screenPoints.length; j++) {
+                const dx = screenPoints[i].x - screenPoints[j].x;
+                const dy = screenPoints[i].y - screenPoints[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                }
+            }
+        }
+        
+        // 如果最小距离小于阈值，隐藏编号
+        const minSpacing = 25;  // 最小像素间距阈值
+        return minDistance >= minSpacing;
     }
     
     // ========== 绘制刻度 ==========

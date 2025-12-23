@@ -1027,11 +1027,15 @@
                                     </select>
                                 </div>
                                 <div class="field-form-group">
-                                    <label>色标范围 (MPa)</label>
-                                    <div class="field-input-row">
-                                        <input type="number" id="field-contour-min" class="field-input-sm" placeholder="自动">
-                                        <span>~</span>
-                                        <input type="number" id="field-contour-max" class="field-input-sm" placeholder="自动">
+                                    <label>色标样式</label>
+                                    <div class="field-colormap-row">
+                                        <select id="field-contour-colormap" class="field-select">
+                                            <option value="jet" selected>Jet (经典彩虹)</option>
+                                            <option value="turbo">Turbo (现代彩虹)</option>
+                                            <option value="plasma">Plasma (等离子)</option>
+                                            <option value="rainbow">Rainbow (标准光谱)</option>
+                                        </select>
+                                        <canvas id="field-colormap-preview" class="field-colormap-preview"></canvas>
                                     </div>
                                 </div>
                                 <div class="field-checkbox-group">
