@@ -155,21 +155,12 @@ const StressDetectionUniaxialModule = (function() {
         // 基准点输入框
         const baselineInput = document.getElementById('field-baseline-point-input');
         const setBtn = document.getElementById('field-baseline-set-btn');
-        const gotoBtn = document.getElementById('field-baseline-goto-btn');
         
         // 设置基准按钮
         if (setBtn) {
             setBtn.addEventListener('click', async () => {
                 const pointNum = parseInt(baselineInput?.value) || 1;
                 await 设置基准点(pointNum);
-            });
-        }
-        
-        // 采集基准按钮（跳转到基准点并采集）
-        if (gotoBtn) {
-            gotoBtn.addEventListener('click', async () => {
-                const pointNum = parseInt(baselineInput?.value) || 1;
-                await 跳转并采集基准点(pointNum);
             });
         }
         

@@ -341,7 +341,7 @@ const StressCalibrationModule = (function() {
         StressCalibrationManager.刷新数据表格();
         StressCalibrationManager.绘制拟合曲线图();
         
-        显示状态栏信息('ℹ️', `标签"${方向名称}"已关闭（数据已保留）`, '', 'info', 3000);
+        显示状态栏信息('ℹ️', `标签"${方向名称}"已关闭`, '', 'info', 3000);
     }
     
     function 加载当前方向配置() {

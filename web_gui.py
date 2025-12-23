@@ -165,20 +165,11 @@ class WebAPI:
     
     def 检查方向是否存在(self, 材料名称, 方向名称):
         """🆕 检查指定材料的指定方向是否已存在于数据库中（只检查有基准波形的完整数据）"""
-        try:
-            from modules.core.data_manager import ExperimentDataManager
-            dm = ExperimentDataManager()
-            cursor = dm.conn.cursor()
-            cursor.execute('''
-                SELECT COUNT(*) FROM test_directions td
-                JOIN experiments e ON td.实验ID = e.id
-                WHERE e.材料名称 = ? AND td.方向名称 = ? AND td.基准波形路径 IS NOT NULL
-            ''', (材料名称, 方向名称))
-            count = cursor.fetchone()[0]
-            dm.关闭()
-            return {"success": True, "exists": count > 0}
-        except Exception as e:
-            return {"success": False, "message": f"检查失败: {str(e)}"}
+        from modules.core.data_manager import ExperimentDataManager
+        dm = ExperimentDataManager()
+        result = dm.检查方向是否存在(材料名称, 方向名称)
+        dm.关闭()
+        return result
     
     def 创建应力检测实验(self, 材料名称, 测试方向列表):
         """🆕 创建新的单轴应力检测实验"""
@@ -651,10 +642,6 @@ class WebAPI:
         Returns:
             {"success": bool, "message": str}
         """
-        if not self.field_experiment.current_exp_id:
-            return {"success": False, "error_code": 1021, "message": "没有当前实验"}
-        
-        # 保存布点配置和测点
         params = params or {}
         return self.field_experiment.save_layout_config(layout_type, params, points)
     

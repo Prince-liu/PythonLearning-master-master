@@ -153,6 +153,28 @@ class ExperimentDataManager:
         result = cursor.fetchone()
         return result[0] if result else None
     
+    def 检查方向是否存在(self, 材料名称, 方向名称):
+        """检查指定材料的指定方向是否已存在于数据库中（只检查有基准波形的完整数据）
+        
+        Args:
+            材料名称: 材料名称
+            方向名称: 方向名称
+        
+        Returns:
+            {"success": bool, "exists": bool, "message": str}
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM test_directions td
+                JOIN experiments e ON td.实验ID = e.id
+                WHERE e.材料名称 = ? AND td.方向名称 = ? AND td.基准波形路径 IS NOT NULL
+            ''', (材料名称, 方向名称))
+            count = cursor.fetchone()[0]
+            return {"success": True, "exists": count > 0}
+        except Exception as e:
+            return {"success": False, "exists": False, "message": f"检查失败: {str(e)}"}
+    
     def 保存基准波形(self, 实验ID, 方向名称, 波形数据, 时间轴):
         """保存基准波形到HDF5"""
         方向ID = self.获取方向ID(实验ID, 方向名称)
