@@ -248,7 +248,7 @@ class FieldExperiment:
             # 计算应力系数 k = 1/slope (MPa/ns)
             # slope 的单位是 s/MPa，需要转换
             if slope and slope != 0:
-                k = 1.0 / (slope * 1e9)  # 转换为 MPa/ns
+                k = 1.0 / (slope * 1e9)  # 转换为 MPa/ns（保留正负号）
             else:
                 return {
                     "success": False,

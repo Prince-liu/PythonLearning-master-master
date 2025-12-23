@@ -1,4 +1,4 @@
-﻿// ==================== 标定数据面板模块 ====================
+// ==================== 标定数据面板模块 ====================
 // 功能：标定数据来源切换、加载、验证、显示
 
 const FieldCalibrationPanel = (function() {
@@ -118,24 +118,26 @@ const FieldCalibrationPanel = (function() {
             
             let html = '';
             validExps.forEach(exp => {
-                html += `<div class="experiment-group">
-                    <div class="experiment-group-header">${exp.材料名称} (ID: ${exp.实验ID})</div>`;
+                // 兼容不同的字段名
+                const expId = exp.实验ID || exp.id || exp.experiment_id;
+                const material = exp.材料名称 || exp.material || exp.sample_material || '未知材料';
                 
                 exp.directions.forEach(dir => {
                     if (dir.拟合结果) {
+                        const dirName = dir.方向名称 || dir.direction || dir.name || '未知方向';
+                        const k = dir.拟合结果.k;
+                        const kFormatted = k.toFixed(2);  // 保留两位小数
                         html += `
-                            <div class="calibration-item" onclick="FieldCalibrationPanel.选择标定数据(${exp.实验ID}, '${dir.方向名称}')">
-                                <div class="direction-name">${dir.方向名称}</div>
+                            <div class="calibration-item" onclick="FieldCalibrationPanel.选择标定数据(${expId}, '${dirName}')">
+                                <div class="direction-name">${material} - ${dirName}</div>
                                 <div class="calibration-info">
-                                    <span>K = ${dir.拟合结果.k?.toFixed(4) || '--'} MPa/ns</span>
+                                    <span>K = ${kFormatted} MPa/ns</span>
                                     <span>R² = ${dir.拟合结果.r_squared?.toFixed(4) || '--'}</span>
                                 </div>
                             </div>
                         `;
                     }
                 });
-                
-                html += '</div>';
             });
             
             container.innerHTML = html;
@@ -204,9 +206,10 @@ const FieldCalibrationPanel = (function() {
             return;
         }
         
-        // 🔧 修复：确保 k 值存在且有效
-        if (!data.k || data.k <= 0) {
-
+        // 🔧 修复：确保 k 值存在且有效（允许负数）
+        const k = data.k;
+        if (k === null || k === undefined || k === 0) {
+            console.warn('[标定面板] K值无效:', data.k);
             清空();
             return;
         }
@@ -236,9 +239,12 @@ const FieldCalibrationPanel = (function() {
         if (source === 'manual') {
             const kInput = document.getElementById('field-calib-manual-k');
             if (kInput) {
-                kInput.value = data.k;
+                kInput.value = k.toFixed(2);
             }
         }
+        
+        // 格式化K值：保留两位小数
+        const kFormatted = k.toFixed(2);
         
         // 更新信息显示
         const infoPanel = document.getElementById('field-calib-info');
@@ -252,9 +258,9 @@ const FieldCalibrationPanel = (function() {
             infoPanel.innerHTML = `
                 <div class="calib-info-item">
                     <span class="label">应力系数 K:</span>
-                    <span class="value">${data.k?.toFixed(4) || '--'} MPa/ns</span>
+                    <span class="value">${kFormatted} MPa/ns</span>
                 </div>
-                ${data.r_squared ? `
+                ${data.r_squared !== null && data.r_squared !== undefined ? `
                 <div class="calib-info-item">
                     <span class="label">拟合度 R²:</span>
                     <span class="value">${data.r_squared.toFixed(4)}</span>
@@ -267,7 +273,7 @@ const FieldCalibrationPanel = (function() {
                 ${data.exp_id ? `
                 <div class="calib-info-item">
                     <span class="label">标定实验:</span>
-                    <span class="value">ID ${data.exp_id} - ${data.direction || ''}</span>
+                    <span class="value">ID ${data.exp_id}${data.direction ? ` - ${data.direction}` : ''}</span>
                 </div>
                 ` : ''}
             `;

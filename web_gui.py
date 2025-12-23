@@ -218,7 +218,7 @@ class WebAPI:
             return {"success": False, "message": f"加载实验数据失败: {str(e)}"}
     
     def 获取所有实验列表(self):
-        """🆕 获取所有实验列表"""
+        """🆕 获取所有实验列表（嵌套结构，用于应力场测绘模块）"""
         try:
             from modules.core.data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
@@ -227,6 +227,17 @@ class WebAPI:
             return {"success": True, "data": 实验列表}
         except Exception as e:
             return {"success": False, "message": f"获取实验列表失败: {str(e)}"}
+    
+    def 获取所有方向列表(self):
+        """🆕 获取所有方向列表（扁平化结构，用于标定模块）"""
+        try:
+            from modules.core.data_manager import ExperimentDataManager
+            dm = ExperimentDataManager()
+            方向列表 = dm.获取所有方向列表()
+            dm.关闭()
+            return {"success": True, "data": 方向列表}
+        except Exception as e:
+            return {"success": False, "message": f"获取方向列表失败: {str(e)}"}
     
     def 删除方向数据(self, 实验ID, 方向ID):
         """🆕 删除指定方向的数据"""

@@ -108,7 +108,6 @@ const StressCalibrationModule = (function() {
             captureWaveformBtn: document.getElementById('sd-captureWaveformBtn'),
             endCaptureBtn: document.getElementById('sd-endCaptureBtn'),
             resetExperimentBtn: document.getElementById('sd-resetExperimentBtn'),
-            fitCurveBtn: document.getElementById('sd-fitCurveBtn'),
             exportDataBtn: document.getElementById('sd-exportDataBtn'),
             startMonitorBtn: document.getElementById('sd-startMonitorBtn'),
             stopMonitorBtn: document.getElementById('sd-stopMonitorBtn'),
@@ -173,7 +172,6 @@ const StressCalibrationModule = (function() {
         elements.captureWaveformBtn.addEventListener('click', 采集应力波形);
         elements.endCaptureBtn.addEventListener('click', 采集结束);
         elements.resetExperimentBtn.addEventListener('click', 重置当前方向实验);
-        elements.fitCurveBtn.addEventListener('click', () => StressCalibrationManager.绘制拟合曲线());
         elements.exportDataBtn.addEventListener('click', () => StressCalibrationManager.导出当前方向CSV());
         elements.startMonitorBtn.addEventListener('click', () => StressCalibrationCapture.手动开始监控());
         elements.stopMonitorBtn.addEventListener('click', () => StressCalibrationCapture.手动停止监控());
@@ -375,6 +373,16 @@ const StressCalibrationModule = (function() {
         elements.stressMax.value = 当前方向.应力范围[1];
         elements.stressStep.value = 当前方向.应力步长;
         
+        // 🆕 更新拟合公式显示
+        if (当前方向.拟合结果) {
+            const 斜率 = (当前方向.拟合结果.斜率 * 1e9).toFixed(3);
+            const 截距 = (当前方向.拟合结果.截距 * 1e9).toFixed(3);
+            const R方 = 当前方向.拟合结果.R方.toFixed(4);
+            elements.fitEquation.textContent = `Δt = ${斜率}σ + ${截距} (R²=${R方})`;
+        } else {
+            elements.fitEquation.textContent = '暂无拟合结果';
+        }
+        
         // 🆕 根据方向状态更新按钮状态
         更新按钮状态();
     }
@@ -429,14 +437,7 @@ const StressCalibrationModule = (function() {
             elements.resetExperimentBtn.disabled = true;
         }
         
-        // 根据数据点数量，启用/禁用拟合按钮
-        if (当前方向.应力数据.length >= 2) {
-            elements.fitCurveBtn.disabled = false;
-        } else {
-            elements.fitCurveBtn.disabled = true;
-        }
-        
-        // 根据是否有拟合结果，启用/禁用导出按钮
+        // 根据是否有拟合结果或数据，启用/禁用导出按钮
         if (当前方向.拟合结果 || 当前方向.应力数据.length > 0) {
             elements.exportDataBtn.disabled = false;
         } else {
@@ -529,7 +530,7 @@ const StressCalibrationModule = (function() {
         }
     }
     
-    function 采集结束() {
+    async function 采集结束() {
         const 当前方向 = 实验状态.测试方向列表[实验状态.当前方向索引];
         
         // 🆕 标记当前方向为已结束
@@ -538,6 +539,15 @@ const StressCalibrationModule = (function() {
         停止实时监控();
         更新按钮状态();
         更新方向选择器();
+        
+        // 🆕 自动绘制拟合曲线
+        if (当前方向.应力数据.length >= 2) {
+            // 数据点足够，自动绘制拟合曲线
+            await StressCalibrationManager.绘制拟合曲线();
+        } else {
+            // 数据点不足，显示错误消息
+            显示状态栏信息('⚠️', '数据点不足，至少需要2个点', '无法绘制拟合曲线', 'warning', 5000);
+        }
         
         // 🆕 检查是否所有方向都已完成
         const 所有方向已完成 = 实验状态.测试方向列表.every(方向 => 方向.采集已结束);

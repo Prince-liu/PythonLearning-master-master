@@ -37,48 +37,48 @@ const StressCalibrationManager = (function() {
             // 显示加载中
             elements.experimentListContainer.innerHTML = '<p style="text-align: center; color: #999;">加载中...</p>';
             
-            // 调用后端获取实验列表
-            const result = await pywebview.api.获取所有实验列表();
+            // 调用后端获取方向列表（扁平化结构）
+            const result = await pywebview.api.获取所有方向列表();
             
             if (!result.success) {
                 elements.experimentListContainer.innerHTML = `<p style="text-align: center; color: #ef4444;">❌ ${result.message}</p>`;
                 return;
             }
             
-            const 实验列表 = result.data;
+            const 方向列表 = result.data;
             
-            if (实验列表.length === 0) {
+            if (方向列表.length === 0) {
                 elements.experimentListContainer.innerHTML = '<p style="text-align: center; color: #999;">暂无实验数据</p>';
                 return;
             }
             
-            // 生成实验列表HTML（按方向展开，只显示有数据的方向）
+            // 生成方向列表HTML
             let html = '';
-            实验列表.forEach(实验 => {
-                const 创建时间 = new Date(实验.创建时间).toLocaleString('zh-CN');
+            方向列表.forEach(方向 => {
+                const 创建时间 = new Date(方向.创建时间).toLocaleString('zh-CN');
                 
                 // 构建标题：EXP001 - 材料名称 - 方向名称
-                const 标题 = `<strong>EXP${String(实验.实验ID).padStart(3, '0')}</strong> - ${实验.材料名称} - ${实验.方向名称}`;
+                const 标题 = `<strong>EXP${String(方向.实验ID).padStart(3, '0')}</strong> - ${方向.材料名称} - ${方向.方向名称}`;
                 
                 html += `
-                    <div class="experiment-item" ondblclick="StressCalibrationModule.加载实验方向(${实验.实验ID})" style="cursor: pointer;">
+                    <div class="experiment-item" ondblclick="StressCalibrationModule.加载实验方向(${方向.实验ID})" style="cursor: pointer;">
                         <div class="experiment-info">
                             <div class="experiment-title">
                                 ${标题}
                             </div>
                             <div class="experiment-meta">
                                 <span>📅 ${创建时间}</span>
-                                <span>📈 ${实验.数据点数} 个数据点</span>
+                                <span>📈 ${方向.数据点数} 个数据点</span>
                             </div>
                         </div>
                         <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.加载实验方向(${实验.实验ID})">
+                            <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.加载实验方向(${方向.实验ID})">
                                 📂 加载
                             </button>
-                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.导出方向数据(${实验.实验ID}, ${实验.方向ID})">
+                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.导出方向数据(${方向.实验ID}, ${方向.方向ID})">
                                 📊 导出
                             </button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.删除方向(${实验.实验ID}, ${实验.方向ID}, '${实验.方向名称}')">
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); StressCalibrationModule.删除方向(${方向.实验ID}, ${方向.方向ID}, '${方向.方向名称}')">
                                 🗑️ 删除
                             </button>
                         </div>

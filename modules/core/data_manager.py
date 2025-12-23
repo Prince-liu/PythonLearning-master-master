@@ -802,49 +802,125 @@ class ExperimentDataManager:
     
     def 获取所有实验列表(self):
         """
-        获取所有实验列表（按方向展开，只显示有数据的方向）
+        获取所有实验列表（嵌套结构，包含方向和拟合结果）
         
         返回:
-            list: 实验列表，每个方向作为一条记录 {实验ID, 方向ID, 材料名称, 方向名称, 创建时间, 数据点数}
+            list: 实验列表 [{实验ID, 材料名称, 创建时间, directions: [{方向名称, 拟合结果}]}]
         """
         cursor = self.conn.cursor()
         
-        # 只查询采集了基准波形的方向（有数据的方向）
+        # 获取所有实验
         cursor.execute('''
-            SELECT 
-                e.id as 实验ID,
-                td.id as 方向ID,
-                e.材料名称,
-                td.方向名称,
-                e.创建时间
-            FROM experiments e
-            JOIN test_directions td ON e.id = td.实验ID
-            WHERE td.基准波形路径 IS NOT NULL
-            ORDER BY e.创建时间 DESC, td.id
+            SELECT id, 材料名称, 创建时间
+            FROM experiments
+            ORDER BY 创建时间 DESC
         ''')
         
         实验列表 = []
-        for row in cursor.fetchall():
-            实验ID, 方向ID, 材料名称, 方向名称, 创建时间 = row
+        for exp_row in cursor.fetchall():
+            实验ID, 材料名称, 创建时间 = exp_row
             
-            # 统计该方向的数据点数
+            # 获取该实验的所有方向
             cursor.execute('''
-                SELECT COUNT(*) 
-                FROM stress_data
-                WHERE 方向ID = ?
+                SELECT id, 方向名称, 基准波形路径
+                FROM test_directions
+                WHERE 实验ID = ?
+                ORDER BY id
+            ''', (实验ID,))
+            
+            directions = []
+            for dir_row in cursor.fetchall():
+                方向ID, 方向名称, 基准波形路径 = dir_row
+                
+                # 只包含有基准波形的方向
+                if not 基准波形路径:
+                    continue
+                
+                # 获取拟合结果
+                cursor.execute('''
+                    SELECT 斜率, 截距, R方
+                    FROM fitting_results
+                    WHERE 方向ID = ?
+                    ORDER BY 计算时间 DESC
+                    LIMIT 1
+                ''', (方向ID,))
+                
+                拟合结果 = None
+                fit_row = cursor.fetchone()
+                if fit_row:
+                    斜率, 截距, R方 = fit_row
+                    # 计算应力系数 K (MPa/ns)
+                    # 斜率单位是 s/MPa，需要转换为 ns/MPa，然后取倒数得到 MPa/ns
+                    k = 1.0 / (斜率 * 1e9) if 斜率 != 0 else 0
+                    
+                    拟合结果 = {
+                        'k': abs(k),  # 应力系数（取绝对值）
+                        'slope': 斜率,
+                        'intercept': 截距,
+                        'r_squared': R方
+                    }
+                
+                directions.append({
+                    '方向ID': 方向ID,
+                    '方向名称': 方向名称,
+                    '拟合结果': 拟合结果
+                })
+            
+            # 只添加有方向数据的实验
+            if directions:
+                实验列表.append({
+                    '实验ID': 实验ID,
+                    '材料名称': 材料名称,
+                    '创建时间': 创建时间,
+                    'directions': directions
+                })
+        
+        return 实验列表
+    
+    def 获取所有方向列表(self):
+        """
+        获取所有方向列表（扁平化结构，用于标定模块）
+        
+        返回:
+            list: 方向列表 [{实验ID, 材料名称, 创建时间, 方向ID, 方向名称, 数据点数}]
+        """
+        cursor = self.conn.cursor()
+        
+        # 获取所有方向及其实验信息
+        cursor.execute('''
+            SELECT 
+                e.id AS 实验ID,
+                e.材料名称,
+                e.创建时间,
+                d.id AS 方向ID,
+                d.方向名称,
+                d.基准波形路径
+            FROM experiments e
+            JOIN test_directions d ON e.id = d.实验ID
+            WHERE d.基准波形路径 IS NOT NULL
+            ORDER BY e.创建时间 DESC, d.id
+        ''')
+        
+        方向列表 = []
+        for row in cursor.fetchall():
+            实验ID, 材料名称, 创建时间, 方向ID, 方向名称, 基准波形路径 = row
+            
+            # 获取该方向的数据点数
+            cursor.execute('''
+                SELECT COUNT(*) FROM stress_data WHERE 方向ID = ?
             ''', (方向ID,))
             数据点数 = cursor.fetchone()[0]
             
-            实验列表.append({
+            方向列表.append({
                 '实验ID': 实验ID,
-                '方向ID': 方向ID,
                 '材料名称': 材料名称,
-                '方向名称': 方向名称,
                 '创建时间': 创建时间,
+                '方向ID': 方向ID,
+                '方向名称': 方向名称,
                 '数据点数': 数据点数
             })
         
-        return 实验列表
+        return 方向列表
     
     def 删除实验(self, 实验ID):
         """
@@ -888,6 +964,18 @@ class ExperimentDataManager:
             
             # 删除实验记录
             cursor.execute('DELETE FROM experiments WHERE id = ?', (实验ID,))
+            
+            # 🆕 检查是否还有其他实验
+            cursor.execute('SELECT COUNT(*) FROM experiments')
+            剩余实验数 = cursor.fetchone()[0]
+            
+            # 🆕 如果没有实验了，重置ID序列
+            if 剩余实验数 == 0:
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name='experiments'")
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name='test_directions'")
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name='stress_data'")
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name='fitting_results'")
+                print("✅ 已重置ID序列（所有实验已删除）")
             
             self.conn.commit()
             return True
