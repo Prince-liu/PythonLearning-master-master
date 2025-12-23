@@ -339,6 +339,7 @@ const FieldCapturePanel = (function() {
             
             const 波形数据 = raw_result.data;
             const autoDenoise = document.getElementById('field-capture-auto-denoise')?.checked ?? true;
+            const bandpassEnabled = document.getElementById('field-capture-bandpass-filter')?.checked ?? true;
             
             // 使用 pointIndex + 1 作为 point_index（从1开始）
             // 传递波形数据给后端处理
@@ -347,7 +348,8 @@ const FieldCapturePanel = (function() {
                 波形数据.voltage,
                 波形数据.time,
                 波形数据.sample_rate || 1e9,
-                autoDenoise
+                autoDenoise,
+                bandpassEnabled
             );
             
             if (result.success) {
@@ -848,7 +850,36 @@ const FieldCapturePanel = (function() {
     }
     
     // ========== 降噪设置 ==========
-    function 打开降噪设置() {
+    async function 打开降噪设置() {
+        // 先从后端获取当前配置
+        let currentConfig = {
+            denoise: {
+                method: 'wavelet',
+                wavelet: 'sym6',
+                level: 5,
+                threshold_mode: 'soft'
+            },
+            bandpass: {
+                lowcut: 1.5,
+                highcut: 3.5,
+                order: 6
+            }
+        };
+        
+        try {
+            const denoiseResult = await pywebview.api.get_denoise_config();
+            if (denoiseResult.success && denoiseResult.data) {
+                currentConfig.denoise = denoiseResult.data;
+            }
+            
+            const bandpassResult = await pywebview.api.get_bandpass_config();
+            if (bandpassResult.success && bandpassResult.data) {
+                currentConfig.bandpass = bandpassResult.data;
+            }
+        } catch (error) {
+            console.log('获取配置失败，使用默认值');
+        }
+        
         const overlay = document.createElement('div');
         overlay.className = 'modal';
         overlay.id = 'field-denoise-modal';
@@ -857,7 +888,7 @@ const FieldCapturePanel = (function() {
         overlay.innerHTML = `
             <div class="modal-content field-modal modal-sm">
                 <div class="modal-header">
-                    <h3>🔧 降噪设置</h3>
+                    <h3>🔧 信号处理设置</h3>
                     <button class="modal-close" onclick="document.getElementById('field-denoise-modal').remove()">×</button>
                 </div>
                 <div class="modal-body">
@@ -870,31 +901,59 @@ const FieldCapturePanel = (function() {
                             <div class="form-group">
                                 <label>降噪方法</label>
                                 <select id="field-denoise-method" class="form-input">
-                                    <option value="wavelet" selected>小波降噪</option>
-                                    <option value="savgol">Savitzky-Golay滤波</option>
-                                    <option value="none">不降噪</option>
+                                    <option value="wavelet" ${currentConfig.denoise.method === 'wavelet' ? 'selected' : ''}>小波降噪</option>
+                                    <option value="savgol" ${currentConfig.denoise.method === 'savgol' ? 'selected' : ''}>Savitzky-Golay滤波</option>
+                                    <option value="none" ${currentConfig.denoise.method === 'none' ? 'selected' : ''}>不降噪</option>
                                 </select>
                             </div>
                             <div id="field-denoise-wavelet-params">
                                 <div class="form-group">
                                     <label>小波基</label>
                                     <select id="field-denoise-wavelet" class="form-input">
-                                        <option value="sym6" selected>sym6</option>
-                                        <option value="db4">db4</option>
-                                        <option value="coif3">coif3</option>
+                                        <option value="sym6" ${currentConfig.denoise.wavelet === 'sym6' ? 'selected' : ''}>sym6</option>
+                                        <option value="db4" ${currentConfig.denoise.wavelet === 'db4' ? 'selected' : ''}>db4</option>
+                                        <option value="coif3" ${currentConfig.denoise.wavelet === 'coif3' ? 'selected' : ''}>coif3</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
                                     <label>分解层数</label>
-                                    <input type="number" id="field-denoise-level" class="form-input" value="5" min="1" max="10">
+                                    <input type="number" id="field-denoise-level" class="form-input" value="${currentConfig.denoise.level}" min="1" max="10">
                                 </div>
                                 <div class="form-group">
                                     <label>阈值模式</label>
                                     <select id="field-denoise-threshold-mode" class="form-input">
-                                        <option value="soft" selected>软阈值</option>
-                                        <option value="hard">硬阈值</option>
+                                        <option value="soft" ${currentConfig.denoise.threshold_mode === 'soft' ? 'selected' : ''}>软阈值</option>
+                                        <option value="hard" ${currentConfig.denoise.threshold_mode === 'hard' ? 'selected' : ''}>硬阈值</option>
                                     </select>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section" style="margin-top: 15px;">
+                        <div class="form-section-title">
+                            <span class="section-icon">🎛️</span>
+                            <span>带通滤波参数</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>低频截止 (MHz)</label>
+                                <input type="number" id="field-bandpass-lowcut" class="form-input" value="${currentConfig.bandpass.lowcut}" min="1" max="6" step="0.1">
+                                <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                            </div>
+                            <div class="form-group">
+                                <label>高频截止 (MHz)</label>
+                                <input type="number" id="field-bandpass-highcut" class="form-input" value="${currentConfig.bandpass.highcut}" min="1" max="6" step="0.1">
+                                <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                            </div>
+                            <div class="form-group">
+                                <label>滤波器阶数</label>
+                                <select id="field-bandpass-order" class="form-input">
+                                    <option value="2" ${currentConfig.bandpass.order === 2 ? 'selected' : ''}>2阶</option>
+                                    <option value="4" ${currentConfig.bandpass.order === 4 ? 'selected' : ''}>4阶</option>
+                                    <option value="6" ${currentConfig.bandpass.order === 6 ? 'selected' : ''}>6阶（推荐）</option>
+                                    <option value="8" ${currentConfig.bandpass.order === 8 ? 'selected' : ''}>8阶</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -910,16 +969,75 @@ const FieldCapturePanel = (function() {
     }
     
     function 保存降噪设置() {
-        // 保存设置到实验配置
+        // 保存降噪设置
         const method = document.getElementById('field-denoise-method')?.value || 'wavelet';
         const wavelet = document.getElementById('field-denoise-wavelet')?.value || 'sym6';
         const level = parseInt(document.getElementById('field-denoise-level')?.value) || 5;
         const thresholdMode = document.getElementById('field-denoise-threshold-mode')?.value || 'soft';
         
-        // TODO: 保存到后端
+        // 保存带通滤波设置
+        const lowcut = parseFloat(document.getElementById('field-bandpass-lowcut')?.value) || 1.5;
+        const highcut = parseFloat(document.getElementById('field-bandpass-highcut')?.value) || 3.5;
+        const order = parseInt(document.getElementById('field-bandpass-order')?.value) || 4;
         
-        document.getElementById('field-denoise-modal')?.remove();
-        callbacks?.显示状态信息('✅', '降噪设置已保存', '', 'success');
+        // 验证参数
+        if (lowcut >= highcut) {
+            callbacks?.显示状态信息('⚠️', '参数错误', '低频截止必须小于高频截止', 'warning');
+            return;
+        }
+        
+        if (lowcut < 1 || lowcut > 6 || highcut < 1 || highcut > 6) {
+            callbacks?.显示状态信息('⚠️', '参数错误', '频率范围必须在 1-6 MHz 之间', 'warning');
+            return;
+        }
+        
+        // 保存到实验状态（临时存储）
+        if (!实验状态.信号处理配置) {
+            实验状态.信号处理配置 = {};
+        }
+        
+        实验状态.信号处理配置.降噪 = {
+            method: method,
+            wavelet: wavelet,
+            level: level,
+            thresholdMode: thresholdMode
+        };
+        
+        实验状态.信号处理配置.带通滤波 = {
+            lowcut: lowcut,
+            highcut: highcut,
+            order: order
+        };
+        
+        // 调用后端API保存配置
+        (async () => {
+            try {
+                // 保存降噪配置
+                const denoiseEnabled = document.getElementById('field-capture-auto-denoise')?.checked ?? true;
+                await pywebview.api.set_denoise_config({
+                    enabled: denoiseEnabled,
+                    method: method,
+                    wavelet: wavelet,
+                    level: level,
+                    threshold_mode: thresholdMode
+                });
+                
+                // 保存带通滤波配置
+                const bandpassEnabled = document.getElementById('field-capture-bandpass-filter')?.checked ?? true;
+                await pywebview.api.set_bandpass_config({
+                    enabled: bandpassEnabled,
+                    lowcut: lowcut,
+                    highcut: highcut,
+                    order: order
+                });
+                
+                document.getElementById('field-denoise-modal')?.remove();
+                callbacks?.显示状态信息('✅', '信号处理设置已保存', 
+                    `带通滤波: ${lowcut}-${highcut} MHz`, 'success');
+            } catch (error) {
+                callbacks?.显示状态信息('❌', '保存失败', error.toString(), 'error');
+            }
+        })();
     }
     
     // ========== 禁用采集 ==========

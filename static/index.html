@@ -564,6 +564,15 @@
                         <input type="number" id="sd-stressStep" class="config-input" value="10" min="1">
                         
                         <button id="sd-toggleExperimentBtn" class="btn btn-primary btn-block">▶️ 开始实验</button>
+                        
+                        <!-- 信号处理选项 -->
+                        <div class="field-capture-options" style="margin-top: 8px;">
+                            <label><input type="checkbox" id="sd-auto-denoise" checked> 自动降噪</label>
+                            <button id="sd-denoise-settings" class="btn btn-sm">⚙️</button>
+                        </div>
+                        <div class="field-capture-options">
+                            <label><input type="checkbox" id="sd-bandpass-filter" checked> 带通滤波</label>
+                        </div>
                     </div>
                     
                     <!-- 数据采集 -->
@@ -992,6 +1001,9 @@
                                     <label><input type="checkbox" id="field-capture-auto-denoise" checked> 自动降噪</label>
                                     <button id="field-capture-denoise-settings" class="btn btn-sm">⚙️</button>
                                 </div>
+                                <div class="field-capture-options">
+                                    <label><input type="checkbox" id="field-capture-bandpass-filter" checked> 带通滤波</label>
+                                </div>
                                 <div class="field-capture-result">
                                     <div class="result-item"><span>时间差:</span><span id="field-capture-result-timediff">--</span> ns</div>
                                     <div class="result-item"><span>应力:</span><span id="field-capture-result-stress">--</span> MPa</div>
@@ -1018,10 +1030,16 @@
                                 <div class="field-form-group">
                                     <label>分辨率</label>
                                     <select id="field-contour-resolution" class="field-select">
-                                        <option value="50">低 (50×50)</option>
-                                        <option value="100" selected>中 (100×100)</option>
-                                        <option value="200">高 (200×200)</option>
+                                        <option value="100">低 (100×100)</option>
+                                        <option value="200" selected>中 (200×200)</option>
+                                        <option value="300">高 (300×300)</option>
                                     </select>
+                                </div>
+                                <div class="field-form-group">
+                                    <label>
+                                        <input type="checkbox" id="field-contour-smoothing" checked>
+                                        高斯平滑
+                                    </label>
                                 </div>
                                 <div class="field-form-group">
                                     <label>色标样式</label>
@@ -1038,7 +1056,7 @@
                                 <div class="field-checkbox-group">
                                     <label><input type="checkbox" id="field-contour-show-points" checked> 显示测点</label>
                                     <label><input type="checkbox" id="field-contour-show-contour-lines"> 显示等高线</label>
-                                    <label><input type="checkbox" id="field-contour-auto-update" checked> 自动更新</label>
+                                    <label><input type="checkbox" id="field-contour-show-tooltip"> 悬停显示应力值</label>
                                 </div>
                                 <div class="field-panel-actions">
                                     <button id="field-contour-refresh" class="btn btn-primary btn-sm">🔄 刷新云图</button>
@@ -1088,7 +1106,6 @@
                                 
                                 <div class="field-checkbox-group">
                                     <label><input type="checkbox" id="field-export-include-contour" checked> 包含云图</label>
-                                    <label><input type="checkbox" id="field-export-include-stats" checked> 包含统计</label>
                                 </div>
                                 <div class="field-panel-actions">
                                     <button id="field-export-btn" class="btn btn-primary btn-block btn-sm">📥 导出数据</button>

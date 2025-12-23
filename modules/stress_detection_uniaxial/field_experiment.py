@@ -102,6 +102,15 @@ class FieldExperiment:
         if not result['success']:
             return result
         
+        # 🔧 调试：打印形状配置
+        exp_data = result['data']['experiment']
+        print(f"\n[调试] 加载实验 {exp_id}")
+        print(f"[调试] shape_config 类型: {type(exp_data.get('shape_config'))}")
+        print(f"[调试] shape_config 值: {exp_data.get('shape_config')}")
+        print(f"[调试] shape_config 是否为空: {not exp_data.get('shape_config')}")
+        if isinstance(exp_data.get('shape_config'), dict):
+            print(f"[调试] shape_config.type: {exp_data.get('shape_config').get('type')}")
+        
         # 加载HDF5配置快照
         hdf5 = FieldExperimentHDF5(exp_id)
         if hdf5.file_exists():

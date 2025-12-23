@@ -163,6 +163,10 @@ class DataExporter:
             use_polar = (shape_config.get('type') == 'circle' and 
                         any(p.get('r_coord') is not None for p in points))
             
+            # 计算统计信息
+            measured_points = [p for p in points if p.get('status') == 'measured']
+            stress_values = [p['stress_value'] for p in measured_points if p.get('stress_value') is not None]
+            
             # 写入CSV
             with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
@@ -174,6 +178,24 @@ class DataExporter:
                 writer.writerow(['试件材料', exp_data.get('sample_material', '')])
                 writer.writerow(['导出时间', datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
                 writer.writerow([])
+                
+                # 写入统计信息
+                writer.writerow(['--- 统计信息 ---'])
+                writer.writerow(['总测点数', len(points)])
+                writer.writerow(['已测量', len(measured_points)])
+                writer.writerow(['待测量', len([p for p in points if p.get('status') == 'pending'])])
+                writer.writerow(['已跳过', len([p for p in points if p.get('status') == 'skipped'])])
+                
+                if stress_values:
+                    writer.writerow([])
+                    writer.writerow(['应力最小值(MPa)', f'{min(stress_values):.2f}'])
+                    writer.writerow(['应力最大值(MPa)', f'{max(stress_values):.2f}'])
+                    writer.writerow(['应力平均值(MPa)', f'{np.mean(stress_values):.2f}'])
+                    writer.writerow(['应力标准差(MPa)', f'{np.std(stress_values):.2f}'])
+                    writer.writerow(['应力范围(MPa)', f'{max(stress_values) - min(stress_values):.2f}'])
+                
+                writer.writerow([])
+                writer.writerow(['--- 测点数据 ---'])
                 
                 # 写入表头
                 if use_polar:

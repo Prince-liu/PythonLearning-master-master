@@ -177,6 +177,11 @@ const FieldCanvas = (function() {
         const shapeWidth = bounds.maxX - bounds.minX;
         const shapeHeight = bounds.maxY - bounds.minY;
         
+        // 防止可用空间为负数或零时导致的计算错误
+        if (availableWidth <= 0 || availableHeight <= 0 || shapeWidth <= 0 || shapeHeight <= 0) {
+            return { scale: 1, offsetX: 0, offsetY: canvasHeight, bounds };
+        }
+        
         // 计算基础缩放比例（保持宽高比）
         const scaleX = availableWidth / shapeWidth;
         const scaleY = availableHeight / shapeHeight;
@@ -396,7 +401,10 @@ const FieldCanvas = (function() {
                         const hcx = mod.centerX * scale + offsetX;
                         const hcy = offsetY - mod.centerY * scale;
                         const hr = mod.radius * scale;
-                        ctx.arc(hcx, hcy, hr, 0, Math.PI * 2);
+                        // 防止负半径导致的 IndexSizeError
+                        if (hr > 0) {
+                            ctx.arc(hcx, hcy, hr, 0, Math.PI * 2);
+                        }
                     } else if (mod.shape === 'rectangle') {
                         const hx = mod.x * scale + offsetX;
                         const hy = offsetY - (mod.y + mod.height) * scale;

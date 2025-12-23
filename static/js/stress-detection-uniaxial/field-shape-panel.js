@@ -467,10 +467,24 @@ const FieldShapePanel = (function() {
                     document.getElementById('field-shape-rect-height').value = config.height || 100;
                 break;
             case 'circle':
-                // ... 填充圆形参数
+                if (document.getElementById('field-shape-circle-cx'))
+                    document.getElementById('field-shape-circle-cx').value = config.centerX || 50;
+                if (document.getElementById('field-shape-circle-cy'))
+                    document.getElementById('field-shape-circle-cy').value = config.centerY || 50;
+                if (document.getElementById('field-shape-circle-radius'))
+                    document.getElementById('field-shape-circle-radius').value = config.radius || 50;
+                if (document.getElementById('field-shape-circle-inner'))
+                    document.getElementById('field-shape-circle-inner').value = config.innerRadius || 0;
+                if (document.getElementById('field-shape-circle-start'))
+                    document.getElementById('field-shape-circle-start').value = config.startAngle || 0;
+                if (document.getElementById('field-shape-circle-end'))
+                    document.getElementById('field-shape-circle-end').value = config.endAngle || 360;
                 break;
             case 'polygon':
-                // ... 填充多边形参数
+                if (document.getElementById('field-shape-polygon-vertices') && config.vertices) {
+                    const verticesStr = config.vertices.map(v => `${v[0]},${v[1]}`).join('\n');
+                    document.getElementById('field-shape-polygon-vertices').value = verticesStr;
+                }
                 break;
         }
         
@@ -480,6 +494,18 @@ const FieldShapePanel = (function() {
         
         // 清除修改标记（因为是从数据库加载的已保存配置）
         形状已修改 = false;
+        
+        // 🔧 更新工作流程标志（从数据库加载的配置视为已应用）
+        if (实验状态) {
+            实验状态.工作流程.已应用形状 = true;
+        }
+        
+        // 🔧 更新状态徽章为"已设置"（因为是从数据库加载的已应用配置）
+        const statusBadge = document.getElementById('field-shape-status');
+        if (statusBadge) {
+            statusBadge.textContent = '✅ 已设置';
+            statusBadge.className = 'status-badge status-success';
+        }
     }
     
     function 清空() {

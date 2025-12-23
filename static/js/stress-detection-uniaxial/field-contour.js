@@ -17,8 +17,21 @@ const FieldContour = (function() {
     let 显示设置 = {
         显示测点: true,
         显示等高线: false,
+        显示提示框: false,  // 默认关闭悬停提示
         色图名称: 'jet',
-        透明度: 0.8
+        透明度: 0.8,
+        缩放比例: 1,
+        偏移X: 0,
+        偏移Y: 0
+    };
+    
+    // 拖动状态
+    let 拖动状态 = {
+        正在拖动: false,
+        起始X: 0,
+        起始Y: 0,
+        起始偏移X: 0,
+        起始偏移Y: 0
     };
     
     // 色图定义
@@ -64,9 +77,17 @@ const FieldContour = (function() {
         
         canvas.addEventListener('mousemove', 处理鼠标移动);
         canvas.addEventListener('mouseleave', 隐藏提示);
-        canvas.addEventListener('click', 处理点击);
+        canvas.addEventListener('wheel', 处理滚轮缩放, { passive: false });
+        canvas.addEventListener('mousedown', 处理拖动开始);
+        canvas.addEventListener('mousemove', 处理拖动中);
+        canvas.addEventListener('mouseup', 处理拖动结束);
+        canvas.addEventListener('mouseleave', 处理拖动结束);
+        canvas.addEventListener('dblclick', 重置视图);
         
         window.addEventListener('resize', debounce(调整尺寸, 200));
+        
+        // 设置初始光标
+        canvas.style.cursor = 'grab';
         
         // 绑定设置面板事件
         绑定设置面板事件();
@@ -94,6 +115,18 @@ const FieldContour = (function() {
                     await 加载等高线数据();
                 } else {
                     刷新();
+                }
+            });
+        }
+        
+        // 悬停显示应力值复选框
+        const showTooltipCheckbox = document.getElementById('field-contour-show-tooltip');
+        if (showTooltipCheckbox) {
+            showTooltipCheckbox.addEventListener('change', (e) => {
+                显示设置.显示提示框 = e.target.checked;
+                // 如果关闭，立即隐藏当前显示的提示框
+                if (!e.target.checked) {
+                    隐藏提示();
                 }
             });
         }
@@ -129,10 +162,12 @@ const FieldContour = (function() {
                     // 获取设置参数
                     const interpolation = document.getElementById('field-contour-interpolation')?.value || 'auto';
                     const resolution = parseInt(document.getElementById('field-contour-resolution')?.value || '100');
+                    const smoothing = document.getElementById('field-contour-smoothing')?.checked ?? true;
                     
                     const result = await pywebview.api.update_field_contour(expId, {
                         method: interpolation,
                         resolution: resolution,
+                        smoothing: smoothing,
                         vmin: null,
                         vmax: null
                     });
@@ -541,13 +576,25 @@ const FieldContour = (function() {
         const dataWidth = bounds.maxX - bounds.minX;
         const dataHeight = bounds.maxY - bounds.minY;
         
+        // 防止可用空间为负数或零时导致的计算错误
+        if (availableWidth <= 0 || availableHeight <= 0 || dataWidth <= 0 || dataHeight <= 0) {
+            return { scale: 1, offsetX: 0, offsetY: canvasHeight, bounds, flipY: true };
+        }
+        
         const scaleX = availableWidth / dataWidth;
         const scaleY = availableHeight / dataHeight;
-        const scale = Math.min(scaleX, scaleY) * 0.9;
+        const baseScale = Math.min(scaleX, scaleY) * 0.9;
         
-        const offsetX = paddingLeft + (availableWidth - dataWidth * scale) / 2 - bounds.minX * scale;
-        // Y轴翻转：Canvas Y轴向下，数据Y轴向上
-        const offsetY = paddingTop + (availableHeight + dataHeight * scale) / 2 + bounds.minY * scale;
+        // 应用缩放比例
+        const scale = baseScale * 显示设置.缩放比例;
+        
+        // 计算基础偏移（居中）
+        const baseOffsetX = paddingLeft + (availableWidth - dataWidth * baseScale) / 2 - bounds.minX * baseScale;
+        const baseOffsetY = paddingTop + (availableHeight + dataHeight * baseScale) / 2 + bounds.minY * baseScale;
+        
+        // 应用用户拖动偏移
+        const offsetX = baseOffsetX + 显示设置.偏移X;
+        const offsetY = baseOffsetY + 显示设置.偏移Y;
         
         return { scale, offsetX, offsetY, bounds, flipY: true };
     }
@@ -692,19 +739,24 @@ const FieldContour = (function() {
     
     // ========== 绘制等高线 ==========
     function 绘制等高线(transform) {
-
         if (!云图数据.contour_lines || 云图数据.contour_lines.length === 0) {
-
             return;
         }
 
         const { scale, offsetX, offsetY } = transform;
         
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';  // 加深颜色，更明显
-        ctx.lineWidth = 2;  // 加粗线条
-        ctx.setLineDash([]);  // 实线
+        // 更细、更柔和的等高线样式
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';  // 降低不透明度到50%
+        ctx.lineWidth = 1.5;  // 更细的线条
+        ctx.setLineDash([]);
+        ctx.lineCap = 'round';  // 圆角端点
+        ctx.lineJoin = 'round';  // 圆角连接
         
-        let totalPaths = 0;
+        // 判断是否显示标签（缩放比例大于1.5时显示）
+        const showLabels = 显示设置.缩放比例 >= 1.5;
+        
+        // 存储标签位置，避免重叠
+        const labelPositions = [];
         
         // 绘制每条等高线
         云图数据.contour_lines.forEach((contour, idx) => {
@@ -712,15 +764,12 @@ const FieldContour = (function() {
             const paths = contour.paths;
 
             paths.forEach((path, pathIdx) => {
-                if (path.length < 2) {
-                    return;
-                }
-                
-                totalPaths++;
+                if (path.length < 2) return;
                 
                 ctx.beginPath();
                 
                 // 绘制路径
+                const screenPath = [];
                 path.forEach((point, index) => {
                     const dataX = point[0];
                     const dataY = point[1];
@@ -728,6 +777,8 @@ const FieldContour = (function() {
                     // 转换坐标（Y轴翻转）
                     const x = dataX * scale + offsetX;
                     const y = offsetY - dataY * scale;
+                    
+                    screenPath.push({ x, y });
                     
                     if (index === 0) {
                         ctx.moveTo(x, y);
@@ -737,9 +788,67 @@ const FieldContour = (function() {
                 });
                 
                 ctx.stroke();
+                
+                // 如果启用标签且路径足够长，添加标签
+                if (showLabels && screenPath.length > 5) {
+                    添加等高线标签(screenPath, level, labelPositions);
+                }
             });
         });
-
+    }
+    
+    // ========== 添加等高线标签 ==========
+    function 添加等高线标签(screenPath, level, existingLabels) {
+        // 在路径中间位置添加标签
+        const midIndex = Math.floor(screenPath.length / 2);
+        const labelPos = screenPath[midIndex];
+        
+        // 检查是否与已有标签重叠
+        const minDistance = 60;  // 最小间距（像素）
+        const tooClose = existingLabels.some(pos => {
+            const dx = pos.x - labelPos.x;
+            const dy = pos.y - labelPos.y;
+            return Math.sqrt(dx * dx + dy * dy) < minDistance;
+        });
+        
+        if (tooClose) return;
+        
+        // 记录标签位置
+        existingLabels.push(labelPos);
+        
+        // 计算等高线方向（用于旋转文字）
+        let angle = 0;
+        if (midIndex > 0 && midIndex < screenPath.length - 1) {
+            const prev = screenPath[midIndex - 1];
+            const next = screenPath[midIndex + 1];
+            angle = Math.atan2(next.y - prev.y, next.x - prev.x);
+            
+            // 保持文字正向（不倒置）
+            if (angle > Math.PI / 2) angle -= Math.PI;
+            if (angle < -Math.PI / 2) angle += Math.PI;
+        }
+        
+        // 绘制文字（无背景）
+        const labelText = level.toFixed(1);
+        ctx.save();
+        
+        ctx.translate(labelPos.x, labelPos.y);
+        ctx.rotate(angle);
+        
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // 文字描边（白色，增强可读性）
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(labelText, 0, 0);
+        
+        // 文字填充（黑色）
+        ctx.fillStyle = '#000';
+        ctx.fillText(labelText, 0, 0);
+        
+        ctx.restore();
     }
     
     // ========== 绘制色标 ==========
@@ -820,6 +929,15 @@ const FieldContour = (function() {
     
     // ========== 交互处理 ==========
     function 处理鼠标移动(event) {
+        // 如果正在拖动，不显示提示
+        if (拖动状态.正在拖动) return;
+        
+        // 如果未启用提示框功能，直接返回
+        if (!显示设置.显示提示框) {
+            隐藏提示();
+            return;
+        }
+        
         if (!云图数据?.grid) return;
         
         const rect = canvas.getBoundingClientRect();
@@ -834,6 +952,74 @@ const FieldContour = (function() {
         }
     }
     
+    // ========== 滚轮缩放 ==========
+    function 处理滚轮缩放(event) {
+        event.preventDefault();
+        
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        // 缩放因子
+        const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = 显示设置.缩放比例 * zoomFactor;
+        
+        // 限制缩放范围
+        if (newZoom < 0.1 || newZoom > 10) return;
+        
+        // 以鼠标位置为中心缩放
+        const canvasWidth = canvas.width / (window.devicePixelRatio || 1);
+        const canvasHeight = canvas.height / (window.devicePixelRatio || 1);
+        
+        // 计算新的偏移，使鼠标位置保持不变
+        const dx = mouseX - canvasWidth / 2;
+        const dy = mouseY - canvasHeight / 2;
+        
+        显示设置.偏移X = 显示设置.偏移X * zoomFactor - dx * (zoomFactor - 1);
+        显示设置.偏移Y = 显示设置.偏移Y * zoomFactor - dy * (zoomFactor - 1);
+        显示设置.缩放比例 = newZoom;
+        
+        刷新();
+    }
+    
+    // ========== 拖动平移 ==========
+    function 处理拖动开始(event) {
+        拖动状态.正在拖动 = true;
+        拖动状态.起始X = event.clientX;
+        拖动状态.起始Y = event.clientY;
+        拖动状态.起始偏移X = 显示设置.偏移X;
+        拖动状态.起始偏移Y = 显示设置.偏移Y;
+        canvas.style.cursor = 'grabbing';
+        隐藏提示();
+    }
+    
+    function 处理拖动中(event) {
+        if (!拖动状态.正在拖动) return;
+        
+        const dx = event.clientX - 拖动状态.起始X;
+        const dy = event.clientY - 拖动状态.起始Y;
+        
+        显示设置.偏移X = 拖动状态.起始偏移X + dx;
+        显示设置.偏移Y = 拖动状态.起始偏移Y + dy;
+        
+        刷新();
+    }
+    
+    function 处理拖动结束(event) {
+        if (拖动状态.正在拖动) {
+            拖动状态.正在拖动 = false;
+            canvas.style.cursor = 'grab';
+        }
+    }
+    
+    // ========== 重置视图 ==========
+    function 重置视图() {
+        显示设置.缩放比例 = 1;
+        显示设置.偏移X = 0;
+        显示设置.偏移Y = 0;
+        刷新();
+    }
+    
     function 获取位置应力值(screenX, screenY) {
         if (!云图数据?.grid) return null;
         
@@ -842,9 +1028,9 @@ const FieldContour = (function() {
         const transform = 计算变换参数(width, height);
         const { scale, offsetX, offsetY } = transform;
         
-        // 转换为数据坐标
+        // 转换为数据坐标（注意Y轴翻转）
         const dataX = (screenX - offsetX) / scale;
-        const dataY = (screenY - offsetY) / scale;
+        const dataY = (offsetY - screenY) / scale;  // Y轴翻转：offsetY - screenY
         
         // 在网格中查找最近的值
         const grid = 云图数据.grid;
@@ -870,14 +1056,11 @@ const FieldContour = (function() {
             }
         }
         
-        // 如果距离太远，返回null
-        if (minDist > 10) return null;
+        // 如果距离太远，返回null（放宽阈值，单位是数据坐标）
+        const threshold = 5 / scale;  // 5像素对应的数据坐标距离
+        if (minDist > threshold) return null;
         
         return value;
-    }
-    
-    function 处理点击(event) {
-        // 可以添加点击测点的交互
     }
     
     function 显示提示(x, y, value) {
@@ -935,6 +1118,7 @@ const FieldContour = (function() {
         刷新,
         高亮测点,
         清空,
-        导出云图图片
+        导出云图图片,
+        重置视图
     };
 })();

@@ -535,7 +535,7 @@ CommonUtils.makeModalDraggable = function(modalContent, dragHandle) {
 // 自动为新添加的弹窗启用拖拽
 CommonUtils.enableModalDrag = function(modalContent) {
     // 查找标题栏作为拖拽手柄
-    const header = modalContent.querySelector('.modal-header, .field-margin-modal-header');
+    const header = modalContent.querySelector('.modal-header');
     if (header) {
         CommonUtils.makeModalDraggable(modalContent, header);
     }
@@ -550,11 +550,10 @@ CommonUtils.enableModalDrag = function(modalContent) {
                     // 检查是否是弹窗遮罩层（匹配各种弹窗类名）
                     if (node.classList && (
                         node.classList.contains('modal') ||
-                        node.classList.contains('field-spacing-modal') ||
-                        node.classList.contains('field-margin-modal')
+                        node.classList.contains('field-spacing-modal')
                     )) {
                         // 找到弹窗内容
-                        const content = node.querySelector('.modal-content, .field-modal, .field-margin-modal-content');
+                        const content = node.querySelector('.modal-content, .field-modal');
                         if (content) {
                             CommonUtils.enableModalDrag(content);
                         }

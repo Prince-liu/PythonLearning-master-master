@@ -594,7 +594,6 @@ const StressDetectionUniaxialModule = (function() {
                 const format = document.getElementById('field-export-format')?.value || 'csv';
                 const includeWaveforms = document.getElementById('field-export-include-waveforms')?.checked || false;
                 const includeContour = document.getElementById('field-export-include-contour')?.checked || false;
-                const includeStats = document.getElementById('field-export-include-stats')?.checked || false;
                 
                 // 获取Excel格式选项
                 let singleSheet = false;
@@ -611,7 +610,6 @@ const StressDetectionUniaxialModule = (function() {
                         format, 
                         {
                             include_waveforms: includeWaveforms,
-                            include_stats: includeStats,
                             single_sheet: singleSheet  // 传递Excel格式选项
                         }
                     );
@@ -886,14 +884,25 @@ const StressDetectionUniaxialModule = (function() {
     }
     
     async function 更新形状配置(config) {
+        // 🔧 检查形状是否真的改变了
+        const 形状已改变 = !实验状态.形状配置 || 
+                         JSON.stringify(实验状态.形状配置) !== JSON.stringify(config);
+        
         实验状态.形状配置 = config;
-        // 清空测点（形状变化后需要重新生成）
-        实验状态.测点列表 = [];
-        实验状态.已测点列表 = [];
-        // 清空云图（测点清空后云图也应清空）
-        实验状态.云图数据 = null;
-        子模块.云图显示?.清空();
-        刷新数据表格();
+        
+        // 🔧 修复：设置工作流程标志（形状配置有效时标记为已应用）
+        实验状态.工作流程.已应用形状 = !!(config && config.type);
+        
+        // 只有形状真的改变了才清空测点
+        if (形状已改变) {
+            // 清空测点（形状变化后需要重新生成）
+            实验状态.测点列表 = [];
+            实验状态.已测点列表 = [];
+            // 清空云图（测点清空后云图也应清空）
+            实验状态.云图数据 = null;
+            子模块.云图显示?.清空();
+            刷新数据表格();
+        }
         
         // 保存形状配置到数据库
         if (实验状态.当前实验) {
@@ -1096,7 +1105,8 @@ const StressDetectionUniaxialModule = (function() {
             // 🆕 更新工作流程状态
             实验状态.工作流程.已加载实验 = true;
             实验状态.工作流程.已加载标定 = !!实验状态.标定数据;
-            实验状态.工作流程.已应用形状 = !!实验状态.形状配置;
+            // 🔧 修复：检查形状配置是否有效（不仅要存在，还要有type字段）
+            实验状态.工作流程.已应用形状 = !!(实验状态.形状配置 && 实验状态.形状配置.type);
             实验状态.工作流程.已生成测点 = 实验状态.测点列表.length > 0;
             
             // 🆕 根据实验状态设置流程状态和模块锁定
@@ -1177,6 +1187,22 @@ const StressDetectionUniaxialModule = (function() {
                 实验状态.云图数据 = null;
                 子模块.云图显示?.清空();
             }
+            
+            // 🆕 加载实验后默认展开预览和云图面板
+            const previewPanel = document.getElementById('field-preview-panel');
+            const contourPanel = document.getElementById('field-contour-panel');
+            if (previewPanel) {
+                previewPanel.classList.remove('collapsed');
+            }
+            if (contourPanel) {
+                contourPanel.classList.remove('collapsed');
+            }
+            
+            // 🆕 触发画布尺寸调整，确保正确渲染
+            setTimeout(() => {
+                子模块.预览画布?.调整尺寸?.();
+                子模块.云图显示?.调整尺寸?.();
+            }, 100);
             
             显示状态信息('✅', '实验加载成功', data.name, 'success');
             return true;

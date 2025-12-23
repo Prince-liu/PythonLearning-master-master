@@ -19,8 +19,9 @@ class StressFieldInterpolation:
     @staticmethod
     def interpolate_stress_field(points: List[Dict[str, Any]], 
                                  shape_config: Dict[str, Any],
-                                 resolution: int = 100,
-                                 method: str = 'auto') -> Dict[str, Any]:
+                                 resolution: int = 200,
+                                 method: str = 'auto',
+                                 smoothing: bool = True) -> Dict[str, Any]:
         """
         对应力场进行插值
         
@@ -29,6 +30,7 @@ class StressFieldInterpolation:
             shape_config: 形状配置
             resolution: 网格分辨率
             method: 插值方法 'auto' | 'linear' | 'cubic' | 'nearest'
+            smoothing: 是否应用高斯平滑（默认True）
         
         Returns:
             dict: {
@@ -94,12 +96,15 @@ class StressFieldInterpolation:
                         fill_value=np.nan
                     )
                     
-                    # 应用高斯平滑
-                    zi_grid = StressFieldInterpolation._apply_smoothing(zi_grid)
+                    # 根据参数决定是否应用高斯平滑
+                    if smoothing:
+                        zi_grid = StressFieldInterpolation._apply_smoothing(zi_grid)
                     
                     mode = 'contour'
                     confidence = StressFieldInterpolation.get_confidence_level(n_points)
                     message = f"使用 {actual_method} 插值，{n_points} 个测点"
+                    if smoothing:
+                        message += "（已平滑）"
                     
                 except Exception as interp_error:
                     # 插值失败，尝试降级

@@ -208,6 +208,9 @@
     pointer-events: none;
     z-index: 1000;
     max-width: 200px;
+    display: none;  /* 默认隐藏 */
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 /* 实验列表样式 */

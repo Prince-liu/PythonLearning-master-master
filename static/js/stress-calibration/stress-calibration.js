@@ -177,6 +177,12 @@ const StressCalibrationModule = (function() {
         elements.stopMonitorBtn.addEventListener('click', () => StressCalibrationCapture.手动停止监控());
         elements.manageExperimentsBtn.addEventListener('click', () => StressCalibrationManager.打开实验管理对话框());
         
+        // 🆕 信号处理设置按钮
+        const denoiseSettingsBtn = document.getElementById('sd-denoise-settings');
+        if (denoiseSettingsBtn) {
+            denoiseSettingsBtn.addEventListener('click', 打开信号处理设置);
+        }
+        
         // 🆕 监听参数输入框变化，同步更新到当前方向对象
         elements.stressMin.addEventListener('change', 同步参数到当前方向);
         elements.stressMax.addEventListener('change', 同步参数到当前方向);
@@ -683,11 +689,206 @@ const StressCalibrationModule = (function() {
         StressCalibrationCapture.停止实时监控();
     }
     
+    // ========== 信号处理设置 ==========
+    async function 打开信号处理设置() {
+        // 先从后端获取当前配置
+        let currentConfig = {
+            denoise: {
+                method: 'wavelet',
+                wavelet: 'sym6',
+                level: 5,
+                threshold_mode: 'soft'
+            },
+            bandpass: {
+                lowcut: 1.5,
+                highcut: 3.5,
+                order: 6
+            }
+        };
+        
+        try {
+            const denoiseResult = await pywebview.api.get_denoise_config();
+            if (denoiseResult.success && denoiseResult.data) {
+                currentConfig.denoise = denoiseResult.data;
+            }
+            
+            const bandpassResult = await pywebview.api.get_bandpass_config();
+            if (bandpassResult.success && bandpassResult.data) {
+                currentConfig.bandpass = bandpassResult.data;
+            }
+        } catch (error) {
+            console.log('获取配置失败，使用默认值');
+        }
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.id = 'sd-signal-processing-modal';
+        overlay.style.display = 'flex';
+        
+        overlay.innerHTML = `
+            <div class="modal-content field-modal modal-sm">
+                <div class="modal-header">
+                    <h3>🔧 信号处理设置</h3>
+                    <button class="modal-close" onclick="document.getElementById('sd-signal-processing-modal').remove()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📉</span>
+                            <span>降噪参数</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>降噪方法</label>
+                                <select id="sd-denoise-method" class="form-input">
+                                    <option value="wavelet" ${currentConfig.denoise.method === 'wavelet' ? 'selected' : ''}>小波降噪</option>
+                                    <option value="savgol" ${currentConfig.denoise.method === 'savgol' ? 'selected' : ''}>Savitzky-Golay滤波</option>
+                                    <option value="none" ${currentConfig.denoise.method === 'none' ? 'selected' : ''}>不降噪</option>
+                                </select>
+                            </div>
+                            <div id="sd-denoise-wavelet-params">
+                                <div class="form-group">
+                                    <label>小波基</label>
+                                    <select id="sd-denoise-wavelet" class="form-input">
+                                        <option value="sym6" ${currentConfig.denoise.wavelet === 'sym6' ? 'selected' : ''}>sym6</option>
+                                        <option value="db4" ${currentConfig.denoise.wavelet === 'db4' ? 'selected' : ''}>db4</option>
+                                        <option value="coif3" ${currentConfig.denoise.wavelet === 'coif3' ? 'selected' : ''}>coif3</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>分解层数</label>
+                                    <input type="number" id="sd-denoise-level" class="form-input" value="${currentConfig.denoise.level}" min="1" max="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>阈值模式</label>
+                                    <select id="sd-denoise-threshold-mode" class="form-input">
+                                        <option value="soft" ${currentConfig.denoise.threshold_mode === 'soft' ? 'selected' : ''}>软阈值</option>
+                                        <option value="hard" ${currentConfig.denoise.threshold_mode === 'hard' ? 'selected' : ''}>硬阈值</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section" style="margin-top: 15px;">
+                        <div class="form-section-title">
+                            <span class="section-icon">🎛️</span>
+                            <span>带通滤波参数</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>低频截止 (MHz)</label>
+                                <input type="number" id="sd-bandpass-lowcut" class="form-input" value="${currentConfig.bandpass.lowcut}" min="1" max="6" step="0.1">
+                                <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                            </div>
+                            <div class="form-group">
+                                <label>高频截止 (MHz)</label>
+                                <input type="number" id="sd-bandpass-highcut" class="form-input" value="${currentConfig.bandpass.highcut}" min="1" max="6" step="0.1">
+                                <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                            </div>
+                            <div class="form-group">
+                                <label>滤波器阶数</label>
+                                <select id="sd-bandpass-order" class="form-input">
+                                    <option value="2" ${currentConfig.bandpass.order === 2 ? 'selected' : ''}>2阶</option>
+                                    <option value="4" ${currentConfig.bandpass.order === 4 ? 'selected' : ''}>4阶</option>
+                                    <option value="6" ${currentConfig.bandpass.order === 6 ? 'selected' : ''}>6阶（推荐）</option>
+                                    <option value="8" ${currentConfig.bandpass.order === 8 ? 'selected' : ''}>8阶</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('sd-signal-processing-modal').remove()">取消</button>
+                    <button class="btn btn-primary" onclick="StressCalibrationModule.保存信号处理设置()">保存</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+    }
+    
+    function 保存信号处理设置() {
+        // 保存降噪设置
+        const method = document.getElementById('sd-denoise-method')?.value || 'wavelet';
+        const wavelet = document.getElementById('sd-denoise-wavelet')?.value || 'sym6';
+        const level = parseInt(document.getElementById('sd-denoise-level')?.value) || 5;
+        const thresholdMode = document.getElementById('sd-denoise-threshold-mode')?.value || 'soft';
+        
+        // 保存带通滤波设置
+        const lowcut = parseFloat(document.getElementById('sd-bandpass-lowcut')?.value) || 1.5;
+        const highcut = parseFloat(document.getElementById('sd-bandpass-highcut')?.value) || 3.5;
+        const order = parseInt(document.getElementById('sd-bandpass-order')?.value) || 6;
+        
+        // 验证参数
+        if (lowcut >= highcut) {
+            显示状态栏信息('⚠️', '参数错误', '低频截止必须小于高频截止', 'warning');
+            return;
+        }
+        
+        if (lowcut < 1 || lowcut > 6 || highcut < 1 || highcut > 6) {
+            显示状态栏信息('⚠️', '参数错误', '频率范围必须在 1-6 MHz 之间', 'warning');
+            return;
+        }
+        
+        // 调用后端API保存配置
+        (async () => {
+            try {
+                // 保存到本地状态
+                if (!实验状态.信号处理配置) {
+                    实验状态.信号处理配置 = {};
+                }
+                
+                const denoiseEnabled = document.getElementById('sd-auto-denoise')?.checked ?? true;
+                const bandpassEnabled = document.getElementById('sd-bandpass-filter')?.checked ?? true;
+                
+                实验状态.信号处理配置.降噪 = {
+                    enabled: denoiseEnabled,
+                    method: method,
+                    wavelet: wavelet,
+                    level: level,
+                    thresholdMode: thresholdMode
+                };
+                
+                实验状态.信号处理配置.带通滤波 = {
+                    enabled: bandpassEnabled,
+                    lowcut: lowcut,
+                    highcut: highcut,
+                    order: order
+                };
+                
+                // 保存降噪配置到后端
+                await pywebview.api.set_denoise_config({
+                    enabled: denoiseEnabled,
+                    method: method,
+                    wavelet: wavelet,
+                    level: level,
+                    threshold_mode: thresholdMode
+                });
+                
+                // 保存带通滤波配置到后端
+                await pywebview.api.set_bandpass_config({
+                    enabled: bandpassEnabled,
+                    lowcut: lowcut,
+                    highcut: highcut,
+                    order: order
+                });
+                
+                document.getElementById('sd-signal-processing-modal')?.remove();
+                显示状态栏信息('✅', '信号处理设置已保存', 
+                    `带通滤波: ${lowcut}-${highcut} MHz`, 'success');
+            } catch (error) {
+                显示状态栏信息('❌', '保存失败', error.toString(), 'error');
+            }
+        })();
+    }
+    
     // ========== 公共接口 ==========
     return {
         初始化,
         删除测试方向,  // 暴露给HTML onclick使用
         删除数据点,    // 暴露给HTML onclick使用
+        保存信号处理设置,  // 🆕 暴露给设置弹窗使用
         // 以下函数委托给数据管理模块
         删除方向: (实验ID, 方向ID, 方向名称) => StressCalibrationManager.删除方向(实验ID, 方向ID, 方向名称),
         删除全部数据: () => StressCalibrationManager.删除全部数据(),

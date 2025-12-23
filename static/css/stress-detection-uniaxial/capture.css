@@ -83,7 +83,7 @@
 }
 
 .field-capture-actions {
-    margin-bottom: 10px;
+    margin-bottom: 3px;
 }
 
 .field-capture-secondary {
@@ -99,10 +99,15 @@
 
 .field-capture-options {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    margin-bottom: 10px;
+    gap: 10px;
+    margin-bottom: 3px;
     font-size: 12px;
+}
+
+.field-capture-options button {
+    margin-left: auto;
 }
 
 .field-capture-result {

@@ -100,57 +100,55 @@ const FieldLayoutPanel = (function() {
     function 打开边距设置弹窗() {
         // 创建弹窗
         const modal = document.createElement('div');
-        modal.className = 'field-margin-modal';
+        modal.className = 'field-spacing-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;';
+        
         modal.innerHTML = `
-            <div class="field-margin-modal-content">
-                <div class="field-margin-modal-header">
+            <div class="modal-content field-modal" style="max-width:400px;">
+                <div class="modal-header">
                     <span>边距设置</span>
-                    <span class="close-btn">×</span>
+                    <span class="close-btn" style="cursor:pointer;font-size:24px;">×</span>
                 </div>
-                <div class="field-margin-modal-body">
-                    <div class="field-margin-mode-group">
-                        <label class="field-margin-mode-option">
-                            <input type="radio" name="margin-mode" value="uniform" ${边距设置.mode === 'uniform' ? 'checked' : ''}>
+                <div class="modal-body">
+                    <div class="spacing-mode-group">
+                        <label style="display:flex;align-items:center;margin-bottom:15px;">
+                            <input type="radio" name="margin-mode" value="uniform" ${边距设置.mode === 'uniform' ? 'checked' : ''} style="margin-right:8px;">
                             <span>统一边距</span>
                         </label>
-                        <div class="field-margin-uniform-input">
-                            <input type="number" id="margin-uniform-value" value="${边距设置.uniform}" min="0" step="1">
-                            <span>mm</span>
+                        <div class="field-margin-uniform-input" style="margin-left:24px;margin-bottom:20px;${边距设置.mode === 'uniform' ? '' : 'display:none;'}">
+                            <input type="number" id="margin-uniform-value" class="form-input" value="${边距设置.uniform}" min="0" step="1" style="width:100%;">
+                            <small style="color:#666;font-size:11px;display:block;margin-top:4px;">单位: mm</small>
                         </div>
                         
-                        <label class="field-margin-mode-option">
-                            <input type="radio" name="margin-mode" value="separate" ${边距设置.mode === 'separate' ? 'checked' : ''}>
+                        <label style="display:flex;align-items:center;margin-bottom:10px;">
+                            <input type="radio" name="margin-mode" value="separate" ${边距设置.mode === 'separate' ? 'checked' : ''} style="margin-right:8px;">
                             <span>分别设置</span>
                         </label>
-                        <div class="field-margin-separate-inputs ${边距设置.mode === 'separate' ? 'active' : ''}">
-                            <div class="field-margin-separate-row">
-                                <div class="field-margin-separate-item">
-                                    <label>上边距 (mm)</label>
-                                    <input type="number" id="margin-top-value" value="${边距设置.top}" min="0" step="1">
-                                </div>
-                                <div class="field-margin-separate-item">
-                                    <label>下边距 (mm)</label>
-                                    <input type="number" id="margin-bottom-value" value="${边距设置.bottom}" min="0" step="1">
-                                </div>
+                        <div class="field-margin-separate-inputs" style="margin-left:24px;${边距设置.mode === 'separate' ? '' : 'display:none;'}">
+                            <div style="margin-bottom:8px;">
+                                <label style="display:block;margin-bottom:4px;font-size:13px;color:#666;">上边距 (mm)</label>
+                                <input type="number" id="margin-top-value" class="form-input" value="${边距设置.top}" min="0" step="1" style="width:100%;">
                             </div>
-                            <div class="field-margin-separate-row">
-                                <div class="field-margin-separate-item">
-                                    <label>左边距 (mm)</label>
-                                    <input type="number" id="margin-left-value" value="${边距设置.left}" min="0" step="1">
-                                </div>
-                                <div class="field-margin-separate-item">
-                                    <label>右边距 (mm)</label>
-                                    <input type="number" id="margin-right-value" value="${边距设置.right}" min="0" step="1">
-                                </div>
+                            <div style="margin-bottom:8px;">
+                                <label style="display:block;margin-bottom:4px;font-size:13px;color:#666;">下边距 (mm)</label>
+                                <input type="number" id="margin-bottom-value" class="form-input" value="${边距设置.bottom}" min="0" step="1" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:8px;">
+                                <label style="display:block;margin-bottom:4px;font-size:13px;color:#666;">左边距 (mm)</label>
+                                <input type="number" id="margin-left-value" class="form-input" value="${边距设置.left}" min="0" step="1" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:8px;">
+                                <label style="display:block;margin-bottom:4px;font-size:13px;color:#666;">右边距 (mm)</label>
+                                <input type="number" id="margin-right-value" class="form-input" value="${边距设置.right}" min="0" step="1" style="width:100%;">
                             </div>
                         </div>
                     </div>
-                    <div class="field-margin-hint">
+                    <div style="margin-top:10px;padding:8px;background:#f0f9ff;border-radius:4px;font-size:12px;color:#1e40af;">
                         💡 边距是指测点区域到试件边缘的距离
                     </div>
                 </div>
-                <div class="field-margin-modal-footer">
-                    <button class="btn btn-secondary cancel-btn">取消</button>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary close-modal-btn">取消</button>
                     <button class="btn btn-primary confirm-btn">确定</button>
                 </div>
             </div>
@@ -160,24 +158,27 @@ const FieldLayoutPanel = (function() {
         
         // 绑定模式切换
         const modeRadios = modal.querySelectorAll('input[name="margin-mode"]');
+        const uniformInput = modal.querySelector('.field-margin-uniform-input');
         const separateInputs = modal.querySelector('.field-margin-separate-inputs');
         
         modeRadios.forEach(radio => {
             radio.addEventListener('change', function() {
-                if (this.value === 'separate') {
-                    separateInputs.classList.add('active');
+                if (this.value === 'uniform') {
+                    uniformInput.style.display = '';
+                    separateInputs.style.display = 'none';
                 } else {
-                    separateInputs.classList.remove('active');
+                    uniformInput.style.display = 'none';
+                    separateInputs.style.display = '';
                 }
             });
         });
         
         // 绑定关闭按钮
-        modal.querySelector('.close-btn').onclick = () => modal.remove();
-        modal.querySelector('.cancel-btn').onclick = () => modal.remove();
+        modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
+        modal.querySelector('.close-modal-btn').addEventListener('click', () => modal.remove());
         
         // 绑定确定按钮
-        modal.querySelector('.confirm-btn').onclick = () => {
+        modal.querySelector('.confirm-btn').addEventListener('click', () => {
             const mode = modal.querySelector('input[name="margin-mode"]:checked').value;
             
             if (mode === 'uniform') {
@@ -204,7 +205,7 @@ const FieldLayoutPanel = (function() {
             
             modal.remove();
             callbacks?.显示状态信息('✅', '边距设置已更新', '', 'success');
-        };
+        });
         
         // 点击背景关闭
         modal.addEventListener('click', (e) => {

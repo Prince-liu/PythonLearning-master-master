@@ -179,9 +179,9 @@ class WebAPI:
         """🆕 保存基准波形数据（从订阅获取的波形）"""
         return self.calibration.保存基准波形数据(实验ID, 方向名称, 电压数据, 时间数据)
     
-    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据):
+    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None):
         """🆕 保存并分析应力波形数据（从订阅获取的波形）"""
-        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据)
+        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置, 带通滤波配置)
     
     def 线性拟合应力时间差(self, 实验ID, 方向名称):
         """🆕 线性拟合应力-时间差数据"""
@@ -385,6 +385,12 @@ class WebAPI:
                 k if k > 0 else 1.0,  # 如果没有标定数据，使用默认值1.0
                 baseline_stress  # 传递基准点应力值
             )
+            
+            # 🆕 恢复信号处理配置（从 HDF5 config_snapshot）
+            if 'denoise' in config_snapshot:
+                self.field_capture.denoise_config.update(config_snapshot['denoise'])
+            if 'bandpass' in config_snapshot:
+                self.field_capture.bandpass_config.update(config_snapshot['bandpass'])
             
             # 初始化云图生成器
             self.contour_generator = ContourGenerator(exp_id)
@@ -677,7 +683,7 @@ class WebAPI:
         """
         return self.field_capture.capture_point(point_index, auto_denoise)
     
-    def capture_field_point_with_waveform(self, point_index, voltage_data, time_data, sample_rate, auto_denoise=True):
+    def capture_field_point_with_waveform(self, point_index, voltage_data, time_data, sample_rate, auto_denoise=True, bandpass_enabled=True):
         """采集单个测点（新接口，前端传入波形数据）
         
         Args:
@@ -686,6 +692,7 @@ class WebAPI:
             time_data: 时间数据数组
             sample_rate: 采样率
             auto_denoise: 是否自动降噪
+            bandpass_enabled: 是否启用带通滤波
         
         Returns:
             {"success": bool, "data": {...}}
@@ -695,7 +702,7 @@ class WebAPI:
             'voltage': voltage_data,
             'sample_rate': sample_rate
         }
-        return self.field_capture.capture_point_with_waveform(point_index, waveform, auto_denoise)
+        return self.field_capture.capture_point_with_waveform(point_index, waveform, auto_denoise, bandpass_enabled)
     
     def set_baseline_point(self, point_index):
         """设置基准测点（已采集的测点）
@@ -785,6 +792,37 @@ class WebAPI:
         """
         return self.field_capture.set_denoise_config(config)
     
+    def set_bandpass_config(self, config):
+        """设置带通滤波配置
+        
+        Args:
+            config: 带通滤波配置 {enabled, lowcut, highcut, order}
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_capture.set_bandpass_config(config)
+    
+    def get_denoise_config(self):
+        """获取降噪配置
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        if self.field_capture:
+            return {"success": True, "data": self.field_capture.denoise_config}
+        return {"success": False, "message": "未初始化"}
+    
+    def get_bandpass_config(self):
+        """获取带通滤波配置
+        
+        Returns:
+            {"success": bool, "data": {...}}
+        """
+        if self.field_capture:
+            return {"success": True, "data": self.field_capture.bandpass_config}
+        return {"success": False, "message": "未初始化"}
+    
     def test_denoise_effect(self, waveform=None):
         """测试降噪效果
         
@@ -814,7 +852,7 @@ class WebAPI:
         
         Args:
             exp_id: 实验ID (可选，默认当前实验)
-            config: 配置参数 (可选) {method, resolution, vmin, vmax}
+            config: 配置参数 (可选) {method, resolution, smoothing, vmin, vmax}
         
         Returns:
             {"success": bool, "mode": str, "grid": {...}, "method": str, "confidence": str}
@@ -826,7 +864,8 @@ class WebAPI:
         # 解析配置参数
         config = config or {}
         method = config.get('method', 'auto')
-        resolution = config.get('resolution', 100)
+        resolution = config.get('resolution', 200)
+        smoothing = config.get('smoothing', True)  # 默认启用平滑
         
         # 获取已测量的测点
         measured_points = self.field_experiment.db.get_measured_points(exp_id)
@@ -854,7 +893,7 @@ class WebAPI:
         
         # 执行插值
         interp_result = StressFieldInterpolation.interpolate_stress_field(
-            points, shape_config, resolution=resolution, method=method
+            points, shape_config, resolution=resolution, method=method, smoothing=smoothing
         )
         
         return interp_result
@@ -945,8 +984,8 @@ class WebAPI:
         
         options = options or {}
         
-        # 🔧 导出时使用更高分辨率（默认300，比实时显示的100高3倍）
-        export_resolution = options.get('resolution', 300)
+        # 🔧 导出时使用更高分辨率（默认500，比实时显示更清晰）
+        export_resolution = options.get('resolution', 500)
         
         # 获取云图数据（使用高分辨率重新生成）
         contour_result = self.update_field_contour(exp_id, config={'resolution': export_resolution})
