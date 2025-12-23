@@ -689,19 +689,15 @@
                             <div class="field-panel-body">
                                 <div class="field-radio-group">
                                     <label><input type="radio" name="field-calib-source" value="local" checked> 本地实验</label>
-                                    <label><input type="radio" name="field-calib-source" value="file"> 文件导入</label>
                                     <label><input type="radio" name="field-calib-source" value="manual"> 手动输入</label>
                                 </div>
                                 <div id="field-calib-local-panel" class="field-calib-source-panel">
                                     <button id="field-calib-load-local" class="btn btn-primary btn-block btn-sm">选择标定实验</button>
                                 </div>
-                                <div id="field-calib-file-panel" class="field-calib-source-panel" style="display:none;">
-                                    <button id="field-calib-load-file" class="btn btn-primary btn-block btn-sm">选择文件</button>
-                                </div>
                                 <div id="field-calib-manual-panel" class="field-calib-source-panel" style="display:none;">
                                     <div class="form-group">
                                         <label>应力系数 K (MPa/ns)</label>
-                                        <input type="number" id="field-calib-manual-k" class="form-control" step="0.01" placeholder="例如: 3.67">
+                                        <input type="number" id="field-calib-manual-k" class="form-control" step="0.01" placeholder="例如: 2.0">
                                     </div>
                                     <button id="field-calib-confirm-manual" class="btn btn-primary btn-block btn-sm">确认</button>
                                 </div>
@@ -1110,7 +1106,14 @@
                             <div class="field-table-header">
                                 <span>📊 测点数据</span>
                                 <div class="field-table-actions">
-                                    <button class="btn btn-sm" onclick="FieldExperimentManager.导出实验(StressDetectionUniaxialModule.获取当前实验()?.experiment_id)">📤 导出</button>
+                                    <button class="btn btn-sm" onclick="(async function() {
+                                        const exp = StressDetectionUniaxialModule.获取当前实验();
+                                        if (!exp) { StressDetectionUniaxialModule.显示状态信息('⚠️', '请先加载实验', '', 'warning'); return; }
+                                        StressDetectionUniaxialModule.显示状态信息('⏳', '正在导出CSV...', '', 'info', 0);
+                                        const result = await pywebview.api.export_field_data(exp.experiment_id, 'csv', {include_waveforms: false});
+                                        if (result.success) StressDetectionUniaxialModule.显示状态信息('✅', 'CSV已导出', '', 'success', 3000);
+                                        else StressDetectionUniaxialModule.显示状态信息('❌', '导出失败', result.message, 'error');
+                                    })()" title="快速导出表格为CSV">📥 导出CSV</button>
                                 </div>
                             </div>
                             <div class="field-table-wrapper">

@@ -38,12 +38,6 @@ const FieldCalibrationPanel = (function() {
             loadLocalBtn.addEventListener('click', 从本地加载);
         }
         
-        // 从文件导入按钮
-        const loadFileBtn = document.getElementById('field-calib-load-file');
-        if (loadFileBtn) {
-            loadFileBtn.addEventListener('click', 从文件加载);
-        }
-        
         // 手动输入确认按钮
         const confirmManualBtn = document.getElementById('field-calib-confirm-manual');
         if (confirmManualBtn) {
@@ -174,33 +168,6 @@ const FieldCalibrationPanel = (function() {
         }
     }
     
-    // ========== 从文件加载 ==========
-    async function 从文件加载() {
-        try {
-            const result = await pywebview.api.select_calibration_file();
-            
-            if (!result.success) {
-                if (result.message !== '用户取消' && result.message !== '未选择文件') {
-                    callbacks?.显示状态信息('❌', '选择文件失败', result.message, 'error');
-                }
-                return;
-            }
-            
-            // 解析文件
-            const parseResult = await pywebview.api.load_calibration_from_file(result.file_path);
-            
-            if (parseResult.success) {
-                const calibData = parseResult.data || parseResult;
-                更新显示(calibData);
-                callbacks?.更新标定数据(calibData);
-            } else {
-                callbacks?.显示状态信息('❌', '解析文件失败', parseResult.error || parseResult.message, 'error');
-            }
-        } catch (error) {
-            console.error('[标定面板] 从文件加载失败:', error);
-            callbacks?.显示状态信息('❌', '加载失败', error.toString(), 'error');
-        }
-    }
     
     // ========== 手动输入 ==========
     function 确认手动输入() {
@@ -351,10 +318,44 @@ const FieldCalibrationPanel = (function() {
         初始化,
         切换来源,
         从本地加载,
-        从文件加载,
         确认手动输入,
         选择标定数据,
         更新显示,
-        清空
+        清空,
+        // 🆕 禁用/启用面板
+        禁用: function() {
+            // 禁用数据来源单选按钮
+            document.querySelectorAll('input[name="field-calib-source"]').forEach(radio => {
+                radio.disabled = true;
+            });
+            
+            // 禁用所有按钮
+            const buttons = ['field-calib-load-local', 'field-calib-confirm-manual'];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+            });
+            
+            // 禁用手动输入框
+            const manualInput = document.getElementById('field-calib-manual-k');
+            if (manualInput) manualInput.disabled = true;
+        },
+        启用: function() {
+            // 启用数据来源单选按钮
+            document.querySelectorAll('input[name="field-calib-source"]').forEach(radio => {
+                radio.disabled = false;
+            });
+            
+            // 启用所有按钮
+            const buttons = ['field-calib-load-local', 'field-calib-confirm-manual'];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = false;
+            });
+            
+            // 启用手动输入框
+            const manualInput = document.getElementById('field-calib-manual-k');
+            if (manualInput) manualInput.disabled = false;
+        }
     };
 })();

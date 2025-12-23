@@ -15,6 +15,9 @@ const FieldShapePanel = (function() {
     // 布尔运算列表（孔洞/缺口）
     let 布尔运算列表 = [];
     
+    // 形状修改标记（用于检测是否需要重新应用）
+    let 形状已修改 = false;
+    
     // ========== 初始化 ==========
     function 初始化(state, els, cbs) {
         实验状态 = state;
@@ -57,6 +60,51 @@ const FieldShapePanel = (function() {
         if (applyBtn) {
             applyBtn.addEventListener('click', 应用形状);
         }
+        
+        // 监听形状参数变化
+        监听形状参数变化();
+    }
+    
+    // ========== 监听形状参数变化 ==========
+    function 监听形状参数变化() {
+        // 监听所有形状参数输入框
+        const inputs = [
+            'field-shape-rect-width',
+            'field-shape-rect-height',
+            'field-shape-circle-cx',
+            'field-shape-circle-cy',
+            'field-shape-circle-radius',
+            'field-shape-circle-inner',
+            'field-shape-circle-start',
+            'field-shape-circle-end',
+            'field-shape-polygon-vertices'
+        ];
+        
+        inputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => {
+                    标记形状已修改();
+                });
+            }
+        });
+    }
+    
+    // ========== 标记形状已修改 ==========
+    function 标记形状已修改() {
+        形状已修改 = true;
+        
+        // 更新状态徽章
+        const statusBadge = document.getElementById('field-shape-status');
+        if (statusBadge) {
+            statusBadge.textContent = '⚠️ 未应用';
+            statusBadge.className = 'status-badge warning';
+        }
+        
+        // 标记工作流程状态为未完成
+        if (实验状态) {
+            实验状态.工作流程.已应用形状 = false;
+        }
     }
     
     // ========== 切换形状类型 ==========
@@ -77,6 +125,9 @@ const FieldShapePanel = (function() {
         // 清空布尔运算
         布尔运算列表 = [];
         刷新布尔运算列表();
+        
+        // 标记形状已修改
+        标记形状已修改();
         
         // 🆕 移除自动预览：切换形状类型时不再自动预览
         // 实时预览();
@@ -209,6 +260,7 @@ const FieldShapePanel = (function() {
             // 更新状态
             实验状态.形状配置 = config;
             实验状态.工作流程.已应用形状 = true;  // 🆕 标记已完成
+            形状已修改 = false;  // 清除修改标记
             callbacks?.更新形状配置(config);
             
             // 刷新预览画布
@@ -340,6 +392,9 @@ const FieldShapePanel = (function() {
         布尔运算列表.push(hole);
         刷新布尔运算列表();
         
+        // 标记形状已修改
+        标记形状已修改();
+        
         document.getElementById('field-hole-modal')?.remove();
         
         // 更新状态并刷新预览
@@ -353,6 +408,9 @@ const FieldShapePanel = (function() {
     function 删除孔洞(index) {
         布尔运算列表.splice(index, 1);
         刷新布尔运算列表();
+        
+        // 标记形状已修改
+        标记形状已修改();
         
         // 更新状态并刷新预览
         const config = 获取形状配置();
@@ -379,7 +437,7 @@ const FieldShapePanel = (function() {
             return `
                 <div class="modifier-item">
                     <span>${desc}</span>
-                    <button class="btn btn-sm btn-danger" onclick="FieldShapePanel.删除孔洞(${index})">×</button>
+                    <button class="btn btn-sm btn-danger modifier-delete-btn" onclick="FieldShapePanel.删除孔洞(${index})">×</button>
                 </div>
             `;
         }).join('');
@@ -419,6 +477,9 @@ const FieldShapePanel = (function() {
         // 加载布尔运算
         布尔运算列表 = config.modifiers || [];
         刷新布尔运算列表();
+        
+        // 清除修改标记（因为是从数据库加载的已保存配置）
+        形状已修改 = false;
     }
     
     function 清空() {
@@ -489,6 +550,69 @@ const FieldShapePanel = (function() {
         添加孔洞,
         删除孔洞,
         更新显示,
-        清空
+        清空,
+        // 🆕 禁用/启用面板
+        禁用: function() {
+            // 禁用形状类型单选按钮
+            document.querySelectorAll('input[name="field-shape-type"]').forEach(radio => {
+                radio.disabled = true;
+            });
+            
+            // 禁用所有参数输入框
+            const inputs = [
+                'field-shape-rect-width', 'field-shape-rect-height',
+                'field-shape-circle-cx', 'field-shape-circle-cy',
+                'field-shape-circle-radius', 'field-shape-circle-inner',
+                'field-shape-circle-start', 'field-shape-circle-end',
+                'field-shape-polygon-vertices'
+            ];
+            inputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.disabled = true;
+            });
+            
+            // 禁用所有按钮
+            const buttons = ['field-shape-add-hole', 'field-shape-validate', 'field-shape-apply'];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+            });
+            
+            // 禁用布尔运算列表中的删除按钮
+            document.querySelectorAll('.modifier-delete-btn').forEach(btn => {
+                btn.disabled = true;
+            });
+        },
+        启用: function() {
+            // 启用形状类型单选按钮
+            document.querySelectorAll('input[name="field-shape-type"]').forEach(radio => {
+                radio.disabled = false;
+            });
+            
+            // 启用所有参数输入框
+            const inputs = [
+                'field-shape-rect-width', 'field-shape-rect-height',
+                'field-shape-circle-cx', 'field-shape-circle-cy',
+                'field-shape-circle-radius', 'field-shape-circle-inner',
+                'field-shape-circle-start', 'field-shape-circle-end',
+                'field-shape-polygon-vertices'
+            ];
+            inputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.disabled = false;
+            });
+            
+            // 启用所有按钮
+            const buttons = ['field-shape-add-hole', 'field-shape-validate', 'field-shape-apply'];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = false;
+            });
+            
+            // 启用布尔运算列表中的删除按钮
+            document.querySelectorAll('.modifier-delete-btn').forEach(btn => {
+                btn.disabled = false;
+            });
+        }
     };
 })();

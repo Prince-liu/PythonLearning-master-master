@@ -43,6 +43,8 @@
     display: none;
 }
 
+/* 面板锁定状态样式已移除 - 现在直接禁用按钮和输入框 */
+
 .field-panel-body {
     padding: 12px;
     padding-bottom: 14px;

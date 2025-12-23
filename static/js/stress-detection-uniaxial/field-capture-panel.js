@@ -255,7 +255,33 @@ const FieldCapturePanel = (function() {
             return;
         }
         
-        // 检查标定数据是否已加载
+        // ========== 🆕 前置条件检查（开始采集实验前）==========
+        
+        // 1. 检查是否已加载实验
+        if (!实验状态.工作流程.已加载实验) {
+            callbacks?.显示状态信息('⚠️', '请先新建或加载实验', '', 'warning');
+            return;
+        }
+        
+        // 2. 检查是否已加载标定数据
+        if (!实验状态.工作流程.已加载标定) {
+            callbacks?.显示状态信息('⚠️', '请先加载标定数据', '需要标定系数才能计算应力值', 'warning');
+            return;
+        }
+        
+        // 3. 检查是否已应用形状
+        if (!实验状态.工作流程.已应用形状) {
+            callbacks?.显示状态信息('⚠️', '请先应用试件形状', '必须完成形状设置并点击"应用"', 'warning');
+            return;
+        }
+        
+        // 4. 检查是否已生成测点
+        if (!实验状态.工作流程.已生成测点) {
+            callbacks?.显示状态信息('⚠️', '请先生成测点布局', '需要测点才能开始采集', 'warning');
+            return;
+        }
+        
+        // 检查标定数据是否已加载（兼容旧逻辑）
         if (!实验状态.标定数据 || !实验状态.标定系数) {
             callbacks?.显示状态信息('⚠️', '请先加载标定数据', '需要标定系数才能计算应力值', 'warning');
             return;
@@ -414,8 +440,19 @@ const FieldCapturePanel = (function() {
     
     // ========== 自动跳转下一测点 ==========
     function 自动跳转下一测点() {
-        if (实验状态.当前测点索引 < 实验状态.测点列表.length - 1) {
-            实验状态.当前测点索引++;
+        // 查找第一个未测的点
+        let nextIndex = -1;
+        for (let i = 0; i < 实验状态.测点列表.length; i++) {
+            const point = 实验状态.测点列表[i];
+            if (point.status === 'pending') {
+                nextIndex = i;
+                break;
+            }
+        }
+        
+        if (nextIndex !== -1) {
+            // 找到未测的点，跳转过去
+            实验状态.当前测点索引 = nextIndex;
             更新当前测点显示();
         } else {
             // 所有测点已采集完成，提示用户可以点击"完成采集"
@@ -755,6 +792,12 @@ const FieldCapturePanel = (function() {
     async function 设为基准点() {
         if (!实验状态.当前实验) return;
         
+        // 🆕 验证：必须先应用形状
+        if (!实验状态.工作流程.已应用形状) {
+            callbacks?.显示状态信息('⚠️', '请先应用试件形状', '必须先完成形状设置并点击"应用"', 'warning');
+            return;
+        }
+        
         const pointIndex = 实验状态.当前测点索引;
         const point = 实验状态.测点列表[pointIndex];
         
@@ -936,6 +979,12 @@ const FieldCapturePanel = (function() {
             return;
         }
         
+        // 🆕 验证：必须先应用形状
+        if (!实验状态.工作流程.已应用形状) {
+            callbacks?.显示状态信息('⚠️', '请先应用试件形状', '必须先完成形状设置并点击"应用"才能开始采集', 'warning');
+            return;
+        }
+        
         // 🆕 验证：必须先生成测点
         if (!实验状态.工作流程.已生成测点 || !实验状态.测点列表 || 实验状态.测点列表.length === 0) {
             callbacks?.显示状态信息('⚠️', '请先生成测点布局', '必须先完成测点生成才能开始采集', 'warning');
@@ -953,9 +1002,10 @@ const FieldCapturePanel = (function() {
         更新全局控制按钮();
         启用采集按钮();
         
-        // 禁用质量检查模式切换
-        if (typeof StressDetectionUniaxialModule !== 'undefined') {
-            StressDetectionUniaxialModule.禁用质量检查模式切换();
+        // 🆕 锁定配置模块（标定、形状、布点、质量检查模式）
+        const 实验流程状态 = callbacks?.获取实验流程状态?.();
+        if (实验流程状态 === 'configuring') {
+            callbacks?.切换到采集阶段?.();
         }
         
         callbacks?.显示状态信息('✅', '采集已开始', '可以开始采集测点', 'success');
@@ -1022,10 +1072,8 @@ const FieldCapturePanel = (function() {
         更新全局控制按钮();
         禁用采集按钮();
         
-        // 启用质量检查模式切换
+        // 启用重置按钮（质量检查模式保持禁用，只有重置实验才能重新选择）
         if (typeof StressDetectionUniaxialModule !== 'undefined') {
-            StressDetectionUniaxialModule.启用质量检查模式切换();
-            // 启用重置按钮
             StressDetectionUniaxialModule.启用重置按钮();
         }
         
@@ -1208,6 +1256,7 @@ const FieldCapturePanel = (function() {
         下一个测点,
         跳转到测点,
         更新当前测点,
+        更新当前测点显示,  // 🆕 导出此函数，用于基准点设置后刷新显示
         // 设为基准点功能已移除，请使用左侧"基准波形管理"面板
         打开降噪设置,
         保存降噪设置,

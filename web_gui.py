@@ -714,10 +714,7 @@ class WebAPI:
         Returns:
             {"success": bool, "message": str, "recalculated_points": int}
         """
-        print(f"[更换基准点] 开始，point_index={point_index}")
-        result = self.field_capture.set_baseline_point(point_index)
-        print(f"[更换基准点] 结果: success={result.get('success')}, recalculated={result.get('recalculated_points')}")
-        return result
+        return self.field_capture.set_baseline_point(point_index)
     
     def set_baseline_stress_value(self, stress_value):
         """设置基准点应力值（用于绝对应力模式）
@@ -841,7 +838,6 @@ class WebAPI:
         
         # 获取已测量的测点
         measured_points = self.field_experiment.db.get_measured_points(exp_id)
-        print(f"[云图] 实验 {exp_id} 已测量测点数: {len(measured_points) if measured_points else 0}")
         
         if not measured_points:
             return {
@@ -853,11 +849,9 @@ class WebAPI:
         # 加载实验数据获取形状配置
         exp_result = self.field_experiment.db.load_experiment(exp_id)
         if not exp_result['success']:
-            print(f"[云图] 加载实验失败: {exp_result}")
             return exp_result
         
         shape_config = exp_result['data']['experiment'].get('shape_config', {})
-        print(f"[云图] 形状配置: {shape_config}")  # 打印完整配置
         
         # 转换测点格式
         points = [{
@@ -866,15 +860,10 @@ class WebAPI:
             'stress_value': p['stress_value']
         } for p in measured_points]
         
-        print(f"[云图] 测点数据: {len(points)} 个, 应力值范围: {min(p['stress_value'] for p in points if p['stress_value'] is not None):.1f} ~ {max(p['stress_value'] for p in points if p['stress_value'] is not None):.1f}")
-        print(f"[云图] 插值参数: method={method}, resolution={resolution}")
-        
-        # 执行插值（传递配置参数）
+        # 执行插值
         interp_result = StressFieldInterpolation.interpolate_stress_field(
             points, shape_config, resolution=resolution, method=method
         )
-        
-        print(f"[云图] 插值结果: success={interp_result.get('success')}, mode={interp_result.get('mode')}, method={interp_result.get('method')}")
         
         return interp_result
     

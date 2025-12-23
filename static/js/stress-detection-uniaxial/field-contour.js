@@ -1,4 +1,4 @@
-﻿// ==================== 云图显示模块 ====================
+// ==================== 云图显示模块 ====================
 // 功能：云图绘制、色标显示、交互、导出
 
 const FieldContour = (function() {
@@ -269,7 +269,7 @@ const FieldContour = (function() {
     
     // ========== 更新数据 ==========
     function 更新数据(data) {
-
+        // 完全替换云图数据
         云图数据 = data;
         
         // 如果显示等高线，加载等高线数据
@@ -584,7 +584,6 @@ const FieldContour = (function() {
     function 绘制云图(transform) {
         const grid = 云图数据.grid;
         if (!grid || !grid.xi || !grid.yi || !grid.zi) {
-
             return;
         }
         
@@ -597,7 +596,6 @@ const FieldContour = (function() {
         const cols = grid.zi[0]?.length || 0;
         
         if (rows === 0 || cols === 0) {
-
             return;
         }
         
@@ -605,17 +603,11 @@ const FieldContour = (function() {
         const dx = Math.abs((grid.xi[0][1] - grid.xi[0][0]) * scale);
         const dy = Math.abs((grid.yi[1]?.[0] - grid.yi[0][0]) * scale);
 
-        // 统计有效点数
-        let validCount = 0;
-        let drawnCount = 0;
-        
         // 绘制每个网格单元
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < cols; j++) {
                 const z = grid.zi[i][j];
                 if (z === null || z === undefined || isNaN(z)) continue;
-                
-                validCount++;
                 
                 const dataX = grid.xi[i][j];
                 const dataY = grid.yi[i][j];
@@ -630,7 +622,6 @@ const FieldContour = (function() {
                 
                 ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${显示设置.透明度})`;
                 ctx.fillRect(x - dx/2, y - dy/2, dx + 1, dy + 1);
-                drawnCount++;
             }
         }
 

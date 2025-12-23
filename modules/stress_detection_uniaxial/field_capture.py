@@ -72,7 +72,10 @@ class FieldCapture:
         self.calibration_k = k
         self.baseline_stress = baseline_stress
         
-        # 加载基准波形
+        # 先清空旧的基准波形，避免跨实验污染
+        self.baseline_waveform = None
+        
+        # 加载基准波形（如果存在）
         baseline_result = hdf5.load_baseline()
         if baseline_result['success']:
             self.baseline_waveform = baseline_result['data']['waveform']

@@ -1,4 +1,4 @@
-﻿// ==================== 应力场测绘主模块 ====================
+// ==================== 应力场测绘主模块 ====================
 // 功能：协调各子模块、状态管理、标签页切换、初始化
 
 const StressDetectionUniaxialModule = (function() {
@@ -30,6 +30,9 @@ const StressDetectionUniaxialModule = (function() {
             已生成测点: false      // 步骤4：是否已生成测点布局
         }
     };
+    
+    // 🆕 实验流程状态：'idle' | 'configuring' | 'capturing' | 'completed'
+    let 实验流程状态 = 'idle';
     
     // DOM 元素缓存
     let elements = {};
@@ -244,6 +247,8 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 设置基准点 ==========
     async function 设置基准点(pointNum) {
+        console.log(`[基准管理] 开始设置基准点: ${pointNum}`);
+        
         if (!实验状态.当前实验) {
             显示状态信息('⚠️', '请先加载实验', '', 'warning');
             return;
@@ -264,6 +269,8 @@ const StressDetectionUniaxialModule = (function() {
         const point = 实验状态.测点列表.find(p => (p.point_index || p.id) === pointNum);
         const isCollected = point && point.status === 'measured';
         
+        console.log(`[基准管理] 测点 ${pointNum} 已采集: ${isCollected}`);
+        
         if (isCollected) {
             // 已采集，调用后端更换基准点
             const confirmed = await 显示确认对话框(
@@ -274,7 +281,9 @@ const StressDetectionUniaxialModule = (function() {
             if (!confirmed) return;
             
             try {
+                console.log(`[基准管理] 调用后端 set_baseline_point(${pointNum})`);
                 const result = await pywebview.api.set_baseline_point(pointNum);
+                console.log(`[基准管理] set_baseline_point 结果:`, result);
                 
                 if (result.success) {
                     实验状态.基准点ID = pointNum;
@@ -284,6 +293,11 @@ const StressDetectionUniaxialModule = (function() {
                     // 重新加载实验数据以更新应力值
                     const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
                     await 加载实验数据(expId);
+                    
+                    // 🆕 更新采集面板的测点类型标签
+                    if (子模块.采集面板?.更新当前测点显示) {
+                        子模块.采集面板.更新当前测点显示();
+                    }
                     
                     显示状态信息('✅', '基准点已更换', 
                         `测点 ${pointNum}，重新计算了 ${result.recalculated_points || 0} 个测点`, 'success');
@@ -303,6 +317,11 @@ const StressDetectionUniaxialModule = (function() {
                     实验状态.基准点ID = pointNum;
                     实验状态.基准点已采集 = false;
                     更新基准点UI(pointNum, false);
+                    
+                    // 🆕 更新采集面板的测点类型标签
+                    if (子模块.采集面板?.更新当前测点显示) {
+                        子模块.采集面板.更新当前测点显示();
+                    }
                     
                     显示状态信息('✅', '基准点已设置', 
                         `测点 ${pointNum}（待采集）\n采集该测点时将自动设为基准波形`, 'success');
@@ -340,6 +359,11 @@ const StressDetectionUniaxialModule = (function() {
                 
                 // 跳转到该测点
                 子模块.采集面板?.跳转到测点(pointNum - 1);  // 索引从0开始
+                
+                // 🆕 更新采集面板的测点类型标签（跳转后会自动调用，但为了确保更新，这里也调用一次）
+                if (子模块.采集面板?.更新当前测点显示) {
+                    子模块.采集面板.更新当前测点显示();
+                }
                 
                 显示状态信息('ℹ️', '已跳转到基准点', `请采集测点 ${pointNum}`, 'info');
             } else {
@@ -576,6 +600,12 @@ const StressDetectionUniaxialModule = (function() {
                     return;
                 }
                 
+                // 🆕 检查实验是否已完成
+                if (实验状态.当前实验.status !== 'completed') {
+                    显示状态信息('⚠️', '请先完成实验', '点击"完成采集"按钮后才能导出数据', 'warning');
+                    return;
+                }
+                
                 const format = document.getElementById('field-export-format')?.value || 'csv';
                 const includeWaveforms = document.getElementById('field-export-include-waveforms')?.checked || false;
                 const includeContour = document.getElementById('field-export-include-contour')?.checked || false;
@@ -675,7 +705,14 @@ const StressDetectionUniaxialModule = (function() {
                 刷新预览画布: () => 子模块.预览画布?.刷新(),
                 刷新云图: 刷新云图,  // 调用主模块的刷新云图函数，会从后端获取新数据
                 刷新数据表格,
-                加载实验数据  // 用于更换基准点后重新加载数据
+                加载实验数据,  // 用于更换基准点后重新加载数据
+                // 🆕 工作流程控制回调
+                获取实验流程状态: () => 实验流程状态,
+                切换到采集阶段: () => {
+                    实验流程状态 = 'capturing';
+                    锁定配置模块();
+                    启用重置按钮();
+                }
             });
         }
         
@@ -1077,6 +1114,32 @@ const StressDetectionUniaxialModule = (function() {
             实验状态.工作流程.已应用形状 = !!实验状态.形状配置;
             实验状态.工作流程.已生成测点 = 实验状态.测点列表.length > 0;
             
+            // 🆕 根据实验状态设置流程状态和模块锁定
+            const expStatus = data.experiment.status;
+            if (expStatus === 'completed') {
+                // 已完成实验
+                实验流程状态 = 'completed';
+                锁定配置模块();
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = false;
+                }
+                子模块.采集面板?.禁用采集();
+            } else if (expStatus === 'collecting') {
+                // 采集中实验
+                实验流程状态 = 'capturing';
+                锁定配置模块();
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = false;
+                }
+            } else {
+                // 规划中实验
+                实验流程状态 = 'configuring';
+                解锁配置模块();
+                if (elements.resetExperimentBtn) {
+                    elements.resetExperimentBtn.disabled = true;
+                }
+            }
+            
             // 处理基准点
             const savedBaselineId = data.experiment.baseline_point_id;
             if (savedBaselineId) {
@@ -1115,25 +1178,7 @@ const StressDetectionUniaxialModule = (function() {
             子模块.预览画布?.刷新();
             刷新数据表格();
             
-            // 根据实验状态更新按钮
-            const expStatus = data.experiment.status;
-            if (expStatus === 'completed') {
-                // 已完成实验：启用重置按钮，禁用采集按钮
-                if (elements.resetExperimentBtn) {
-                    elements.resetExperimentBtn.disabled = false;
-                }
-                子模块.采集面板?.禁用采集();
-            } else if (expStatus === 'collecting') {
-                // 采集中实验：启用重置按钮
-                if (elements.resetExperimentBtn) {
-                    elements.resetExperimentBtn.disabled = false;
-                }
-            } else {
-                // 规划中实验：禁用重置按钮
-                if (elements.resetExperimentBtn) {
-                    elements.resetExperimentBtn.disabled = true;
-                }
-            }
+            // 🆕 根据实验状态设置流程状态和模块锁定（已移到前面）
             
             // 更新基准点UI
             const baselineQuality = data.baseline_data?.quality || null;
@@ -1192,6 +1237,13 @@ const StressDetectionUniaxialModule = (function() {
         实验状态.应力计算模式 = 'relative';
         实验状态.基准点应力值 = 0;
         
+        // 🆕 重置流程状态
+        实验流程状态 = 'idle';
+        实验状态.工作流程.已加载实验 = false;
+        实验状态.工作流程.已加载标定 = false;
+        实验状态.工作流程.已应用形状 = false;
+        实验状态.工作流程.已生成测点 = false;
+        
         更新实验信息显示();
         更新基准点UI(1, false);
         更新应力计算模式UI();
@@ -1224,6 +1276,12 @@ const StressDetectionUniaxialModule = (function() {
             const result = await pywebview.api.reset_field_experiment(expId);
             
             if (result.success) {
+                // 🆕 切换到配置阶段
+                实验流程状态 = 'configuring';
+                
+                // 🆕 解锁配置模块
+                解锁配置模块();
+                
                 // 重新加载实验数据
                 await 加载实验数据(expId);
                 
@@ -1251,21 +1309,52 @@ const StressDetectionUniaxialModule = (function() {
         }
     }
     
+    // ========== 🆕 锁定配置模块（模块 2,3,4,6）==========
+    function 锁定配置模块() {
+        console.log('[工作流程] 锁定配置模块');
+        
+        // 锁定模块2：标定数据面板
+        子模块.标定面板?.禁用();
+        
+        // 锁定模块3：形状面板
+        子模块.形状面板?.禁用();
+        
+        // 锁定模块4：布点面板
+        子模块.布点面板?.禁用();
+        
+        // 锁定模块6：质量检查模式
+        禁用质量检查模式切换();
+    }
+    
+    // ========== 🆕 解锁配置模块（模块 2,3,4,6）==========
+    function 解锁配置模块() {
+        console.log('[工作流程] 解锁配置模块');
+        
+        // 解锁模块2：标定数据面板
+        子模块.标定面板?.启用();
+        
+        // 解锁模块3：形状面板
+        子模块.形状面板?.启用();
+        
+        // 解锁模块4：布点面板
+        子模块.布点面板?.启用();
+        
+        // 解锁模块6：质量检查模式
+        启用质量检查模式切换();
+    }
+    
     // ========== 刷新云图 ==========
     async function 刷新云图() {
-
         if (!实验状态.当前实验) {
-
             return;
         }
         
         // 获取实验ID（兼容不同字段名）
         const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
         if (!expId) {
-            console.error('[应力场测绘] 无法获取实验ID');
             return;
         }
-
+        
         try {
             const result = await pywebview.api.update_field_contour(expId);
 
@@ -1273,8 +1362,6 @@ const StressDetectionUniaxialModule = (function() {
                 // update_field_contour 直接返回数据，不嵌套在 data 里
                 实验状态.云图数据 = result;
                 子模块.云图显示?.更新数据(result);
-            } else {
-                console.error('[应力场测绘] 刷新云图失败:', result.message);
             }
         } catch (error) {
             console.error('[应力场测绘] 刷新云图失败:', error);

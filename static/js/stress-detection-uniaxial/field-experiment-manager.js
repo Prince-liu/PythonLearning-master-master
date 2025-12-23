@@ -348,6 +348,27 @@ const FieldExperimentManager = (function() {
     
     // ========== 导出实验 ==========
     async function 导出实验(expId) {
+        // 🆕 先获取实验信息，检查状态
+        try {
+            const expResult = await pywebview.api.load_field_experiment(expId);
+            if (!expResult.success) {
+                callbacks?.显示状态信息('❌', '加载实验失败', expResult.message, 'error');
+                return;
+            }
+            
+            const experiment = expResult.data.experiment;
+            
+            // 🆕 检查实验是否已完成
+            if (experiment.status !== 'completed') {
+                callbacks?.显示状态信息('⚠️', '无法导出', '只能导出已完成的实验', 'warning');
+                return;
+            }
+        } catch (error) {
+            console.error('[实验管理] 检查实验状态失败:', error);
+            callbacks?.显示状态信息('❌', '操作失败', error.toString(), 'error');
+            return;
+        }
+        
         // 显示导出选项对话框
         const overlay = document.createElement('div');
         overlay.className = 'modal';

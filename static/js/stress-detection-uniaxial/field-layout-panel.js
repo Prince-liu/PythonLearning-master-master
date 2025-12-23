@@ -1376,6 +1376,51 @@ const FieldLayoutPanel = (function() {
         导入CSV,
         更新显示,
         恢复布点参数,
-        清空
+        清空,
+        // 🆕 禁用/启用面板
+        禁用: function() {
+            // 禁用布点类型单选按钮
+            document.querySelectorAll('input[name="field-layout-type"]').forEach(radio => {
+                radio.disabled = true;
+            });
+            
+            // 禁用所有参数输入框
+            const inputs = document.querySelectorAll('#field-layout-panel input[type="number"]');
+            inputs.forEach(input => input.disabled = true);
+            
+            // 禁用所有按钮
+            const buttons = [
+                'field-layout-margin-btn', 'field-layout-row-spacing-btn',
+                'field-layout-col-spacing-btn', 'field-layout-polar-ppr-btn',
+                'field-layout-polar-rstep-btn', 'field-layout-generate',
+                'field-layout-optimize', 'field-layout-clear', 'field-layout-import'
+            ];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+            });
+        },
+        启用: function() {
+            // 启用布点类型单选按钮
+            document.querySelectorAll('input[name="field-layout-type"]').forEach(radio => {
+                radio.disabled = false;
+            });
+            
+            // 启用所有参数输入框
+            const inputs = document.querySelectorAll('#field-layout-panel input[type="number"]');
+            inputs.forEach(input => input.disabled = false);
+            
+            // 启用所有按钮
+            const buttons = [
+                'field-layout-margin-btn', 'field-layout-row-spacing-btn',
+                'field-layout-col-spacing-btn', 'field-layout-polar-ppr-btn',
+                'field-layout-polar-rstep-btn', 'field-layout-generate',
+                'field-layout-optimize', 'field-layout-clear', 'field-layout-import'
+            ];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = false;
+            });
+        }
     };
 })();
