@@ -247,8 +247,6 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 设置基准点 ==========
     async function 设置基准点(pointNum) {
-        console.log(`[基准管理] 开始设置基准点: ${pointNum}`);
-        
         if (!实验状态.当前实验) {
             显示状态信息('⚠️', '请先加载实验', '', 'warning');
             return;
@@ -269,8 +267,6 @@ const StressDetectionUniaxialModule = (function() {
         const point = 实验状态.测点列表.find(p => (p.point_index || p.id) === pointNum);
         const isCollected = point && point.status === 'measured';
         
-        console.log(`[基准管理] 测点 ${pointNum} 已采集: ${isCollected}`);
-        
         if (isCollected) {
             // 已采集，调用后端更换基准点
             const confirmed = await 显示确认对话框(
@@ -281,9 +277,7 @@ const StressDetectionUniaxialModule = (function() {
             if (!confirmed) return;
             
             try {
-                console.log(`[基准管理] 调用后端 set_baseline_point(${pointNum})`);
                 const result = await pywebview.api.set_baseline_point(pointNum);
-                console.log(`[基准管理] set_baseline_point 结果:`, result);
                 
                 if (result.success) {
                     实验状态.基准点ID = pointNum;
@@ -1311,8 +1305,6 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 🆕 锁定配置模块（模块 2,3,4,6）==========
     function 锁定配置模块() {
-        console.log('[工作流程] 锁定配置模块');
-        
         // 锁定模块2：标定数据面板
         子模块.标定面板?.禁用();
         
@@ -1328,8 +1320,6 @@ const StressDetectionUniaxialModule = (function() {
     
     // ========== 🆕 解锁配置模块（模块 2,3,4,6）==========
     function 解锁配置模块() {
-        console.log('[工作流程] 解锁配置模块');
-        
         // 解锁模块2：标定数据面板
         子模块.标定面板?.启用();
         

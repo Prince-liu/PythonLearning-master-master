@@ -375,7 +375,6 @@ class WebAPI:
         Returns:
             {"success": bool, "data": {...}}
         """
-        print(f"[加载实验] 开始加载实验 {exp_id}")
         result = self.field_experiment.load_experiment(exp_id)
         if result['success']:
             # 同步设置采集器的当前实验
@@ -388,8 +387,6 @@ class WebAPI:
             baseline_stress = exp_data.get('baseline_stress', 0) or 0
             baseline_point_id = exp_data.get('baseline_point_id')
             
-            print(f"[加载实验] baseline_point_id={baseline_point_id}, baseline_stress={baseline_stress}, k={k}")
-            
             # 无论是否有标定数据，都设置采集器的当前实验
             self.field_capture.set_experiment(
                 exp_id, 
@@ -400,9 +397,6 @@ class WebAPI:
             
             # 初始化云图生成器
             self.contour_generator = ContourGenerator(exp_id)
-            print(f"[加载实验] 加载完成")
-        else:
-            print(f"[加载实验] 加载失败: {result.get('message')}")
         
         return result
     
@@ -925,45 +919,25 @@ class WebAPI:
         Returns:
             {"success": bool, "contours": [...], "levels": [...]}
         """
-        print(f"[等高线] 开始生成等高线, exp_id={exp_id}, levels={levels}")
-        
         exp_id = exp_id or self.field_experiment.current_exp_id
         if not exp_id:
-            print("[等高线] 错误: 没有当前实验")
             return {"success": False, "error_code": 1021, "message": "没有当前实验"}
         
         # 先获取云图数据
-        print(f"[等高线] 获取云图数据...")
         contour_result = self.update_field_contour(exp_id)
         
-        print(f"[等高线] 云图数据获取结果: success={contour_result.get('success')}, mode={contour_result.get('mode')}")
-        
         if not contour_result.get('success') or contour_result.get('mode') == 'points_only':
-            print("[等高线] 错误: 没有足够的数据生成等高线")
             return {"success": False, "message": "没有足够的数据生成等高线"}
         
         grid_data = contour_result.get('grid')
         if not grid_data:
-            print("[等高线] 错误: 云图数据不完整")
             return {"success": False, "message": "云图数据不完整"}
-        
-        print(f"[等高线] 网格数据: xi shape={len(grid_data.get('xi', []))}, yi shape={len(grid_data.get('yi', []))}, zi shape={len(grid_data.get('zi', []))}")
         
         # 生成等高线
         if not self.contour_generator:
             self.contour_generator = ContourGenerator(exp_id)
         
-        print(f"[等高线] 调用 generate_contour_lines...")
         result = self.contour_generator.generate_contour_lines(grid_data, levels=levels)
-        
-        print(f"[等高线] 生成结果: success={result.get('success')}")
-        if result.get('success'):
-            print(f"[等高线] 成功生成 {len(result.get('contours', []))} 条等高线")
-            for i, contour in enumerate(result.get('contours', [])[:3]):  # 只打印前3条
-                print(f"[等高线]   等高线 {i}: level={contour.get('level')}, paths={len(contour.get('paths', []))}")
-        else:
-            print(f"[等高线] 失败: {result.get('error', '未知错误')}")
-        
         return result
     
     def export_contour_image(self, exp_id=None, format='png', dpi=300, options=None):
