@@ -234,6 +234,8 @@ const FieldContour = (function() {
                 const result = await pywebview.api.export_contour_image(expId, 'png', 300, {
                     show_points: true,
                     show_colorbar: true,
+                    show_contour_lines: true,  // 显示等高线和数字标签
+                    contour_levels: 8,         // 等高线数量
                     title: 实验状态?.当前实验?.name || ''
                 });
                 
@@ -965,7 +967,7 @@ const FieldContour = (function() {
         const newZoom = 显示设置.缩放比例 * zoomFactor;
         
         // 限制缩放范围
-        if (newZoom < 0.3 || newZoom > 8) return;
+        if (newZoom < 0.3 || newZoom > 10) return;
         
         // 以鼠标位置为中心缩放
         const canvasWidth = canvas.width / (window.devicePixelRatio || 1);

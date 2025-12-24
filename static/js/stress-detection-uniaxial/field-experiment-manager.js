@@ -435,9 +435,14 @@ const FieldExperimentManager = (function() {
             
             let message = `数据已导出: ${result.file_path || result.data?.file_path || ''}`;
             
-            // 导出云图
+            // 导出云图（带等高线和数字标签）
             if (exportContour) {
-                const contourResult = await pywebview.api.export_contour_image(expId, 'png', 300);
+                const contourResult = await pywebview.api.export_contour_image(expId, 'png', 300, {
+                    show_points: true,
+                    show_colorbar: true,
+                    show_contour_lines: true,
+                    contour_levels: 8
+                });
                 if (contourResult.success) {
                     message += `\n云图已导出: ${contourResult.file_path || contourResult.data?.file_path || ''}`;
                 }

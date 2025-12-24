@@ -1034,6 +1034,8 @@ class WebAPI:
             dpi=dpi,
             show_points=options.get('show_points', True),
             show_colorbar=options.get('show_colorbar', True),
+            show_contour_lines=options.get('show_contour_lines', True),
+            contour_levels=options.get('contour_levels', 8),
             title=options.get('title')
         )
     

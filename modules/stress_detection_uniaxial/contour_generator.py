@@ -14,6 +14,7 @@ try:
     matplotlib.use('Agg')  # 非交互式后端
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
+    import matplotlib.patheffects as patheffects
     from matplotlib.patches import Polygon as MplPolygon, Circle, Rectangle
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
@@ -215,6 +216,8 @@ class ContourGenerator:
                             vmax: float = None,
                             show_points: bool = True,
                             show_colorbar: bool = True,
+                            show_contour_lines: bool = True,
+                            contour_levels: int = 8,
                             title: str = None) -> Dict[str, Any]:
         """
         导出云图图片
@@ -230,6 +233,8 @@ class ContourGenerator:
             vmin, vmax: 色标范围
             show_points: 是否显示测点
             show_colorbar: 是否显示色标
+            show_contour_lines: 是否显示等高线和数字标签
+            contour_levels: 等高线数量
             title: 图片标题
         
         Returns:
@@ -267,6 +272,10 @@ class ContourGenerator:
             cmap_name = self.COLORMAPS.get(colormap, self.COLORMAPS[self.DEFAULT_COLORMAP])
             im = ax.pcolormesh(xi, yi, zi, cmap=cmap_name, vmin=vmin, vmax=vmax, shading='auto')
             
+            # 绘制等高线和数字标签
+            if show_contour_lines:
+                self._draw_contour_lines_with_labels(ax, xi, yi, zi, vmin, vmax, contour_levels)
+            
             # 绘制形状轮廓
             self._draw_shape_outline(ax, shape_config)
             
@@ -278,9 +287,11 @@ class ContourGenerator:
                     y = p.get('y') or p.get('y_coord')
                     if x is not None and y is not None:
                         if p.get('status') == 'measured':
-                            ax.plot(x, y, 'ko', markersize=4)
+                            # 绿色填充 + 白色边框，参考图片样式
+                            ax.plot(x, y, 'o', color='#28a745', markersize=6, 
+                                   markeredgecolor='white', markeredgewidth=1.5)
                         elif p.get('status') == 'pending':
-                            ax.plot(x, y, 'o', color='gray', markersize=3, alpha=0.5)
+                            ax.plot(x, y, 'o', color='gray', markersize=4, alpha=0.5)
             
             # 添加色标
             if show_colorbar:
@@ -314,6 +325,46 @@ class ContourGenerator:
                 "success": False,
                 "error": f"导出云图图片失败: {str(e)}"
             }
+    
+    def _draw_contour_lines_with_labels(self, ax, xi: np.ndarray, yi: np.ndarray, 
+                                        zi: np.ndarray, vmin: float, vmax: float,
+                                        levels: int = 8):
+        """
+        绘制等高线和数字标签
+        
+        Args:
+            ax: matplotlib axes对象
+            xi, yi, zi: 网格数据
+            vmin, vmax: 值范围
+            levels: 等高线数量
+        """
+        try:
+            # 计算等高线级别（均匀分布）
+            level_values = np.linspace(vmin, vmax, levels + 2)[1:-1]  # 去掉最小和最大值
+            
+            # 创建掩码数组处理NaN
+            zi_masked = np.ma.masked_invalid(zi)
+            
+            # 绘制等高线 - 黑色细线，半透明
+            contours = ax.contour(xi, yi, zi_masked, levels=level_values, 
+                                 colors='black', linewidths=1.0, alpha=0.5)
+            
+            # 添加等高线标签 - 参考图片样式
+            # 使用 clabel 添加数字标签
+            labels = ax.clabel(contours, inline=True, fontsize=10, fmt='%.1f',
+                              inline_spacing=5)
+            
+            # 设置标签样式：黑色粗体文字
+            for label in labels:
+                label.set_fontweight('bold')
+                label.set_color('black')
+                # 添加白色描边效果增强可读性
+                label.set_path_effects([
+                    patheffects.withStroke(linewidth=2, foreground='white')
+                ])
+                
+        except Exception as e:
+            print(f"绘制等高线失败: {str(e)}")
     
     def _draw_shape_outline(self, ax, shape_config: Dict[str, Any]):
         """在图上绘制形状轮廓"""

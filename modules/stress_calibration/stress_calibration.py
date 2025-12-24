@@ -18,16 +18,46 @@ class StressCalibration:
         self.window = window
         self.data_manager = None  # 延迟初始化
     
-    def 计算互相关声时差(self, 基准波形, 测量波形, 采样率):
+    def 计算互相关声时差(self, 基准波形, 测量波形, 采样率, 基准时间=None, 测量时间=None):
         """
         计算两个波形之间的声时差（使用互相关算法）
         返回: 声时差（纳秒）
+        
+        Args:
+            基准波形: 基准电压数组
+            测量波形: 测量电压数组
+            采样率: 采样率 (Hz)
+            基准时间: 基准波形的时间数组（可选）
+            测量时间: 测量波形的时间数组（可选）
         """
         try:
             from scipy.signal import correlate
             
             基准 = np.array(基准波形)
             测量 = np.array(测量波形)
+            
+            # 如果有时间数组，先对齐到相同的时间范围
+            if 基准时间 is not None and 测量时间 is not None:
+                基准_time = np.array(基准时间)
+                测量_time = np.array(测量时间)
+                
+                if len(基准_time) > 0 and len(测量_time) > 0:
+                    # 找到重叠的时间范围
+                    t_start = max(基准_time[0], 测量_time[0])
+                    t_end = min(基准_time[-1], 测量_time[-1])
+                    
+                    if t_start < t_end:
+                        # 在基准波形中找到对应的索引范围
+                        基准_mask = (基准_time >= t_start) & (基准_time <= t_end)
+                        测量_mask = (测量_time >= t_start) & (测量_time <= t_end)
+                        
+                        基准_aligned = 基准[基准_mask]
+                        测量_aligned = 测量[测量_mask]
+                        
+                        # 只有重叠区域足够大才使用对齐后的数据
+                        if len(基准_aligned) >= 100 and len(测量_aligned) >= 100:
+                            基准 = 基准_aligned
+                            测量 = 测量_aligned
             
             # 确保两个波形长度相同
             最小长度 = min(len(基准), len(测量))
@@ -416,7 +446,9 @@ class StressCalibration:
             互相关结果 = self.计算互相关声时差(
                 基准波形['data'],
                 处理后波形,
-                采样率
+                采样率,
+                基准时间=基准波形.get('time'),
+                测量时间=时间数据
             )
             
             if not 互相关结果['success']:

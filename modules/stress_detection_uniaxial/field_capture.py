@@ -520,13 +520,35 @@ class FieldCapture:
         """
         from scipy.signal import correlate
         
-        基准 = np.array(baseline['voltage'])
-        测量 = np.array(waveform['voltage'])
+        基准_voltage = np.array(baseline['voltage'])
+        测量_voltage = np.array(waveform['voltage'])
+        基准_time = np.array(baseline.get('time', []))
+        测量_time = np.array(waveform.get('time', []))
+        
+        # 如果有时间数组，先对齐到相同的时间范围
+        if len(基准_time) > 0 and len(测量_time) > 0:
+            # 找到重叠的时间范围
+            t_start = max(基准_time[0], 测量_time[0])
+            t_end = min(基准_time[-1], 测量_time[-1])
+            
+            if t_start < t_end:
+                # 在基准波形中找到对应的索引范围
+                基准_mask = (基准_time >= t_start) & (基准_time <= t_end)
+                测量_mask = (测量_time >= t_start) & (测量_time <= t_end)
+                
+                基准_voltage = 基准_voltage[基准_mask]
+                测量_voltage = 测量_voltage[测量_mask]
         
         # 确保长度一致
-        最小长度 = min(len(基准), len(测量))
-        基准 = 基准[:最小长度]
-        测量 = 测量[:最小长度]
+        最小长度 = min(len(基准_voltage), len(测量_voltage))
+        if 最小长度 < 100:
+            # 重叠区域太小，回退到原始方法
+            基准_voltage = np.array(baseline['voltage'])
+            测量_voltage = np.array(waveform['voltage'])
+            最小长度 = min(len(基准_voltage), len(测量_voltage))
+        
+        基准 = 基准_voltage[:最小长度]
+        测量 = 测量_voltage[:最小长度]
         
         # 🆕 带通滤波（如果启用）
         if self.bandpass_config and self.bandpass_config.get('enabled', True):
