@@ -9,6 +9,13 @@ from scipy import interpolate
 from scipy.ndimage import gaussian_filter
 
 
+def _get_point_coords(point: Dict[str, Any]) -> Tuple[float, float]:
+    """获取测点坐标，兼容 x/y 和 x_coord/y_coord 两种字段名"""
+    x = point.get('x', point.get('x_coord', 0))
+    y = point.get('y', point.get('y_coord', 0))
+    return x, y
+
+
 class StressFieldInterpolation:
     """应力场插值类"""
     
@@ -26,7 +33,7 @@ class StressFieldInterpolation:
         对应力场进行插值
         
         Args:
-            points: 测点列表，每个点包含 {x, y, stress_value}
+            points: 测点列表，每个点包含 {x, y, stress_value} 或 {x_coord, y_coord, stress_value}
             shape_config: 形状配置
             resolution: 网格分辨率
             method: 插值方法 'auto' | 'linear' | 'cubic' | 'nearest'
@@ -55,9 +62,10 @@ class StressFieldInterpolation:
                     "grid": None
                 }
             
-            # 提取坐标和应力值
-            x = np.array([p['x'] for p in valid_points])
-            y = np.array([p['y'] for p in valid_points])
+            # 提取坐标和应力值（兼容 x/y 和 x_coord/y_coord）
+            coords = [_get_point_coords(p) for p in valid_points]
+            x = np.array([c[0] for c in coords])
+            y = np.array([c[1] for c in coords])
             z = np.array([p['stress_value'] for p in valid_points])
             
             # 获取边界框
@@ -372,7 +380,8 @@ class StressFieldInterpolation:
             min_dist = float('inf')
             nearest_stress = None
             for p in valid_points:
-                dist = np.sqrt((p['x'] - x)**2 + (p['y'] - y)**2)
+                px, py = _get_point_coords(p)
+                dist = np.sqrt((px - x)**2 + (py - y)**2)
                 if dist < min_dist:
                     min_dist = dist
                     nearest_stress = p['stress_value']
@@ -384,7 +393,8 @@ class StressFieldInterpolation:
             values = []
             
             for p in valid_points:
-                dist = np.sqrt((p['x'] - x)**2 + (p['y'] - y)**2)
+                px, py = _get_point_coords(p)
+                dist = np.sqrt((px - x)**2 + (py - y)**2)
                 if dist < 0.001:  # 非常接近某个测点
                     return p['stress_value']
                 weights.append(1.0 / dist**2)

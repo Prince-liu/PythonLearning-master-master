@@ -710,6 +710,12 @@ class FieldDatabaseManager:
             
             # 插入新的测点
             for idx, point in enumerate(points):
+                # 兼容两种字段名：x/y 和 x_coord/y_coord
+                x_val = point.get('x', point.get('x_coord', 0))
+                y_val = point.get('y', point.get('y_coord', 0))
+                r_val = point.get('r', point.get('r_coord'))
+                theta_val = point.get('theta', point.get('theta_coord'))
+                
                 cursor.execute('''
                     INSERT INTO field_points (
                         experiment_id, point_index, x_coord, y_coord, 
@@ -718,10 +724,10 @@ class FieldDatabaseManager:
                 ''', (
                     exp_id,
                     idx + 1,
-                    point.get('x', 0),
-                    point.get('y', 0),
-                    point.get('r'),
-                    point.get('theta')
+                    x_val,
+                    y_val,
+                    r_val,
+                    theta_val
                 ))
             
             # 更新实验的point_layout字段

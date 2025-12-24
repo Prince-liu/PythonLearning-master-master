@@ -12,6 +12,9 @@ const FieldLayoutPanel = (function() {
     // 当前布点类型
     let 当前布点类型 = 'grid';  // 'grid' | 'polar' | 'adaptive' | 'custom'
     
+    // 顺序优化状态
+    let 已优化顺序 = false;
+    
     // 边距设置
     let 边距设置 = {
         mode: 'uniform',  // 'uniform' | 'separate'
@@ -974,11 +977,13 @@ const FieldLayoutPanel = (function() {
                     // 使用数据库中的完整测点数据
                     实验状态.测点列表 = loadResult.data.points || [];
                     实验状态.工作流程.已生成测点 = true;  // 🆕 标记已完成
+                    已优化顺序 = false;  // 重置优化状态
                     callbacks?.更新测点列表(实验状态.测点列表);
                 } else {
                     // 如果加载失败，使用生成的测点（但可能缺少 point_index）
                     实验状态.测点列表 = points;
                     实验状态.工作流程.已生成测点 = true;  // 🆕 标记已完成
+                    已优化顺序 = false;  // 重置优化状态
                     callbacks?.更新测点列表(points);
                 }
                 
@@ -1005,6 +1010,18 @@ const FieldLayoutPanel = (function() {
             return;
         }
         
+        // 切换逻辑：已优化 -> 恢复原始顺序，未优化 -> 优化
+        if (已优化顺序) {
+            // 恢复原始顺序（按坐标排序）
+            await 恢复原始顺序();
+        } else {
+            // 执行优化
+            await 执行顺序优化();
+        }
+    }
+    
+    // 执行顺序优化
+    async function 执行顺序优化() {
         // 根据布点类型自动选择优化策略
         let strategy;
         switch (当前布点类型) {
@@ -1027,7 +1044,6 @@ const FieldLayoutPanel = (function() {
                 const optimizedPoints = result.points || result.optimized_points || [];
                 
                 // 保存优化后的测点到数据库（保留原布点配置）
-                // 获取当前的布点参数，避免覆盖
                 const currentParams = 获取布点参数();
                 const saveResult = await pywebview.api.save_point_layout(optimizedPoints, 当前布点类型, currentParams);
                 if (!saveResult.success) {
@@ -1044,13 +1060,16 @@ const FieldLayoutPanel = (function() {
                     实验状态.测点列表 = optimizedPoints;
                 }
                 
+                // 更新状态
+                已优化顺序 = true;
+                
                 callbacks?.更新测点列表(实验状态.测点列表);
                 callbacks?.刷新预览画布?.();
                 callbacks?.刷新数据表格?.();
                 
                 const strategyNames = { 'zigzag': '之字形', 'spiral': '螺旋', 'nearest': '最近邻' };
                 callbacks?.显示状态信息('✅', '顺序优化完成', 
-                    `策略: ${strategyNames[strategy] || strategy}, 总距离: ${result.total_distance?.toFixed(1) || '--'} mm`, 'success');
+                    `策略: ${strategyNames[strategy] || strategy}，再次点击可恢复原始顺序`, 'success');
             } else {
                 callbacks?.显示状态信息('❌', '优化失败', result.error || result.message, 'error');
             }
@@ -1060,11 +1079,60 @@ const FieldLayoutPanel = (function() {
         }
     }
     
+    // 恢复原始顺序（按坐标排序：先Y后X）
+    async function 恢复原始顺序() {
+        callbacks?.显示状态信息('⏳', '正在恢复原始顺序...', '', 'info', 0);
+        
+        try {
+            // 按坐标排序：先按Y从小到大，再按X从小到大
+            const sortedPoints = [...实验状态.测点列表].sort((a, b) => {
+                const yDiff = (a.y_coord || 0) - (b.y_coord || 0);
+                if (Math.abs(yDiff) > 0.001) return yDiff;
+                return (a.x_coord || 0) - (b.x_coord || 0);
+            });
+            
+            // 重新编号
+            sortedPoints.forEach((p, i) => {
+                p.point_index = i + 1;
+            });
+            
+            // 保存到数据库
+            const currentParams = 获取布点参数();
+            const saveResult = await pywebview.api.save_point_layout(sortedPoints, 当前布点类型, currentParams);
+            if (!saveResult.success) {
+                callbacks?.显示状态信息('⚠️', '恢复成功但保存失败', saveResult.message, 'warning');
+                return;
+            }
+            
+            // 重新从数据库加载测点
+            const expId = 实验状态.当前实验.id || 实验状态.当前实验.experiment_id;
+            const loadResult = await pywebview.api.load_field_experiment(expId);
+            if (loadResult.success) {
+                实验状态.测点列表 = loadResult.data.points || [];
+            } else {
+                实验状态.测点列表 = sortedPoints;
+            }
+            
+            // 更新状态
+            已优化顺序 = false;
+            
+            callbacks?.更新测点列表(实验状态.测点列表);
+            callbacks?.刷新预览画布?.();
+            callbacks?.刷新数据表格?.();
+            
+            callbacks?.显示状态信息('✅', '已恢复原始顺序', '按坐标排序（先Y后X）', 'success');
+        } catch (error) {
+            console.error('[布点面板] 恢复原始顺序失败:', error);
+            callbacks?.显示状态信息('❌', '恢复失败', error.toString(), 'error');
+        }
+    }
+    
     // ========== 清空测点 ==========
     function 清空测点() {
         实验状态.测点列表 = [];
         实验状态.已测点列表 = [];
         实验状态.当前测点索引 = 0;
+        已优化顺序 = false;  // 重置优化状态
         
         callbacks?.更新测点列表([]);
         callbacks?.刷新预览画布?.();
