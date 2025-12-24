@@ -1077,16 +1077,17 @@ const StressDetectionUniaxialModule = (function() {
             实验状态.当前实验 = data.experiment;
             
             // 🔧 修复问题1：优先从数据库获取标定系数，其次从config_snapshot
+            // 🔧 修复：允许负数标定系数（复合材料单向板在某些方向应力系数为负）
             const dbCalibrationK = data.experiment.calibration_k;
             const snapshotCalibration = data.experiment.config_snapshot?.calibration || null;
             
-            if (dbCalibrationK && dbCalibrationK > 0) {
-                // 数据库有标定系数（手动输入的情况）
+            if (dbCalibrationK && dbCalibrationK !== 0) {
+                // 数据库有标定系数（手动输入的情况，允许负数）
                 实验状态.标定数据 = snapshotCalibration || { k: dbCalibrationK, source: 'manual' };
                 实验状态.标定数据.k = dbCalibrationK;  // 确保使用数据库的值
                 实验状态.标定系数 = dbCalibrationK;
-            } else if (snapshotCalibration && snapshotCalibration.k > 0) {
-                // 从config_snapshot获取
+            } else if (snapshotCalibration && snapshotCalibration.k && snapshotCalibration.k !== 0) {
+                // 从config_snapshot获取（允许负数）
                 实验状态.标定数据 = snapshotCalibration;
                 实验状态.标定系数 = snapshotCalibration.k;
             } else {

@@ -21,15 +21,15 @@ class FieldCapture:
     QUALITY_SCORE_WARNING = 0.6
     
     # 应力值有效范围 (MPa)
-    STRESS_MIN = -500
-    STRESS_MAX = 500
+    STRESS_MIN = -1000
+    STRESS_MAX = 1000
     
     # 时间差有效范围 (ns)
     TIME_DIFF_MIN = -1000
     TIME_DIFF_MAX = 1000
     
     # 相邻点应力差异阈值 (MPa)
-    NEIGHBOR_STRESS_DIFF = 100
+    NEIGHBOR_STRESS_DIFF = 200
     
     def __init__(self, db: FieldDatabaseManager, oscilloscope=None):
         """

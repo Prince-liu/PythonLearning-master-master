@@ -176,15 +176,16 @@ const FieldCalibrationPanel = (function() {
         const kInput = document.getElementById('field-calib-manual-k');
         const k = parseFloat(kInput?.value);
         
-        if (isNaN(k) || k <= 0) {
-            callbacks?.显示状态信息('⚠️', '请输入有效的应力系数', 'K值必须大于0', 'warning');
+        // 🔧 修复：允许负数（复合材料单向板在某些方向应力系数为负）
+        if (isNaN(k) || k === 0) {
+            callbacks?.显示状态信息('⚠️', '请输入有效的应力系数', 'K值不能为0', 'warning');
             kInput?.focus();
             return;
         }
         
-        // 验证范围
-        if (k < 0.1 || k > 10) {
-            callbacks?.显示状态信息('⚠️', '应力系数超出正常范围', '建议范围: 0.1 ~ 10 MPa/ns', 'warning');
+        // 验证范围（允许负数）
+        if (Math.abs(k) < 0.01 || Math.abs(k) > 20) {
+            callbacks?.显示状态信息('⚠️', '应力系数超出正常范围', '建议范围: ±0.01 ~ ±20 MPa/ns', 'warning');
         }
         
         const data = {

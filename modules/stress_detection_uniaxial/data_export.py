@@ -18,11 +18,11 @@ class DataValidator:
     """数据验证器类"""
     
     # 验证阈值
-    STRESS_MIN = -500  # MPa
-    STRESS_MAX = 500   # MPa
+    STRESS_MIN = -1000  # MPa
+    STRESS_MAX = 1000   # MPa
     TIME_DIFF_MIN = -1000  # ns
     TIME_DIFF_MAX = 1000   # ns
-    NEIGHBOR_DIFF_MAX = 100  # MPa（与相邻点差异阈值）
+    NEIGHBOR_DIFF_MAX = 200  # MPa（与相邻点差异阈值）
     MIN_SHAPE_AREA = 100   # mm²
     MIN_POINT_COUNT = 3
     MIN_R_SQUARED = 0.95

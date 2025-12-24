@@ -876,7 +876,7 @@ class ExperimentDataManager:
                     k = 1.0 / (斜率 * 1e9) if 斜率 != 0 else 0
                     
                     拟合结果 = {
-                        'k': abs(k),  # 应力系数（取绝对值）
+                        'k': k,  # 应力系数（保留正负号，复合材料可能为负）
                         'slope': 斜率,
                         'intercept': 截距,
                         'r_squared': R方
