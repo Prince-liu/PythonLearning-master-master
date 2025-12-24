@@ -511,8 +511,8 @@ class WebAPI:
         
         try:
             k = calibration_data.get('k', 0)
-            if k <= 0:
-                return {"success": False, "message": "无效的应力系数"}
+            if k == 0:
+                return {"success": False, "message": "无效的应力系数（不能为0）"}
             
             # 保存到HDF5配置快照
             if self.field_experiment.current_hdf5:
