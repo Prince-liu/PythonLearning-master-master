@@ -687,7 +687,7 @@ const StressDetectionUniaxialModule = (function() {
                 更新测点状态,
                 刷新预览画布: () => 子模块.预览画布?.刷新(),
                 刷新云图: 刷新云图,  // 调用主模块的刷新云图函数，会从后端获取新数据
-                刷新数据表格,
+                刷新数据表格: (自动滚动) => 刷新数据表格(自动滚动),
                 加载实验数据,  // 用于更换基准点后重新加载数据
                 // 🆕 工作流程控制回调
                 获取实验流程状态: () => 实验流程状态,
@@ -952,7 +952,7 @@ const StressDetectionUniaxialModule = (function() {
     }
     
     // ========== 数据表格刷新 ==========
-    function 刷新数据表格() {
+    function 刷新数据表格(自动滚动 = false) {
         if (!elements.dataTableBody) return;
         
         // 获取当前布点类型
@@ -992,11 +992,14 @@ const StressDetectionUniaxialModule = (function() {
             return;
         }
         
+        let 当前行元素 = null;
+        
         实验状态.测点列表.forEach((point, index) => {
             const row = document.createElement('tr');
             row.className = `point-row status-${point.status || 'pending'}`;
             if (index === 实验状态.当前测点索引) {
                 row.classList.add('current');
+                当前行元素 = row;
             }
             
             // 状态图标
@@ -1043,6 +1046,13 @@ const StressDetectionUniaxialModule = (function() {
             
             elements.dataTableBody.appendChild(row);
         });
+        
+        // 🆕 自动滚动到当前测点行
+        if (自动滚动 && 当前行元素) {
+            setTimeout(() => {
+                当前行元素.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
+        }
     }
 
     

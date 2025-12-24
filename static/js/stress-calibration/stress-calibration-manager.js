@@ -125,7 +125,13 @@ const StressCalibrationManager = (function() {
                     // 历史数据标记为已完成，但可以重置后重新实验
                     实验已开始: true,
                     实验已暂停: false,
-                    采集已结束: true
+                    采集已结束: true,
+                    // 🆕 重测状态（加载历史数据时初始化为关闭）
+                    重测状态: {
+                        启用: false,
+                        重测应力值: null,
+                        返回应力值: null
+                    }
                 };
                 
                 实验状态.测试方向列表.push(新方向);
@@ -316,20 +322,26 @@ const StressCalibrationManager = (function() {
         `;
         elements.dataTableBody.appendChild(baselineRow);
         
+        // 🆕 确保数据按应力值排序
+        const 排序后数据 = [...当前方向.应力数据].sort((a, b) => a.应力值 - b.应力值);
+        
         // 添加应力数据点
-        当前方向.应力数据.forEach((data, index) => {
+        排序后数据.forEach((data, index) => {
             const row = document.createElement('tr');
             const 时间差ns = (data.时间差 * 1e9).toFixed(3);
             
-            // 🆕 采集结束后禁用删除按钮
-            const 禁用删除 = 当前方向.采集已结束 ? 'disabled' : '';
-            const 删除按钮样式 = 当前方向.采集已结束 ? 'btn-delete-row disabled' : 'btn-delete-row';
+            // 🆕 采集结束后或重测模式下禁用删除按钮
+            const 禁用删除 = 当前方向.采集已结束 || 当前方向.重测状态?.启用 ? 'disabled' : '';
+            const 删除按钮样式 = (当前方向.采集已结束 || 当前方向.重测状态?.启用) ? 'btn-delete-row disabled' : 'btn-delete-row';
+            
+            // 🆕 找到原始索引用于删除
+            const 原始索引 = 当前方向.应力数据.findIndex(d => d.应力值 === data.应力值);
             
             row.innerHTML = `
                 <td>${data.应力值}</td>
                 <td>${时间差ns}</td>
                 <td>
-                    <button class="${删除按钮样式}" onclick="StressCalibrationModule.删除数据点(${index})" ${禁用删除}>删除</button>
+                    <button class="${删除按钮样式}" onclick="StressCalibrationModule.删除数据点(${原始索引})" ${禁用删除}>删除</button>
                 </td>
             `;
             elements.dataTableBody.appendChild(row);
@@ -345,14 +357,20 @@ const StressCalibrationManager = (function() {
             return;
         }
         
+        // 🆕 重测模式下不允许删除其他点
+        if (当前方向.重测状态?.启用) {
+            显示状态栏信息('⚠️', '请先完成当前重测', '', 'warning', 3000);
+            return;
+        }
+        
         const 数据 = 当前方向.应力数据[index];
         
-        const 确认 = await 显示确认对话框(
-            '🗑️ 删除数据点',
-            `确定要删除数据点 ${数据.应力值} MPa 吗？`
-        );
-        if (!确认) return;
+        // 🆕 显示三选项弹窗
+        const 选择结果 = await 显示删除选项对话框(数据.应力值);
         
+        if (选择结果 === 'cancel') return;
+        
+        // 删除数据点
         当前方向.应力数据.splice(index, 1);
         
         // 如果数据点不足，清除拟合结果
@@ -360,10 +378,82 @@ const StressCalibrationManager = (function() {
             当前方向.拟合结果 = null;
         }
         
+        if (选择结果 === 'recapture') {
+            // 🆕 重新采集模式
+            const 当前应力值 = parseFloat(elements.currentStress.value);
+            
+            // 设置重测状态
+            当前方向.重测状态 = {
+                启用: true,
+                重测应力值: 数据.应力值,
+                返回应力值: 当前应力值
+            };
+            
+            // 更新应力框为重测值
+            elements.currentStress.value = 数据.应力值;
+            
+            // 显示重测标记
+            const recaptureTag = document.getElementById('sd-recaptureTag');
+            if (recaptureTag) {
+                recaptureTag.style.display = 'inline';
+            }
+            
+            显示状态栏信息('🔄', `进入重测模式：${数据.应力值} MPa`, '采集完成后将自动返回', 'info', 3000);
+        } else {
+            // 跳过模式，直接删除
+            显示状态栏信息('✅', `已跳过数据点：${数据.应力值} MPa`, '', 'success', 3000);
+        }
+        
+        // 刷新界面（采集结束前不刷新拟合曲线）
         刷新数据表格();
-        绘制拟合曲线图();
         更新按钮状态();
         更新方向选择器();
+    }
+    
+    // 🆕 显示删除选项对话框（三选项）
+    function 显示删除选项对话框(应力值) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal';
+            overlay.style.display = 'flex';
+            
+            overlay.innerHTML = `
+                <div class="modal-content field-modal modal-sm">
+                    <div class="modal-header">
+                        <h3>🗑️ 删除数据点</h3>
+                        <button class="modal-close">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="confirm-message">确定要删除数据点 <strong>${应力值} MPa</strong> 吗？</p>
+                        <p style="color: #666; font-size: 13px; margin-top: 10px;">请选择后续操作：</p>
+                    </div>
+                    <div class="modal-footer" style="flex-direction: column; gap: 8px;">
+                        <button class="btn btn-primary recapture-btn" style="width: 100%;">🔄 重新采集该点</button>
+                        <button class="btn btn-warning skip-btn" style="width: 100%;">⏭️ 跳过此点</button>
+                        <button class="btn btn-secondary cancel-btn" style="width: 100%;">取消</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(overlay);
+            
+            const cleanup = () => document.body.removeChild(overlay);
+            
+            overlay.querySelector('.modal-close').onclick = () => { cleanup(); resolve('cancel'); };
+            overlay.querySelector('.cancel-btn').onclick = () => { cleanup(); resolve('cancel'); };
+            overlay.querySelector('.recapture-btn').onclick = () => { cleanup(); resolve('recapture'); };
+            overlay.querySelector('.skip-btn').onclick = () => { cleanup(); resolve('skip'); };
+            
+            // ESC键取消
+            const handleKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    resolve('cancel');
+                    document.removeEventListener('keydown', handleKeydown);
+                }
+            };
+            document.addEventListener('keydown', handleKeydown);
+        });
     }
     
     // ========== 拟合曲线 ==========

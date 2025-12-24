@@ -514,6 +514,26 @@
     box-sizing: border-box;
 }
 
+/* 重测标记样式 */
+.stress-input-wrapper {
+    position: relative;
+}
+
+.recapture-tag {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #e67e22;
+    font-size: 12px;
+    font-weight: bold;
+    background: #fef5e7;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #f5d0a9;
+    pointer-events: none;
+}
+
 .stress-input-group .btn {
     flex: 1;
     height: 42px;

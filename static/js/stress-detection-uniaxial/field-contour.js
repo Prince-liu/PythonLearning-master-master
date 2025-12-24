@@ -965,7 +965,7 @@ const FieldContour = (function() {
         const newZoom = 显示设置.缩放比例 * zoomFactor;
         
         // 限制缩放范围
-        if (newZoom < 0.1 || newZoom > 10) return;
+        if (newZoom < 0.3 || newZoom > 8) return;
         
         // 以鼠标位置为中心缩放
         const canvasWidth = canvas.width / (window.devicePixelRatio || 1);

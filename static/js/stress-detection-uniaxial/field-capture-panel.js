@@ -708,8 +708,8 @@ const FieldCapturePanel = (function() {
         // 高亮预览画布中的测点
         callbacks?.刷新预览画布?.();
         
-        // 刷新数据表格
-        callbacks?.刷新数据表格?.();
+        // 刷新数据表格（采集时自动滚动到当前测点）
+        callbacks?.刷新数据表格?.(true);
     }
     
     function 更新当前测点(index) {

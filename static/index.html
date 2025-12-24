@@ -581,7 +581,10 @@
                         <button id="sd-captureBaselineBtn" class="btn btn-primary btn-block" disabled>采集基准波形</button>
                         
                         <label class="config-label">当前应力点 (MPa)</label>
-                        <input type="number" id="sd-currentStress" class="config-input" value="0" min="0">
+                        <div class="stress-input-wrapper">
+                            <input type="number" id="sd-currentStress" class="config-input" value="0" min="0">
+                            <span id="sd-recaptureTag" class="recapture-tag" style="display: none;">(重测)</span>
+                        </div>
                         
                         <button id="sd-captureWaveformBtn" class="btn btn-success btn-block" disabled>采集波形</button>
                         <button id="sd-endCaptureBtn" class="btn btn-secondary btn-block" disabled>采集结束</button>
@@ -1030,8 +1033,8 @@
                                 <div class="field-form-group">
                                     <label>分辨率</label>
                                     <select id="field-contour-resolution" class="field-select">
-                                        <option value="100">低 (100×100)</option>
-                                        <option value="200" selected>中 (200×200)</option>
+                                        <option value="100" selected>低 (100×100)</option>
+                                        <option value="200">中 (200×200)</option>
                                         <option value="300">高 (300×300)</option>
                                     </select>
                                 </div>

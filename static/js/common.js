@@ -53,7 +53,7 @@ const CommonUtils = (function() {
         }
         
         // 减小padding以充分利用空间
-        const padding = { top: 15, right: 60, bottom: 35, left: 40 };
+        const padding = { top: 10, right: 50, bottom: 24, left: 8 };
         const chartWidth = width - padding.left - padding.right;
         const chartHeight = height - padding.top - padding.bottom;
         
@@ -164,14 +164,20 @@ const CommonUtils = (function() {
     // 绘制X轴刻度
     function 绘制X轴刻度(ctx, padding, chartWidth, chartHeight, 时基档位, timeOffset, 时间单位) {
         ctx.fillStyle = '#999999';
-        ctx.font = '12px Consolas, monospace';
+        ctx.font = '11px Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
+        
+        // 根据画布宽度决定刻度密度
+        const 稀疏模式 = chartWidth < 400;
         
         // 绘制刻度 - 每个刻度独立判断单位
         for (let i = 0; i <= 10; i++) {
             // 隐藏最左(i=0)和最右(i=10)的标签
             if (i === 0 || i === 10) continue;
+            
+            // 稀疏模式：只显示奇数刻度（1,3,5,7,9）
+            if (稀疏模式 && i % 2 === 0) continue;
             
             const x = padding.left + (chartWidth / 10) * i;
             const 格数 = i - 5;
@@ -199,19 +205,19 @@ const CommonUtils = (function() {
                 else if (绝对值_秒 <= 999e-6) {
                     显示单位 = 'μs';
                     显示值 = 时间值_秒 * 1e6;
-                    格式化值 = 显示值.toFixed(2).replace(/\.?0+$/, '');
+                    格式化值 = 显示值.toFixed(1).replace(/\.0$/, '');
                 }
                 // 999μs以上到999ms显示ms
                 else if (绝对值_秒 <= 999e-3) {
                     显示单位 = 'ms';
                     显示值 = 时间值_秒 * 1e3;
-                    格式化值 = 显示值.toFixed(2).replace(/\.?0+$/, '');
+                    格式化值 = 显示值.toFixed(1).replace(/\.0$/, '');
                 }
                 // 999ms以上显示s
                 else {
                     显示单位 = 's';
                     显示值 = 时间值_秒;
-                    格式化值 = 显示值.toFixed(2).replace(/\.?0+$/, '');
+                    格式化值 = 显示值.toFixed(1).replace(/\.0$/, '');
                 }
                 
                 显示文本 = 格式化值 + 显示单位;
@@ -219,7 +225,7 @@ const CommonUtils = (function() {
                 ctx.fillStyle = '#999999';
             }
             
-            ctx.fillText(显示文本, x, padding.top + chartHeight + 8);
+            ctx.fillText(显示文本, x, padding.top + chartHeight + 6);
             
             // 重置样式
             if (i === 5) {

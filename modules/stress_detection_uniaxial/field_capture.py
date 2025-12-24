@@ -669,7 +669,7 @@ class FieldCapture:
     @staticmethod
     def calculate_snr(voltage: np.ndarray) -> float:
         """
-        计算信噪比
+        计算信噪比（针对超声波信号优化）
         
         Args:
             voltage: 电压数组
@@ -677,19 +677,43 @@ class FieldCapture:
         Returns:
             float: SNR (dB)
         """
-        # 简化的SNR计算：信号功率 / 噪声功率
-        # 假设信号在中间部分，噪声在两端
         n = len(voltage)
-        noise_region = np.concatenate([voltage[:n//10], voltage[-n//10:]])
-        signal_region = voltage[n//4:3*n//4]
         
-        noise_power = np.var(noise_region)
-        signal_power = np.var(signal_region)
+        # 方法：使用信号峰值与背景噪声的比值
+        # 1. 计算信号的绝对值
+        abs_voltage = np.abs(voltage)
         
-        if noise_power < 1e-10:
-            return 60.0  # 非常高的SNR
+        # 2. 找到峰值位置
+        peak_idx = np.argmax(abs_voltage)
+        peak_value = abs_voltage[peak_idx]
         
-        snr = 10 * np.log10(signal_power / noise_power)
+        # 3. 估计噪声：使用信号到达前的区域（前5%）或最小的10%数据
+        # 取前5%作为噪声区域（假设信号还没到达）
+        noise_end = max(n // 20, 100)  # 至少100个点
+        if peak_idx > noise_end * 2:
+            # 峰值在后面，前面是噪声区
+            noise_region = voltage[:noise_end]
+        else:
+            # 峰值在前面，使用最小幅度区域估计噪声
+            # 对信号进行滑动窗口，找到方差最小的区域
+            window_size = n // 20
+            min_var = float('inf')
+            noise_region = voltage[:window_size]
+            for i in range(0, n - window_size, window_size // 2):
+                window = voltage[i:i + window_size]
+                var = np.var(window)
+                if var < min_var:
+                    min_var = var
+                    noise_region = window
+        
+        # 4. 计算噪声RMS
+        noise_rms = np.sqrt(np.mean(noise_region ** 2))
+        if noise_rms < 1e-10:
+            noise_rms = 1e-10  # 避免除零
+        
+        # 5. 计算SNR = 20 * log10(peak / noise_rms)
+        snr = 20 * np.log10(peak_value / noise_rms)
+        
         return max(0, min(60, snr))  # 限制在0-60 dB
     
     def _validate_point_data(self, point_index: int, time_diff: float, 

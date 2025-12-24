@@ -255,7 +255,13 @@ const StressCalibrationModule = (function() {
             实验ID: null,        // 该方向的实验ID
             实验已开始: false,   // 是否点击过"开始实验"
             实验已暂停: false,   // 是否点击过"暂停实验"
-            采集已结束: false    // 是否点击过"采集结束"
+            采集已结束: false,   // 是否点击过"采集结束"
+            // 🆕 重测状态
+            重测状态: {
+                启用: false,
+                重测应力值: null,
+                返回应力值: null
+            }
         });
         
         // 切换到新添加的方向
@@ -378,6 +384,17 @@ const StressCalibrationModule = (function() {
         elements.stressMin.value = 当前方向.应力范围[0];
         elements.stressMax.value = 当前方向.应力范围[1];
         elements.stressStep.value = 当前方向.应力步长;
+        
+        // 🆕 处理重测状态显示
+        const recaptureTag = document.getElementById('sd-recaptureTag');
+        if (recaptureTag) {
+            if (当前方向.重测状态?.启用) {
+                recaptureTag.style.display = 'inline';
+                elements.currentStress.value = 当前方向.重测状态.重测应力值;
+            } else {
+                recaptureTag.style.display = 'none';
+            }
+        }
         
         // 🆕 更新拟合公式显示
         if (当前方向.拟合结果) {
@@ -545,6 +562,7 @@ const StressCalibrationModule = (function() {
         停止实时监控();
         更新按钮状态();
         更新方向选择器();
+        StressCalibrationManager.刷新数据表格();  // 🆕 刷新表格以禁用删除按钮
         
         // 🆕 自动绘制拟合曲线
         if (当前方向.应力数据.length >= 2) {
@@ -589,6 +607,19 @@ const StressCalibrationModule = (function() {
                 当前方向.实验已开始 = false;
                 当前方向.实验已暂停 = false;
                 当前方向.采集已结束 = false;
+                
+                // 🆕 清除重测状态
+                当前方向.重测状态 = {
+                    启用: false,
+                    重测应力值: null,
+                    返回应力值: null
+                };
+                
+                // 🆕 隐藏重测标记
+                const recaptureTag = document.getElementById('sd-recaptureTag');
+                if (recaptureTag) {
+                    recaptureTag.style.display = 'none';
+                }
                 
                 // 重置当前应力点
                 elements.currentStress.value = 当前方向.应力范围[0];
