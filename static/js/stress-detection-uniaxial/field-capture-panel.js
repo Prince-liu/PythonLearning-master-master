@@ -243,7 +243,7 @@ const FieldCapturePanel = (function() {
     let 正在采集 = false;
     
     // ========== 测点采集 ==========
-    async function 采集当前测点() {
+    async function 采集当前测点(isRecapture = false) {
         // 防抖：如果正在采集，忽略新的点击
         if (正在采集) {
             callbacks?.显示状态信息('⚠️', '正在采集中，请稍候...', '', 'warning');
@@ -292,13 +292,15 @@ const FieldCapturePanel = (function() {
             return;
         }
         
-        // 检查是否所有测点都已采集完成
-        const totalPoints = 实验状态.测点列表.length;
-        const measuredCount = 实验状态.已测点列表?.length || 0;
-        if (measuredCount >= totalPoints) {
-            callbacks?.显示状态信息('🎉', '所有测点已采集完成', 
-                `共 ${totalPoints} 个测点，如需重新采集请点击"重测"`, 'success', 5000);
-            return;
+        // 检查是否所有测点都已采集完成（重测时跳过此检查）
+        if (!isRecapture) {
+            const totalPoints = 实验状态.测点列表.length;
+            const measuredCount = 实验状态.已测点列表?.length || 0;
+            if (measuredCount >= totalPoints) {
+                callbacks?.显示状态信息('🎉', '所有测点已采集完成', 
+                    `共 ${totalPoints} 个测点，如需重新采集请点击"重测"`, 'success', 5000);
+                return;
+            }
         }
         
         const pointIndex = 实验状态.当前测点索引;
@@ -394,9 +396,15 @@ const FieldCapturePanel = (function() {
                     : data.quality_score >= 0.5 ? '★★★☆☆' 
                     : '★★☆☆☆';
                 
+                // 检查数据异常（优先级高于质量警告）
+                const hasDataAnomaly = data.validation_warnings && data.validation_warnings.length > 0;
+                const hasQualityIssue = data.quality_score < 0.6;
+                
                 if (qualityMode === 'strict') {
-                    // 严格模式：质量不合格时弹出警告对话框
-                    if (data.quality_score < 0.6) {
+                    // 严格模式：数据异常或质量不合格时弹出警告对话框
+                    if (hasDataAnomaly) {
+                        显示数据异常警告(data, pointIndex + 1);
+                    } else if (hasQualityIssue) {
                         显示质量警告(data);
                     } else {
                         callbacks?.显示状态信息('✅', '采集成功', 
@@ -406,9 +414,18 @@ const FieldCapturePanel = (function() {
                         自动跳转下一测点();
                     }
                 } else {
-                    // 快速模式：只显示简短提示，自动继续
-                    if (data.quality_score < 0.6) {
-                        callbacks?.显示状态信息('⚠️', `#${pointIndex + 1} ${qualityStars}`, '质量较差', 'warning');
+                    // 快速模式：只显示状态栏警告，自动继续
+                    if (hasDataAnomaly) {
+                        // 数据异常：红色/黄色警告，显示3秒
+                        const hasSevereError = data.validation_warnings.some(w => w.severity === 'error');
+                        const warningMsg = 生成快速模式警告信息(data.validation_warnings);
+                        if (hasSevereError) {
+                            callbacks?.显示状态信息('❌', `#${pointIndex + 1} 数据异常`, warningMsg, 'error', 3000);
+                        } else {
+                            callbacks?.显示状态信息('⚠️', `#${pointIndex + 1} 数据异常`, warningMsg, 'warning', 3000);
+                        }
+                    } else if (hasQualityIssue) {
+                        callbacks?.显示状态信息('⚠️', `#${pointIndex + 1} ${qualityStars}`, '质量较差', 'warning', 3000);
                     } else {
                         callbacks?.显示状态信息('✅', `#${pointIndex + 1} ${qualityStars}`, '', 'success');
                     }
@@ -542,8 +559,8 @@ const FieldCapturePanel = (function() {
     
     // ========== 重测测点 ==========
     async function 重测当前测点() {
-        // 直接重新采集当前测点
-        await 采集当前测点();
+        // 直接重新采集当前测点（传入 isRecapture=true 跳过完成检查）
+        await 采集当前测点(true);
     }
     
     // ========== 测点导航 ==========
@@ -787,6 +804,142 @@ const FieldCapturePanel = (function() {
     
     async function 跳过并关闭警告() {
         document.getElementById('field-quality-warning-modal')?.remove();
+        await 跳过当前测点();
+    }
+    
+    // ========== 数据异常警告 ==========
+    function 显示数据异常警告(data, pointId) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.id = 'field-data-anomaly-modal';
+        overlay.style.display = 'flex';
+        
+        // 生成异常原因列表
+        const warnings = data.validation_warnings || [];
+        let warningsHtml = '';
+        
+        warnings.forEach(w => {
+            const icon = w.severity === 'error' ? '🔴' : '🟡';
+            const colorClass = w.severity === 'error' ? 'error' : 'warning';
+            warningsHtml += `
+                <div class="anomaly-item ${colorClass}">
+                    <span class="icon">${icon}</span>
+                    <span class="message">${w.message}</span>
+                </div>
+            `;
+        });
+        
+        // 判断是否有严重错误
+        const hasSevereError = warnings.some(w => w.severity === 'error');
+        const headerClass = hasSevereError ? 'error' : 'warning';
+        const headerIcon = hasSevereError ? '❌' : '⚠️';
+        const headerTitle = hasSevereError ? '数据严重异常' : '数据异常警告';
+        
+        overlay.innerHTML = `
+            <div class="modal-content field-modal modal-sm">
+                <div class="modal-header ${headerClass}">
+                    <h3>${headerIcon} ${headerTitle}</h3>
+                </div>
+                <div class="modal-body">
+                    <div class="form-section" style="margin-bottom: 12px;">
+                        <div class="form-section-title">
+                            <span class="section-icon">📊</span>
+                            <span>测量结果 (测点 #${pointId})</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="quality-warning-info" style="background: transparent; padding: 0;">
+                                <div class="quality-item">
+                                    <span class="label">时间差:</span>
+                                    <span class="value ${Math.abs(data.time_diff) > 1000 ? 'bad' : ''}">${data.time_diff != null ? Number(data.time_diff).toFixed(2) : '--'} ns</span>
+                                </div>
+                                <div class="quality-item">
+                                    <span class="label">应力值:</span>
+                                    <span class="value ${Math.abs(data.stress) > 500 ? 'bad' : ''}">${data.stress != null ? Number(data.stress).toFixed(1) : '--'} MPa</span>
+                                </div>
+                                <div class="quality-item">
+                                    <span class="label">质量评分:</span>
+                                    <span class="value">${data.quality_score != null ? (Number(data.quality_score) * 100).toFixed(0) : '--'}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section" style="margin-bottom: 12px;">
+                        <div class="form-section-title">
+                            <span class="section-icon">❗</span>
+                            <span>异常原因</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="anomaly-list">
+                                ${warningsHtml}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section" style="margin-bottom: 0;">
+                        <div class="form-section-title">
+                            <span class="section-icon">💡</span>
+                            <span>可能原因</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="quality-warning-message" style="padding: 10px; background: #f5f5f5; border-radius: 6px; border-left: 3px solid #9e9e9e;">
+                                <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #666;">
+                                    <li>探头耦合不良或有气泡</li>
+                                    <li>探头位置偏移或未放稳</li>
+                                    <li>信号干扰或噪声过大</li>
+                                    <li>带通滤波参数不匹配</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer anomaly-footer">
+                    <button class="btn btn-secondary" onclick="FieldCapturePanel.接受异常数据()">接受数据</button>
+                    <button class="btn btn-warning" onclick="FieldCapturePanel.重测并关闭异常警告()">重新采集</button>
+                    <button class="btn btn-danger" onclick="FieldCapturePanel.跳过并关闭异常警告()">跳过测点</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+    }
+    
+    function 生成快速模式警告信息(warnings) {
+        if (!warnings || warnings.length === 0) return '';
+        
+        // 优先显示严重错误
+        const severeWarning = warnings.find(w => w.severity === 'error');
+        if (severeWarning) {
+            if (severeWarning.type === 'time_diff_out_of_range') {
+                return `时间差超范围 (${Number(severeWarning.value).toFixed(0)} ns)`;
+            } else if (severeWarning.type === 'stress_out_of_range') {
+                return `应力超范围 (${Number(severeWarning.value).toFixed(0)} MPa)`;
+            }
+        }
+        
+        // 显示警告
+        const warning = warnings[0];
+        if (warning.type === 'neighbor_diff_too_large') {
+            return `与前点差异过大 (Δσ=${Number(warning.value).toFixed(0)} MPa)`;
+        }
+        
+        return '数据异常';
+    }
+    
+    function 接受异常数据() {
+        document.getElementById('field-data-anomaly-modal')?.remove();
+        
+        // 自动跳转到下一个测点
+        自动跳转下一测点();
+    }
+    
+    async function 重测并关闭异常警告() {
+        document.getElementById('field-data-anomaly-modal')?.remove();
+        await 重测当前测点();
+    }
+    
+    async function 跳过并关闭异常警告() {
+        document.getElementById('field-data-anomaly-modal')?.remove();
         await 跳过当前测点();
     }
     
@@ -1431,6 +1584,10 @@ const FieldCapturePanel = (function() {
         接受低质量数据,
         重测并关闭警告,
         跳过并关闭警告,
+        // 数据异常警告相关
+        接受异常数据,
+        重测并关闭异常警告,
+        跳过并关闭异常警告,
         禁用采集,
         更新显示,
         清空,

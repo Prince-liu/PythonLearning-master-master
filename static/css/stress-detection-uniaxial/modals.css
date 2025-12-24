@@ -52,6 +52,73 @@
 
 .quality-warning-message p { margin: 4px 0; }
 
+/* 数据异常警告样式 */
+.anomaly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.anomaly-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.anomaly-item.error {
+    background: #ffebee;
+    border-left: 3px solid #f44336;
+}
+
+.anomaly-item.warning {
+    background: #fff8e1;
+    border-left: 3px solid #ff9800;
+}
+
+.anomaly-item .icon {
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.anomaly-item .message {
+    flex: 1;
+    color: #333;
+    line-height: 1.4;
+}
+
+/* 弹窗头部颜色变体 */
+.modal-header.error {
+    background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+    color: white;
+}
+
+.modal-header.error h3 {
+    color: white;
+}
+
+.modal-header.error .modal-close {
+    color: white;
+}
+
+.modal-header.error .modal-close:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+/* 数据异常弹窗底部按钮平均分配 */
+.modal-footer.anomaly-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: stretch;
+}
+
+.modal-footer.anomaly-footer .btn {
+    flex: 1;
+    min-width: 0;
+}
+
 /* 边距设置显示区域 */
 .field-margin-display {
     display: flex;

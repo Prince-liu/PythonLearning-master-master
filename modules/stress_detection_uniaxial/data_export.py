@@ -22,7 +22,7 @@ class DataValidator:
     STRESS_MAX = 500   # MPa
     TIME_DIFF_MIN = -1000  # ns
     TIME_DIFF_MAX = 1000   # ns
-    NEIGHBOR_DIFF_MAX = 50  # MPa
+    NEIGHBOR_DIFF_MAX = 100  # MPa（与相邻点差异阈值）
     MIN_SHAPE_AREA = 100   # mm²
     MIN_POINT_COUNT = 3
     MIN_R_SQUARED = 0.95

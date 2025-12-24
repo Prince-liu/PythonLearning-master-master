@@ -29,7 +29,7 @@ class FieldCapture:
     TIME_DIFF_MAX = 1000
     
     # 相邻点应力差异阈值 (MPa)
-    NEIGHBOR_STRESS_DIFF = 50
+    NEIGHBOR_STRESS_DIFF = 100
     
     def __init__(self, db: FieldDatabaseManager, oscilloscope=None):
         """
@@ -220,17 +220,15 @@ class FieldCapture:
                 # σ = σ_基准 + k × Δt
                 stress = self.baseline_stress + self.calibration_k * time_diff
             
-            # 验证数据
-            is_suspicious = False
-            validation_warnings = []
-            
-            if not (self.STRESS_MIN <= stress <= self.STRESS_MAX):
-                is_suspicious = True
-                validation_warnings.append(f"应力值 {stress:.1f} MPa 超出正常范围")
-            
-            if not (self.TIME_DIFF_MIN <= time_diff <= self.TIME_DIFF_MAX):
-                is_suspicious = True
-                validation_warnings.append(f"时间差 {time_diff:.2f} ns 超出正常范围")
+            # 验证数据（增强版）
+            validation_result = self._validate_point_data(
+                point_index=point_index,
+                time_diff=time_diff,
+                stress=stress,
+                is_baseline=is_baseline
+            )
+            is_suspicious = validation_result['is_suspicious']
+            validation_warnings = validation_result['warnings']
             
             # 保存波形数据
             analysis = {
@@ -377,17 +375,15 @@ class FieldCapture:
                 # 恢复原始配置
                 self.bandpass_config['enabled'] = original_bandpass_enabled
             
-            # 验证数据
-            is_suspicious = False
-            validation_warnings = []
-            
-            if not (self.STRESS_MIN <= stress <= self.STRESS_MAX):
-                is_suspicious = True
-                validation_warnings.append(f"应力值 {stress:.1f} MPa 超出正常范围")
-            
-            if not (self.TIME_DIFF_MIN <= time_diff <= self.TIME_DIFF_MAX):
-                is_suspicious = True
-                validation_warnings.append(f"时间差 {time_diff:.2f} ns 超出正常范围")
+            # 验证数据（增强版）
+            validation_result = self._validate_point_data(
+                point_index=point_index,
+                time_diff=time_diff,
+                stress=stress,
+                is_baseline=is_baseline
+            )
+            is_suspicious = validation_result['is_suspicious']
+            validation_warnings = validation_result['warnings']
             
             # 保存波形数据
             analysis = {
@@ -578,7 +574,7 @@ class FieldCapture:
             np.ndarray: 滤波后的信号
         """
         try:
-            from scipy.signal import butter, filtfilt
+            from scipy.signal import butter, sosfiltfilt
             
             # 获取滤波参数（MHz转Hz）
             lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6
@@ -595,11 +591,12 @@ class FieldCapture:
                 # 参数无效，返回原始信号
                 return signal
             
-            # 设计巴特沃斯带通滤波器
-            b, a = butter(order, [low, high], btype='band')
+            # 设计巴特沃斯带通滤波器（使用SOS形式，数值更稳定）
+            # 注意：高阶滤波器使用 b,a 形式会有数值不稳定问题
+            sos = butter(order, [low, high], btype='band', output='sos')
             
-            # 零相位滤波（前向后向滤波）
-            filtered = filtfilt(b, a, signal)
+            # 零相位滤波（前向后向滤波，使用SOS形式）
+            filtered = sosfiltfilt(sos, signal)
             
             return filtered
             
@@ -694,6 +691,122 @@ class FieldCapture:
         
         snr = 10 * np.log10(signal_power / noise_power)
         return max(0, min(60, snr))  # 限制在0-60 dB
+    
+    def _validate_point_data(self, point_index: int, time_diff: float, 
+                            stress: float, is_baseline: bool) -> Dict[str, Any]:
+        """
+        验证测点数据（增强版）
+        
+        检查项目：
+        1. 时间差是否在 ±1000 ns 范围内
+        2. 应力值是否在 ±500 MPa + 基准应力 范围内
+        3. 与前一个已测点的应力差异是否超过 200 MPa
+        
+        Args:
+            point_index: 测点索引
+            time_diff: 时间差 (ns)
+            stress: 应力值 (MPa)
+            is_baseline: 是否是基准点
+        
+        Returns:
+            dict: {
+                "is_suspicious": bool,
+                "warnings": [{"type": str, "severity": str, "message": str, "value": any}, ...]
+            }
+        """
+        warnings = []
+        is_suspicious = False
+        
+        # 基准点不做验证
+        if is_baseline:
+            return {"is_suspicious": False, "warnings": []}
+        
+        # 1. 检查时间差范围
+        if not (self.TIME_DIFF_MIN <= time_diff <= self.TIME_DIFF_MAX):
+            is_suspicious = True
+            warnings.append({
+                "type": "time_diff_out_of_range",
+                "severity": "error",  # 严重
+                "message": f"时间差 {time_diff:.2f} ns 超出正常范围 (±{self.TIME_DIFF_MAX} ns)",
+                "value": time_diff,
+                "limit": self.TIME_DIFF_MAX
+            })
+        
+        # 2. 检查应力值范围（考虑绝对应力模式）
+        stress_min = self.STRESS_MIN + self.baseline_stress
+        stress_max = self.STRESS_MAX + self.baseline_stress
+        
+        if not (stress_min <= stress <= stress_max):
+            is_suspicious = True
+            warnings.append({
+                "type": "stress_out_of_range",
+                "severity": "error",  # 严重
+                "message": f"应力值 {stress:.1f} MPa 超出正常范围 ({stress_min:.0f} ~ {stress_max:.0f} MPa)",
+                "value": stress,
+                "limit_min": stress_min,
+                "limit_max": stress_max
+            })
+        
+        # 3. 检查与前一个已测点的差异
+        prev_stress = self._get_previous_measured_stress(point_index)
+        if prev_stress is not None:
+            stress_diff = abs(stress - prev_stress)
+            if stress_diff > self.NEIGHBOR_STRESS_DIFF:
+                is_suspicious = True
+                warnings.append({
+                    "type": "neighbor_diff_too_large",
+                    "severity": "warning",  # 警告
+                    "message": f"与前一测点应力差异过大 (Δσ = {stress_diff:.1f} MPa，阈值 {self.NEIGHBOR_STRESS_DIFF} MPa)",
+                    "value": stress_diff,
+                    "prev_stress": prev_stress,
+                    "limit": self.NEIGHBOR_STRESS_DIFF
+                })
+        
+        return {
+            "is_suspicious": is_suspicious,
+            "warnings": warnings
+        }
+    
+    def _get_previous_measured_stress(self, current_point_index: int) -> Optional[float]:
+        """
+        获取前一个已测点的应力值
+        
+        逻辑：
+        - 如果当前是第一个点且不是基准点，返回基准点应力
+        - 否则返回前一个已测点的应力值
+        - 如果没有前一个已测点，返回 None
+        
+        Args:
+            current_point_index: 当前测点索引
+        
+        Returns:
+            float or None: 前一个已测点的应力值
+        """
+        if not self.current_exp_id:
+            return None
+        
+        # 获取所有已测点
+        measured_points = self.db.get_measured_points(self.current_exp_id)
+        if not measured_points:
+            # 没有已测点，返回基准应力（如果有的话）
+            return self.baseline_stress if self.baseline_waveform is not None else None
+        
+        # 按测点索引排序
+        measured_points.sort(key=lambda p: p['point_index'])
+        
+        # 找到当前点之前的最后一个已测点
+        prev_point = None
+        for point in measured_points:
+            if point['point_index'] < current_point_index:
+                prev_point = point
+            else:
+                break
+        
+        if prev_point and prev_point.get('stress_value') is not None:
+            return prev_point['stress_value']
+        
+        # 如果没有前一个已测点，返回基准应力
+        return self.baseline_stress if self.baseline_waveform is not None else None
     
     # ==================== 基准波形管理 ====================
     
