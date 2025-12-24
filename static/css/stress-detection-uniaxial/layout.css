@@ -78,7 +78,8 @@
 
 .field-experiment-info {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     font-size: 12px;
     color: #666;
     margin-bottom: 10px;

@@ -178,7 +178,8 @@ class FieldDatabaseManager:
                 'probe_model': 'TEXT',
                 'sample_material': 'TEXT',
                 'sample_thickness': 'REAL',
-                'config_snapshot': 'TEXT'
+                'config_snapshot': 'TEXT',
+                'wedge_angle': 'REAL'  # 楔块角度/临界折射角度 (度)
             }
             
             # 添加缺失的列
@@ -287,8 +288,8 @@ class FieldDatabaseManager:
                 INSERT INTO field_experiments (
                     id, name, stress_direction, status, created_at, 
                     test_purpose, sample_material, sample_thickness, 
-                    operator, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    operator, notes, wedge_angle
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 exp_id,
                 experiment_data.get('name', f'实验 {exp_id}'),
@@ -299,7 +300,8 @@ class FieldDatabaseManager:
                 experiment_data.get('sample_material', ''),
                 experiment_data.get('sample_thickness'),
                 experiment_data.get('operator', ''),
-                experiment_data.get('notes', '')
+                experiment_data.get('notes', ''),
+                experiment_data.get('wedge_angle')
             ))
             
             self.conn.commit()
@@ -599,7 +601,8 @@ class FieldDatabaseManager:
                 'stress_direction', 'shape_config', 'point_layout', 'baseline_point_id',
                 'baseline_stress', 'status', 'notes', 'config_snapshot',
                 'operator', 'temperature', 'humidity', 'scope_model',
-                'probe_model', 'sample_material', 'sample_thickness', 'test_purpose'
+                'probe_model', 'sample_material', 'sample_thickness', 'test_purpose',
+                'wedge_angle'
             ]
             
             set_clauses = []

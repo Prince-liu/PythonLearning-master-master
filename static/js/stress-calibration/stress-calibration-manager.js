@@ -98,6 +98,13 @@ const StressCalibrationManager = (function() {
     
     // ========== 加载历史实验 ==========
     async function 加载实验方向(实验ID) {
+        // 检查是否已经加载过该实验
+        const 已存在 = 实验状态.测试方向列表.some(方向 => 方向.实验ID === 实验ID);
+        if (已存在) {
+            显示状态栏信息('ℹ️', '该实验已在前台', '', 'info', 2000);
+            return;
+        }
+        
         try {
             // 调用后端加载完整实验数据
             const result = await pywebview.api.加载实验完整数据(实验ID);

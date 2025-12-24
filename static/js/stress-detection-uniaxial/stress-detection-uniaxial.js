@@ -758,9 +758,12 @@ const StressDetectionUniaxialModule = (function() {
         if (!实验状态.当前实验) {
             if (elements.experimentName) elements.experimentName.textContent = '未加载实验';
             if (elements.experimentStatus) elements.experimentStatus.textContent = '--';
-            if (elements.experimentProgress) elements.experimentProgress.textContent = '0/0';
+            const sampleMaterialEl = document.getElementById('field-sample-material');
+            if (sampleMaterialEl) sampleMaterialEl.textContent = '--';
             const stressDirectionEl = document.getElementById('field-stress-direction');
             if (stressDirectionEl) stressDirectionEl.textContent = '--';
+            const wedgeAngleEl = document.getElementById('field-wedge-angle');
+            if (wedgeAngleEl) wedgeAngleEl.textContent = '--';
             return;
         }
         
@@ -779,16 +782,23 @@ const StressDetectionUniaxialModule = (function() {
                 elements.experimentStatus.classList.add(`status-${exp.status}`);
             }
         }
-        if (elements.experimentProgress) {
-            const total = 实验状态.测点列表.length;
-            const measured = 实验状态.已测点列表.length;
-            elements.experimentProgress.textContent = `${measured}/${total}`;
+        
+        // 显示材料
+        const sampleMaterialEl = document.getElementById('field-sample-material');
+        if (sampleMaterialEl) {
+            sampleMaterialEl.textContent = exp.sample_material || '--';
         }
         
         // 显示应力方向
         const stressDirectionEl = document.getElementById('field-stress-direction');
         if (stressDirectionEl) {
             stressDirectionEl.textContent = exp.stress_direction || '--';
+        }
+        
+        // 显示楔块角度
+        const wedgeAngleEl = document.getElementById('field-wedge-angle');
+        if (wedgeAngleEl) {
+            wedgeAngleEl.textContent = exp.wedge_angle != null ? exp.wedge_angle : '--';
         }
     }
     

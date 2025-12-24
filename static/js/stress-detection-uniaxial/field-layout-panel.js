@@ -1027,7 +1027,9 @@ const FieldLayoutPanel = (function() {
                 const optimizedPoints = result.points || result.optimized_points || [];
                 
                 // 保存优化后的测点到数据库（保留原布点配置）
-                const saveResult = await pywebview.api.save_point_layout(optimizedPoints, 当前布点类型, {});
+                // 获取当前的布点参数，避免覆盖
+                const currentParams = 获取布点参数();
+                const saveResult = await pywebview.api.save_point_layout(optimizedPoints, 当前布点类型, currentParams);
                 if (!saveResult.success) {
                     callbacks?.显示状态信息('⚠️', '优化成功但保存失败', saveResult.message, 'warning');
                     return;

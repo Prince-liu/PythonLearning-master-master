@@ -129,6 +129,75 @@ class DataExporter:
         """
         self.db = db
     
+    def _merge_hdf5_config(self, exp_id: str, exp_data: Dict) -> Dict:
+        """
+        从HDF5读取config_snapshot并合并到exp_data
+        
+        Args:
+            exp_id: 实验ID
+            exp_data: 实验数据字典
+        
+        Returns:
+            合并后的exp_data
+        """
+        try:
+            hdf5 = FieldExperimentHDF5(exp_id)
+            if hdf5.file_exists():
+                hdf5_config = hdf5.load_config_snapshot()
+                if hdf5_config.get('success') and hdf5_config.get('data'):
+                    # 合并HDF5中的配置到exp_data
+                    if not exp_data.get('config_snapshot'):
+                        exp_data['config_snapshot'] = {}
+                    exp_data['config_snapshot'].update(hdf5_config['data'])
+        except Exception as e:
+            # 如果HDF5读取失败，继续使用数据库中的数据
+            print(f"Warning: Failed to load HDF5 config: {e}")
+        return exp_data
+    
+    def _infer_grid_params_from_points(self, points: List[Dict], shape_config: Dict) -> Dict:
+        """
+        从测点数据反推网格布点参数（用于历史数据兼容）
+        
+        Args:
+            points: 测点列表
+            shape_config: 形状配置
+        
+        Returns:
+            推断出的布点参数
+        """
+        if not points:
+            return {}
+        
+        try:
+            # 获取所有 X 和 Y 坐标
+            x_coords = sorted(set(p.get('x_coord', 0) for p in points if p.get('x_coord') is not None))
+            y_coords = sorted(set(p.get('y_coord', 0) for p in points if p.get('y_coord') is not None))
+            
+            if not x_coords or not y_coords:
+                return {}
+            
+            params = {}
+            
+            # 计算行列数
+            params['rows'] = len(y_coords)
+            params['cols'] = len(x_coords)
+            
+            # 计算边距（从形状边界到最外侧测点的距离）
+            if shape_config.get('type') == 'rectangle':
+                width = shape_config.get('width', 0)
+                height = shape_config.get('height', 0)
+                
+                if width > 0 and height > 0:
+                    params['margin_left'] = round(min(x_coords), 2)
+                    params['margin_right'] = round(width - max(x_coords), 2)
+                    params['margin_top'] = round(min(y_coords), 2)
+                    params['margin_bottom'] = round(height - max(y_coords), 2)
+            
+            return params
+        except Exception as e:
+            print(f"Warning: Failed to infer grid params: {e}")
+            return {}
+    
     def export_to_csv(self, exp_id: str, output_path: str = None,
                      include_quality: bool = True) -> Dict[str, Any]:
         """
@@ -150,6 +219,9 @@ class DataExporter:
             
             exp_data = result['data']['experiment']
             points = result['data']['points']
+            
+            # 尝试从HDF5读取完整的config_snapshot（包含layout配置）
+            exp_data = self._merge_hdf5_config(exp_id, exp_data)
             
             # 生成输出路径
             if output_path is None:
@@ -174,9 +246,131 @@ class DataExporter:
                 # 写入元数据
                 writer.writerow(['实验ID', exp_id])
                 writer.writerow(['实验名称', exp_data.get('name', '')])
+                writer.writerow(['状态', exp_data.get('status', '')])
                 writer.writerow(['创建时间', exp_data.get('created_at', '')])
+                writer.writerow(['完成时间', exp_data.get('completed_at', '')])
                 writer.writerow(['试件材料', exp_data.get('sample_material', '')])
+                writer.writerow(['试件厚度(mm)', exp_data.get('sample_thickness', '')])
+                writer.writerow(['楔块角度(°)', exp_data.get('wedge_angle', '')])
+                writer.writerow(['应力方向', exp_data.get('stress_direction', '')])
+                writer.writerow(['实验目的', exp_data.get('test_purpose', '')])
+                writer.writerow(['操作员', exp_data.get('operator', '')])
+                writer.writerow(['环境温度(°C)', exp_data.get('temperature', '')])
+                writer.writerow(['环境湿度(%)', exp_data.get('humidity', '')])
+                writer.writerow(['示波器型号', exp_data.get('scope_model', '')])
+                writer.writerow(['探头型号', exp_data.get('probe_model', '')])
+                writer.writerow(['备注', exp_data.get('notes', '')])
                 writer.writerow(['导出时间', datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+                writer.writerow([])
+                
+                # 写入标定信息
+                writer.writerow(['--- 标定信息 ---'])
+                writer.writerow(['标定实验ID', exp_data.get('calibration_exp_id', '')])
+                writer.writerow(['标定方向', exp_data.get('calibration_direction', '')])
+                writer.writerow(['标定系数(MPa/ns)', exp_data.get('calibration_k', '')])
+                
+                # 从HDF5配置快照中获取更详细的标定信息
+                calibration_config = exp_data.get('config_snapshot', {}).get('calibration', {})
+                if calibration_config:
+                    writer.writerow(['拟合优度(R²)', calibration_config.get('r_squared', '')])
+                    writer.writerow(['斜率', calibration_config.get('slope', '')])
+                    writer.writerow(['截距', calibration_config.get('intercept', '')])
+                
+                writer.writerow([])
+                
+                # 写入基准点信息
+                baseline_point_id = exp_data.get('baseline_point_id')
+                baseline_stress = exp_data.get('baseline_stress')
+                if baseline_point_id is not None or baseline_stress is not None:
+                    writer.writerow(['--- 基准点信息 ---'])
+                    writer.writerow(['基准点ID', baseline_point_id if baseline_point_id else ''])
+                    writer.writerow(['基准应力(MPa)', baseline_stress if baseline_stress else ''])
+                    writer.writerow([])
+                
+                # 写入形状配置
+                writer.writerow(['--- 形状配置 ---'])
+                shape_type_map = {'rectangle': '矩形', 'circle': '圆形', 'polygon': '多边形'}
+                shape_type = shape_config.get('type', '')
+                writer.writerow(['形状类型', shape_type_map.get(shape_type, shape_type)])
+                
+                if shape_type == 'rectangle':
+                    writer.writerow(['宽度(mm)', shape_config.get('width', '')])
+                    writer.writerow(['高度(mm)', shape_config.get('height', '')])
+                elif shape_type == 'circle':
+                    writer.writerow(['半径(mm)', shape_config.get('radius', '')])
+                    center = shape_config.get('center', {})
+                    writer.writerow(['圆心X(mm)', center.get('x', '')])
+                    writer.writerow(['圆心Y(mm)', center.get('y', '')])
+                elif shape_type == 'polygon':
+                    vertices = shape_config.get('vertices', [])
+                    writer.writerow(['顶点数', len(vertices)])
+                
+                # 写入孔洞信息
+                modifiers = shape_config.get('modifiers', [])
+                holes = [m for m in modifiers if m.get('op') == 'subtract']
+                if holes:
+                    writer.writerow(['孔洞数量', len(holes)])
+                    for i, hole in enumerate(holes, 1):
+                        hole_shape = hole.get('shape', 'circle')
+                        if hole_shape == 'circle':
+                            writer.writerow([f'孔洞{i}类型', '圆形'])
+                            writer.writerow([f'孔洞{i}圆心X(mm)', hole.get('centerX', '')])
+                            writer.writerow([f'孔洞{i}圆心Y(mm)', hole.get('centerY', '')])
+                            writer.writerow([f'孔洞{i}半径(mm)', hole.get('radius', '')])
+                        elif hole_shape == 'rectangle':
+                            writer.writerow([f'孔洞{i}类型', '矩形'])
+                            writer.writerow([f'孔洞{i}中心X(mm)', hole.get('centerX', '')])
+                            writer.writerow([f'孔洞{i}中心Y(mm)', hole.get('centerY', '')])
+                            writer.writerow([f'孔洞{i}宽度(mm)', hole.get('width', '')])
+                            writer.writerow([f'孔洞{i}高度(mm)', hole.get('height', '')])
+                
+                writer.writerow([])
+                
+                # 写入布点配置
+                writer.writerow(['--- 布点配置 ---'])
+                layout_config = exp_data.get('config_snapshot', {}).get('layout', {})
+                layout_type_map = {'grid': '网格布点', 'polar': '极坐标布点', 'custom': '自定义布点'}
+                layout_type = layout_config.get('type', '')
+                writer.writerow(['布点方式', layout_type_map.get(layout_type, layout_type)])
+                
+                # 获取布点参数（可能在params子字典中）
+                layout_params = layout_config.get('params', {})
+                
+                # 如果 params 为空，尝试从测点数据反推
+                if not layout_params and points and layout_type == 'grid':
+                    layout_params = self._infer_grid_params_from_points(points, shape_config)
+                
+                if layout_type == 'grid':
+                    # 兼容性适配：前端可能使用不同的参数名
+                    # 前端: rows, cols, margin_left, margin_right, margin_top, margin_bottom
+                    # 后端: spacing_x, spacing_y, margins: {left, right, top, bottom}
+                    rows = layout_params.get('rows', '')
+                    cols = layout_params.get('cols', '')
+                    spacing_x = layout_params.get('spacing_x') or layout_params.get('cols', '')
+                    spacing_y = layout_params.get('spacing_y') or layout_params.get('rows', '')
+                    
+                    # 如果有行列数，优先显示
+                    if rows:
+                        writer.writerow(['行数', rows])
+                    if cols:
+                        writer.writerow(['列数', cols])
+                    
+                    # 边距信息
+                    margins = layout_params.get('margins', {})
+                    margin_left = margins.get('left') if margins else layout_params.get('margin_left', '')
+                    margin_right = margins.get('right') if margins else layout_params.get('margin_right', '')
+                    margin_top = margins.get('top') if margins else layout_params.get('margin_top', '')
+                    margin_bottom = margins.get('bottom') if margins else layout_params.get('margin_bottom', '')
+                    
+                    if margin_left or margin_right or margin_top or margin_bottom:
+                        writer.writerow(['左边距(mm)', margin_left])
+                        writer.writerow(['右边距(mm)', margin_right])
+                        writer.writerow(['上边距(mm)', margin_top])
+                        writer.writerow(['下边距(mm)', margin_bottom])
+                elif layout_type == 'polar':
+                    writer.writerow(['半径步长(mm)', layout_params.get('radius_step', '')])
+                    writer.writerow(['角度步长(°)', layout_params.get('angle_step', '')])
+                    writer.writerow(['起始半径(mm)', layout_params.get('start_radius', '')])
                 writer.writerow([])
                 
                 # 写入统计信息
@@ -195,6 +389,17 @@ class DataExporter:
                     writer.writerow(['应力范围(MPa)', f'{max(stress_values) - min(stress_values):.2f}'])
                 
                 writer.writerow([])
+                
+                # 写入云图配置（如果有）
+                metadata = result['data'].get('metadata')
+                if metadata:
+                    writer.writerow(['--- 云图配置 ---'])
+                    writer.writerow(['插值方法', metadata.get('interpolation_method', '')])
+                    writer.writerow(['网格分辨率', metadata.get('grid_resolution', '')])
+                    writer.writerow(['色标范围最小值(MPa)', metadata.get('vmin', '')])
+                    writer.writerow(['色标范围最大值(MPa)', metadata.get('vmax', '')])
+                    writer.writerow([])
+                
                 writer.writerow(['--- 测点数据 ---'])
                 
                 # 写入表头
@@ -205,6 +410,9 @@ class DataExporter:
                 
                 if include_quality:
                     headers.extend(['质量评分', 'SNR(dB)', '可疑'])
+                
+                # 添加跳过原因列
+                headers.append('跳过原因')
                 
                 writer.writerow(headers)
                 
@@ -235,6 +443,9 @@ class DataExporter:
                             f"{point.get('snr', 0):.1f}" if point.get('snr') else '',
                             '是' if point.get('is_suspicious') else ''
                         ])
+                    
+                    # 添加跳过原因
+                    row.append(point.get('skip_reason', ''))
                     
                     writer.writerow(row)
             
@@ -284,6 +495,9 @@ class DataExporter:
             exp_data = result['data']['experiment']
             points = result['data']['points']
             
+            # 尝试从HDF5读取完整的config_snapshot（包含layout配置）
+            exp_data = self._merge_hdf5_config(exp_id, exp_data)
+            
             # 生成输出路径
             if output_path is None:
                 output_dir = 'data/uniaxial_field/exports'
@@ -309,6 +523,7 @@ class DataExporter:
                     ('创建时间', exp_data.get('created_at', '')),
                     ('试件材料', exp_data.get('sample_material', '')),
                     ('试件厚度(mm)', exp_data.get('sample_thickness', '')),
+                    ('楔块角度(°)', exp_data.get('wedge_angle', '')),
                     ('操作员', exp_data.get('operator', '')),
                 ]
                 
@@ -408,6 +623,7 @@ class DataExporter:
                     ('状态', exp_data.get('status', '')),
                     ('试件材料', exp_data.get('sample_material', '')),
                     ('试件厚度(mm)', exp_data.get('sample_thickness', '')),
+                    ('楔块角度(°)', exp_data.get('wedge_angle', '')),
                     ('实验目的', exp_data.get('test_purpose', '')),
                     ('操作员', exp_data.get('operator', '')),
                     ('环境温度(°C)', exp_data.get('temperature', '')),
@@ -427,10 +643,10 @@ class DataExporter:
                 
                 if use_polar:
                     headers = ['#', 'R(mm)', 'θ(°)', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
-                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
+                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间', '跳过原因']
                 else:
                     headers = ['#', 'X(mm)', 'Y(mm)', 'Δt(ns)', 'σ(MPa)', 
-                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间']
+                              '状态', '质量评分', 'SNR(dB)', '可疑', '测量时间', '跳过原因']
                 
                 for col_idx, header in enumerate(headers, 1):
                     cell = ws_points.cell(row=1, column=col_idx, value=header)
@@ -450,7 +666,8 @@ class DataExporter:
                             point.get('quality_score'),
                             point.get('snr'),
                             '是' if point.get('is_suspicious') else '',
-                            point.get('measured_at')
+                            point.get('measured_at'),
+                            point.get('skip_reason', '')
                         ]
                     else:
                         data = [
@@ -463,7 +680,8 @@ class DataExporter:
                             point.get('quality_score'),
                             point.get('snr'),
                             '是' if point.get('is_suspicious') else '',
-                            point.get('measured_at')
+                            point.get('measured_at'),
+                            point.get('skip_reason', '')
                         ]
                     
                     for col_idx, value in enumerate(data, 1):
@@ -500,6 +718,121 @@ class DataExporter:
                         ws_stats.cell(row=row_idx, column=2, value=round(value, 2))
                     else:
                         ws_stats.cell(row=row_idx, column=2, value=value)
+                
+                # Sheet 4: 配置信息（形状和布点参数）
+                ws_config = wb.create_sheet('配置信息')
+                
+                config_data = []
+                
+                # 形状配置
+                config_data.append(('--- 形状配置 ---', ''))
+                shape_type_map = {'rectangle': '矩形', 'circle': '圆形', 'polygon': '多边形'}
+                shape_type = shape_config.get('type', '')
+                config_data.append(('形状类型', shape_type_map.get(shape_type, shape_type)))
+                
+                if shape_type == 'rectangle':
+                    config_data.append(('宽度(mm)', shape_config.get('width', '')))
+                    config_data.append(('高度(mm)', shape_config.get('height', '')))
+                elif shape_type == 'circle':
+                    config_data.append(('半径(mm)', shape_config.get('radius', '')))
+                    center = shape_config.get('center', {})
+                    config_data.append(('圆心X(mm)', center.get('x', '')))
+                    config_data.append(('圆心Y(mm)', center.get('y', '')))
+                elif shape_type == 'polygon':
+                    vertices = shape_config.get('vertices', [])
+                    config_data.append(('顶点数', len(vertices)))
+                    for i, v in enumerate(vertices):
+                        config_data.append((f'顶点{i+1}', f"({v.get('x', 0)}, {v.get('y', 0)})"))
+                
+                # 孔洞信息
+                modifiers = shape_config.get('modifiers', [])
+                holes = [m for m in modifiers if m.get('op') == 'subtract']
+                if holes:
+                    config_data.append(('孔洞数量', len(holes)))
+                    for i, hole in enumerate(holes, 1):
+                        hole_shape = hole.get('shape', 'circle')
+                        if hole_shape == 'circle':
+                            config_data.append((f'孔洞{i}类型', '圆形'))
+                            config_data.append((f'孔洞{i}圆心X(mm)', hole.get('centerX', '')))
+                            config_data.append((f'孔洞{i}圆心Y(mm)', hole.get('centerY', '')))
+                            config_data.append((f'孔洞{i}半径(mm)', hole.get('radius', '')))
+                        elif hole_shape == 'rectangle':
+                            config_data.append((f'孔洞{i}类型', '矩形'))
+                            config_data.append((f'孔洞{i}中心X(mm)', hole.get('centerX', '')))
+                            config_data.append((f'孔洞{i}中心Y(mm)', hole.get('centerY', '')))
+                            config_data.append((f'孔洞{i}宽度(mm)', hole.get('width', '')))
+                            config_data.append((f'孔洞{i}高度(mm)', hole.get('height', '')))
+                
+                config_data.append(('', ''))
+                
+                # 布点配置
+                config_data.append(('--- 布点配置 ---', ''))
+                layout_config = exp_data.get('config_snapshot', {}).get('layout', {})
+                layout_type_map = {'grid': '网格布点', 'polar': '极坐标布点', 'custom': '自定义布点', 'adaptive': '自适应布点'}
+                layout_type = layout_config.get('type', '')
+                config_data.append(('布点方式', layout_type_map.get(layout_type, layout_type)))
+                
+                # 获取布点参数（可能在params子字典中）
+                layout_params = layout_config.get('params', {})
+                
+                # 如果 params 为空，尝试从测点数据反推
+                if not layout_params and points and layout_type == 'grid':
+                    layout_params = self._infer_grid_params_from_points(points, shape_config)
+                
+                if layout_type == 'grid':
+                    # 行数和列数（优先显示）
+                    rows = layout_params.get('rows', '')
+                    cols = layout_params.get('cols', '')
+                    if rows:
+                        config_data.append(('行数', rows))
+                    if cols:
+                        config_data.append(('列数', cols))
+                    
+                    # 边距可能在margins子字典中，也可能直接在params中
+                    margins = layout_params.get('margins', {})
+                    if margins:
+                        config_data.append(('左边距(mm)', margins.get('left', '')))
+                        config_data.append(('右边距(mm)', margins.get('right', '')))
+                        config_data.append(('上边距(mm)', margins.get('top', '')))
+                        config_data.append(('下边距(mm)', margins.get('bottom', '')))
+                    else:
+                        # 尝试直接从params读取
+                        margin_left = layout_params.get('margin_left', '')
+                        margin_right = layout_params.get('margin_right', '')
+                        margin_top = layout_params.get('margin_top', '')
+                        margin_bottom = layout_params.get('margin_bottom', '')
+                        if margin_left or margin_right or margin_top or margin_bottom:
+                            config_data.append(('左边距(mm)', margin_left))
+                            config_data.append(('右边距(mm)', margin_right))
+                            config_data.append(('上边距(mm)', margin_top))
+                            config_data.append(('下边距(mm)', margin_bottom))
+                        
+                elif layout_type == 'polar':
+                    config_data.append(('半径步长(mm)', layout_params.get('radius_step') or layout_params.get('r_step', '')))
+                    config_data.append(('角度步长(°)', layout_params.get('angle_step', '')))
+                    config_data.append(('起始半径(mm)', layout_params.get('start_radius') or layout_params.get('r_start', '')))
+                    config_data.append(('圆心X(mm)', layout_params.get('center_x', '')))
+                    config_data.append(('圆心Y(mm)', layout_params.get('center_y', '')))
+                    config_data.append(('每层点数', layout_params.get('points_per_ring', '')))
+                
+                config_data.append(('', ''))
+                config_data.append(('总测点数', len(points)))
+                
+                # 云图配置（如果有）
+                metadata = result['data'].get('metadata')
+                if metadata:
+                    config_data.append(('', ''))
+                    config_data.append(('--- 云图配置 ---', ''))
+                    config_data.append(('插值方法', metadata.get('interpolation_method', '')))
+                    config_data.append(('网格分辨率', metadata.get('grid_resolution', '')))
+                    config_data.append(('色标范围最小值(MPa)', metadata.get('vmin', '')))
+                    config_data.append(('色标范围最大值(MPa)', metadata.get('vmax', '')))
+                
+                for row_idx, (key, value) in enumerate(config_data, 1):
+                    cell = ws_config.cell(row=row_idx, column=1, value=key)
+                    if key.startswith('---'):
+                        cell.font = Font(bold=True)
+                    ws_config.cell(row=row_idx, column=2, value=value)
             
             # 保存
             wb.save(output_path)

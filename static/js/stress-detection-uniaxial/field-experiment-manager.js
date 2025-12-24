@@ -53,22 +53,31 @@ const FieldExperimentManager = (function() {
                                     <input type="number" id="field-exp-thickness" class="form-input" value="10" min="0.1" step="0.1">
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>应力方向 <span class="required">*</span></label>
-                                <select id="field-exp-stress-direction" class="form-input">
-                                    <option value="">-- 请选择应力方向 --</option>
-                                    <option value="0°">0° (X方向)</option>
-                                    <option value="45°">45°</option>
-                                    <option value="90°">90° (Y方向)</option>
-                                    <option value="135°">135°</option>
-                                    <option value="custom">自定义...</option>
-                                </select>
-                                <input type="text" id="field-exp-stress-direction-custom" class="form-input" 
-                                       placeholder="输入自定义方向，例如：30°" 
-                                       style="display: none; margin-top: 8px;">
-                                <small style="color: #666; display: block; margin-top: 4px;">
-                                    ℹ️ 单轴应力方向，与标定实验方向一致
-                                </small>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>应力方向 <span class="required">*</span></label>
+                                    <select id="field-exp-stress-direction" class="form-input">
+                                        <option value="">-- 请选择应力方向 --</option>
+                                        <option value="0°">0° (X方向)</option>
+                                        <option value="45°">45°</option>
+                                        <option value="90°">90° (Y方向)</option>
+                                        <option value="135°">135°</option>
+                                        <option value="custom">自定义...</option>
+                                    </select>
+                                    <input type="text" id="field-exp-stress-direction-custom" class="form-input" 
+                                           placeholder="输入自定义方向，例如：30°" 
+                                           style="display: none; margin-top: 8px;">
+                                    <small style="color: #666; display: block; margin-top: 4px;">
+                                        ℹ️ 单轴应力方向，与标定实验方向一致
+                                    </small>
+                                </div>
+                                <div class="form-group">
+                                    <label>楔块角度 (°) <span class="required">*</span></label>
+                                    <input type="number" id="field-exp-wedge-angle" class="form-input" placeholder="例如：28.5" min="0" max="90" step="0.1">
+                                    <small style="color: #666; display: block; margin-top: 4px;">
+                                        ℹ️ 临界折射角度
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -144,6 +153,7 @@ const FieldExperimentManager = (function() {
         const name = document.getElementById('field-exp-name')?.value.trim();
         const material = document.getElementById('field-exp-material')?.value.trim();
         const thickness = parseFloat(document.getElementById('field-exp-thickness')?.value);
+        const wedgeAngle = parseFloat(document.getElementById('field-exp-wedge-angle')?.value);
         const directionSelect = document.getElementById('field-exp-stress-direction');
         const customDirectionInput = document.getElementById('field-exp-stress-direction-custom');
         
@@ -179,6 +189,11 @@ const FieldExperimentManager = (function() {
             directionSelect?.focus();
             return;
         }
+        if (isNaN(wedgeAngle) || wedgeAngle <= 0 || wedgeAngle >= 90) {
+            callbacks?.显示状态信息('⚠️', '请输入有效的楔块角度', '角度范围：0° ~ 90°', 'warning');
+            document.getElementById('field-exp-wedge-angle')?.focus();
+            return;
+        }
         
         try {
             const result = await pywebview.api.create_field_experiment({
@@ -186,6 +201,7 @@ const FieldExperimentManager = (function() {
                 sample_material: material,
                 sample_thickness: thickness,
                 stress_direction: stressDirection,
+                wedge_angle: wedgeAngle,
                 test_purpose: purpose,
                 operator: operator,
                 temperature: temperature,
