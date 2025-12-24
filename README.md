@@ -64,7 +64,6 @@
 - **h5py** - HDF5 格式支持
 - **pywavelets** - 小波变换库
 - **shapely** - 几何运算（应力场测绘）
-- **scikit-learn** - Kriging 插值（应力场测绘）
 
 ### 前端
 - **纯原生 HTML/CSS/JavaScript** - 无框架依赖

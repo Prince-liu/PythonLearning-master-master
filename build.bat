@@ -45,7 +45,6 @@ python -m nuitka ^
     --nofollow-import-to=jaraco ^
     --nofollow-import-to=matplotlib.tests ^
     --nofollow-import-to=scipy.tests ^
-    --nofollow-import-to=sklearn.tests ^
     --enable-plugin=no-qt ^
     --include-package=webview ^
     --include-package=numpy ^
@@ -56,9 +55,7 @@ python -m nuitka ^
     --include-package=shapely ^
     --include-package=matplotlib ^
     --include-package=openpyxl ^
-    --include-package=sklearn ^
     --include-package-data=scipy ^
-    --include-package-data=sklearn ^
     --include-package-data=shapely ^
     --nofollow-import-to=webview.platforms.android ^
     --nofollow-import-to=webview.platforms.cocoa ^
