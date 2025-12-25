@@ -21,6 +21,9 @@ const FieldResizer = (function() {
     // ResizeObserver 实例
     let resizeObservers = [];
     
+    // 折叠动画状态（防止动画期间频繁刷新导致跳动）
+    let 正在折叠动画 = false;
+    
     // ========== 初始化 ==========
     function 初始化(cbs) {
         callbacks = cbs || {};

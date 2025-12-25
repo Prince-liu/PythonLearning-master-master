@@ -47,6 +47,55 @@ class WebAPI:
         self.field_capture = FieldCapture(db, self.osc)
         self.data_exporter = DataExporter(db)
     
+    # ==================== 私有辅助方法 ====================
+    
+    def _select_file(self, file_types, allow_multiple=False):
+        """打开文件选择对话框（私有辅助方法）
+        
+        Args:
+            file_types: 文件类型元组，如 ('CSV文件 (*.csv)', '所有文件 (*.*)')
+            allow_multiple: 是否允许多选
+        
+        Returns:
+            {"success": bool, "file_path": str} 或 {"success": bool, "file_paths": list}
+        """
+        try:
+            result = self.window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=file_types,
+                allow_multiple=allow_multiple
+            )
+            if result and len(result) > 0:
+                if allow_multiple:
+                    return {"success": True, "file_paths": result}
+                else:
+                    return {"success": True, "file_path": result[0]}
+            return {"success": False, "message": "未选择文件"}
+        except Exception as e:
+            return {"success": False, "message": f"选择文件失败: {str(e)}"}
+    
+    def _save_file(self, file_types, default_filename):
+        """打开文件保存对话框（私有辅助方法）
+        
+        Args:
+            file_types: 文件类型元组
+            default_filename: 默认文件名
+        
+        Returns:
+            {"success": bool, "file_path": str}
+        """
+        try:
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                file_types=file_types,
+                save_filename=default_filename
+            )
+            if result and len(result) > 0:
+                return {"success": True, "file_path": result[0]}
+            return {"success": False, "message": "未选择保存路径"}
+        except Exception as e:
+            return {"success": False, "message": f"选择路径失败: {str(e)}"}
+    
     # ==================== 示波器基础功能 ====================
     
     def 搜索设备(self):
@@ -89,6 +138,10 @@ class WebAPI:
         """获取示波器完整状态信息"""
         return self.osc.获取完整状态()
     
+    def 获取通道状态(self):
+        """获取所有通道的开启状态"""
+        return self.osc.获取通道状态()
+    
     def 自动设置(self):
         """执行自动设置"""
         return self.osc.自动设置()
@@ -100,6 +153,10 @@ class WebAPI:
     def 停止示波器(self):
         """停止示波器采集"""
         return self.osc.停止示波器()
+    
+    def 获取运行状态(self):
+        """查询示波器运行状态"""
+        return self.osc.获取运行状态()
     
     def 设置垂直灵敏度(self, 通道, 灵敏度):
         """设置指定通道的垂直灵敏度（V/div）"""
@@ -129,10 +186,6 @@ class WebAPI:
         """打开文件选择对话框"""
         return self.analysis.选择打开文件()
     
-    def 获取波形文件列表(self, 目录路径=None):
-        """获取指定目录下的所有波形文件"""
-        return self.analysis.获取波形文件列表(目录路径)
-    
     def 加载波形文件(self, 文件路径):
         """从NPY文件加载波形数据"""
         return self.analysis.加载波形文件(文件路径)
@@ -143,17 +196,9 @@ class WebAPI:
         """计算两个波形之间的声时差"""
         return self.calibration.计算互相关声时差(基准波形, 测量波形, 采样率)
     
-    def 保存HDF5格式(self, 文件路径, 实验数据):
-        """保存实验数据到HDF5格式"""
-        return self.calibration.保存HDF5格式(文件路径, 实验数据)
-    
     def 保存CSV格式(self, 文件路径, 实验数据):
         """保存应力-声时差数据到CSV格式"""
         return self.calibration.保存CSV格式(文件路径, 实验数据)
-    
-    def 选择HDF5保存路径(self):
-        """打开HDF5文件保存对话框"""
-        return self.calibration.选择HDF5保存路径()
     
     def 选择CSV保存路径(self):
         """打开CSV文件保存对话框"""
@@ -358,7 +403,7 @@ class WebAPI:
         return self.field_experiment.create_experiment(experiment_data)
     
     def load_field_experiment(self, exp_id):
-        """加载应力场实验
+        """加载应力场实验（路由层 - 简化版）
         
         Args:
             exp_id: 实验ID (如 "FIELD001")
@@ -366,34 +411,16 @@ class WebAPI:
         Returns:
             {"success": bool, "data": {...}}
         """
-        result = self.field_experiment.load_experiment(exp_id)
-        if result['success']:
-            # 同步设置采集器的当前实验
-            exp_data = result['data']['experiment']
-            config_snapshot = result['data'].get('config_snapshot', {})
-            calibration = config_snapshot.get('calibration', {})
-            
-            # 优先从数据库读取 k，其次从 config_snapshot
-            k = exp_data.get('calibration_k') or calibration.get('k', 0)
-            baseline_stress = exp_data.get('baseline_stress', 0) or 0
-            baseline_point_id = exp_data.get('baseline_point_id')
-            
-            # 无论是否有标定数据，都设置采集器的当前实验
-            self.field_capture.set_experiment(
-                exp_id, 
-                self.field_experiment.current_hdf5,
-                k if k > 0 else 1.0,  # 如果没有标定数据，使用默认值1.0
-                baseline_stress  # 传递基准点应力值
-            )
-            
-            # 🆕 恢复信号处理配置（从 HDF5 config_snapshot）
-            if 'denoise' in config_snapshot:
-                self.field_capture.denoise_config.update(config_snapshot['denoise'])
-            if 'bandpass' in config_snapshot:
-                self.field_capture.bandpass_config.update(config_snapshot['bandpass'])
-            
-            # 初始化云图生成器
-            self.contour_generator = ContourGenerator(exp_id)
+        # 调用模块层的业务逻辑方法
+        result = self.field_experiment.load_and_sync_experiment(
+            exp_id,
+            field_capture=self.field_capture,
+            contour_generator_class=ContourGenerator
+        )
+        
+        # 保存云图生成器实例
+        if result.get('success') and result.get('contour_generator'):
+            self.contour_generator = result.pop('contour_generator')
         
         return result
     
@@ -452,7 +479,7 @@ class WebAPI:
     # ---------- 标定数据 ----------
     
     def load_calibration_from_experiment(self, calib_exp_id, direction):
-        """从本地标定实验加载标定系数
+        """从本地标定实验加载标定系数（路由层 - 简化版）
         
         Args:
             calib_exp_id: 标定实验ID
@@ -461,22 +488,15 @@ class WebAPI:
         Returns:
             {"success": bool, "data": {...}, "warnings": [...]}
         """
-        result = self.field_experiment.load_calibration_from_experiment(calib_exp_id, direction)
-        
-        # 如果加载成功，同步更新采集器
-        if result['success'] and self.field_experiment.current_exp_id:
-            k = result['data'].get('k', 0)
-            if k > 0:
-                self.field_capture.set_experiment(
-                    self.field_experiment.current_exp_id,
-                    self.field_experiment.current_hdf5,
-                    k
-                )
-        
-        return result
+        # 调用模块层方法，传入采集器用于同步
+        return self.field_experiment.load_calibration_from_experiment(
+            calib_exp_id, 
+            direction,
+            field_capture=self.field_capture
+        )
     
     def load_calibration_from_file(self, file_path):
-        """从文件导入标定数据
+        """从文件导入标定数据（路由层 - 简化版）
         
         Args:
             file_path: 文件路径 (JSON或CSV)
@@ -484,21 +504,14 @@ class WebAPI:
         Returns:
             {"success": bool, "data": {...}, "warnings": [...]}
         """
-        result = self.field_experiment.load_calibration_from_file(file_path)
-        
-        if result['success'] and self.field_experiment.current_exp_id:
-            k = result['data'].get('k', 0)
-            if k > 0:
-                self.field_capture.set_experiment(
-                    self.field_experiment.current_exp_id,
-                    self.field_experiment.current_hdf5,
-                    k
-                )
-        
-        return result
+        # 调用模块层方法，传入采集器用于同步
+        return self.field_experiment.load_calibration_from_file(
+            file_path,
+            field_capture=self.field_capture
+        )
     
     def save_manual_calibration(self, calibration_data):
-        """保存手动输入的标定数据
+        """保存手动输入的标定数据（路由层 - 简化版）
         
         Args:
             calibration_data: 标定数据 {k, source, ...}
@@ -506,37 +519,11 @@ class WebAPI:
         Returns:
             {"success": bool, "message": str}
         """
-        if not self.field_experiment.current_exp_id:
-            return {"success": False, "message": "没有当前实验"}
-        
-        try:
-            k = calibration_data.get('k', 0)
-            if k == 0:
-                return {"success": False, "message": "无效的应力系数（不能为0）"}
-            
-            # 保存到HDF5配置快照
-            if self.field_experiment.current_hdf5:
-                config = self.field_experiment.current_hdf5.load_config_snapshot().get('data', {})
-                config['calibration'] = calibration_data
-                self.field_experiment.current_hdf5.save_config_snapshot(config)
-            
-            # 保存k到数据库
-            self.field_experiment.db.update_experiment(
-                self.field_experiment.current_exp_id,
-                {'calibration_k': k}
-            )
-            
-            # 更新采集器
-            self.field_capture.set_experiment(
-                self.field_experiment.current_exp_id,
-                self.field_experiment.current_hdf5,
-                k
-            )
-            
-            return {"success": True, "message": "手动标定数据已保存"}
-            
-        except Exception as e:
-            return {"success": False, "message": f"保存失败: {str(e)}"}
+        # 调用模块层方法，传入采集器用于同步
+        return self.field_experiment.save_manual_calibration(
+            calibration_data,
+            field_capture=self.field_capture
+        )
     
     def validate_calibration_data(self, calibration_data):
         """验证标定数据有效性
@@ -549,23 +536,7 @@ class WebAPI:
         """
         return self.field_experiment.validate_calibration_data(calibration_data)
     
-    def select_calibration_file(self):
-        """打开文件选择对话框选择标定文件
-        
-        Returns:
-            {"success": bool, "file_path": str}
-        """
-        try:
-            result = self.window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                file_types=('JSON文件 (*.json)', 'CSV文件 (*.csv)', '所有文件 (*.*)'),
-                allow_multiple=False
-            )
-            if result and len(result) > 0:
-                return {"success": True, "file_path": result[0]}
-            return {"success": False, "message": "未选择文件"}
-        except Exception as e:
-            return {"success": False, "message": f"选择文件失败: {str(e)}"}
+
     
     # ---------- 形状和布点 ----------
     
@@ -657,31 +628,12 @@ class WebAPI:
         Returns:
             {"success": bool, "file_path": str}
         """
-        try:
-            result = self.window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                file_types=('CSV文件 (*.csv)', '所有文件 (*.*)'),
-                allow_multiple=False
-            )
-            if result and len(result) > 0:
-                return {"success": True, "file_path": result[0]}
-            return {"success": False, "message": "未选择文件"}
-        except Exception as e:
-            return {"success": False, "message": f"选择文件失败: {str(e)}"}
+        return self._select_file(
+            file_types=('CSV文件 (*.csv)', '所有文件 (*.*)'),
+            allow_multiple=False
+        )
     
     # ---------- 数据采集 ----------
-    
-    def capture_field_point(self, point_index, auto_denoise=True):
-        """采集单个测点（旧接口，保留兼容）
-        
-        Args:
-            point_index: 测点索引
-            auto_denoise: 是否自动降噪
-        
-        Returns:
-            {"success": bool, "data": {...}}
-        """
-        return self.field_capture.capture_point(point_index, auto_denoise)
     
     def capture_field_point_with_waveform(self, point_index, voltage_data, time_data, sample_rate, auto_denoise=True, bandpass_enabled=True):
         """采集单个测点（新接口，前端传入波形数据）
@@ -864,7 +816,7 @@ class WebAPI:
         # 解析配置参数
         config = config or {}
         method = config.get('method', 'auto')
-        resolution = config.get('resolution', 200)
+        resolution = config.get('resolution', 100)  # 默认100，与前端下拉框一致
         smoothing = config.get('smoothing', True)  # 默认启用平滑
         
         # 获取已测量的测点
@@ -1007,23 +959,14 @@ class WebAPI:
         # 🆕 如果没有指定输出路径，打开文件保存对话框
         output_path = options.get('output_path')
         if not output_path:
-            try:
-                file_types = ('PNG图片 (*.png)', 'SVG矢量图 (*.svg)', '所有文件 (*.*)')
-                if format == 'svg':
-                    file_types = ('SVG矢量图 (*.svg)', 'PNG图片 (*.png)', '所有文件 (*.*)')
-                
-                result = self.window.create_file_dialog(
-                    webview.SAVE_DIALOG,
-                    file_types=file_types,
-                    save_filename=f'{exp_id}_contour.{format}'
-                )
-                
-                if result and len(result) > 0:
-                    output_path = result[0]
-                else:
-                    return {"success": False, "message": "用户取消"}
-            except Exception as e:
-                return {"success": False, "message": f"打开文件对话框失败: {str(e)}"}
+            file_types = ('PNG图片 (*.png)', 'SVG矢量图 (*.svg)', '所有文件 (*.*)')
+            if format == 'svg':
+                file_types = ('SVG矢量图 (*.svg)', 'PNG图片 (*.png)', '所有文件 (*.*)')
+            
+            result = self._save_file(file_types, f'{exp_id}_contour.{format}')
+            if not result['success']:
+                return result
+            output_path = result['file_path']
         
         return self.contour_generator.export_contour_image(
             contour_result['grid'],
@@ -1039,58 +982,9 @@ class WebAPI:
             title=options.get('title')
         )
     
-    def select_contour_export_path(self, format='png'):
-        """选择云图导出路径
-        
-        Args:
-            format: 图片格式
-        
-        Returns:
-            {"success": bool, "file_path": str}
-        """
-        try:
-            if format == 'png':
-                file_types = ('PNG图片 (*.png)',)
-            elif format == 'svg':
-                file_types = ('SVG图片 (*.svg)',)
-            else:
-                file_types = ('所有文件 (*.*)',)
-            
-            result = self.window.create_file_dialog(
-                webview.SAVE_DIALOG,
-                file_types=file_types,
-                save_filename=f'contour.{format}'
-            )
-            if result:
-                return {"success": True, "file_path": result}
-            return {"success": False, "message": "未选择保存路径"}
-        except Exception as e:
-            return {"success": False, "message": f"选择路径失败: {str(e)}"}
+
     
     # ---------- 数据验证和导出 ----------
-    
-    def validate_point_data(self, point, neighbors=None):
-        """验证单个测点数据
-        
-        Args:
-            point: 测点数据
-            neighbors: 相邻测点列表
-        
-        Returns:
-            {"is_valid": bool, "is_suspicious": bool, "warnings": [...]}
-        """
-        return DataValidator.validate_point_data(point, neighbors)
-    
-    def validate_experiment_config(self, config):
-        """验证实验配置
-        
-        Args:
-            config: 实验配置
-        
-        Returns:
-            {"is_valid": bool, "warnings": [...], "errors": [...]}
-        """
-        return DataValidator.validate_experiment_config(config)
     
     def export_field_data(self, exp_id, format, options=None):
         """导出实验数据
@@ -1112,31 +1006,22 @@ class WebAPI:
         # 🆕 如果没有指定输出路径，打开文件保存对话框
         output_path = options.get('output_path')
         if not output_path:
-            try:
-                if format == 'csv':
-                    file_types = ('CSV文件 (*.csv)', '所有文件 (*.*)')
-                    default_name = f'{exp_id}_data.csv'
-                elif format == 'excel':
-                    file_types = ('Excel文件 (*.xlsx)', '所有文件 (*.*)')
-                    default_name = f'{exp_id}_data.xlsx'
-                elif format == 'hdf5':
-                    file_types = ('HDF5文件 (*.h5)', '所有文件 (*.*)')
-                    default_name = f'{exp_id}_export.h5'
-                else:
-                    return {"success": False, "message": f"不支持的导出格式: {format}"}
-                
-                result = self.window.create_file_dialog(
-                    webview.SAVE_DIALOG,
-                    file_types=file_types,
-                    save_filename=default_name
-                )
-                
-                if result and len(result) > 0:
-                    output_path = result[0]
-                else:
-                    return {"success": False, "message": "用户取消"}
-            except Exception as e:
-                return {"success": False, "message": f"打开文件对话框失败: {str(e)}"}
+            if format == 'csv':
+                file_types = ('CSV文件 (*.csv)', '所有文件 (*.*)')
+                default_name = f'{exp_id}_data.csv'
+            elif format == 'excel':
+                file_types = ('Excel文件 (*.xlsx)', '所有文件 (*.*)')
+                default_name = f'{exp_id}_data.xlsx'
+            elif format == 'hdf5':
+                file_types = ('HDF5文件 (*.h5)', '所有文件 (*.*)')
+                default_name = f'{exp_id}_export.h5'
+            else:
+                return {"success": False, "message": f"不支持的导出格式: {format}"}
+            
+            result = self._save_file(file_types, default_name)
+            if not result['success']:
+                return result
+            output_path = result['file_path']
         
         if format == 'csv':
             return self.data_exporter.export_to_csv(
@@ -1159,39 +1044,7 @@ class WebAPI:
         else:
             return {"success": False, "message": f"不支持的导出格式: {format}"}
     
-    def select_export_path(self, format):
-        """选择数据导出路径
-        
-        Args:
-            format: 导出格式
-        
-        Returns:
-            {"success": bool, "file_path": str}
-        """
-        try:
-            if format == 'csv':
-                file_types = ('CSV文件 (*.csv)',)
-                filename = 'data.csv'
-            elif format == 'excel':
-                file_types = ('Excel文件 (*.xlsx)',)
-                filename = 'data.xlsx'
-            elif format == 'hdf5':
-                file_types = ('HDF5文件 (*.h5)',)
-                filename = 'data.h5'
-            else:
-                file_types = ('所有文件 (*.*)',)
-                filename = 'data'
-            
-            result = self.window.create_file_dialog(
-                webview.SAVE_DIALOG,
-                file_types=file_types,
-                save_filename=filename
-            )
-            if result:
-                return {"success": True, "file_path": result}
-            return {"success": False, "message": "未选择保存路径"}
-        except Exception as e:
-            return {"success": False, "message": f"选择路径失败: {str(e)}"}
+
     
 
 def 创建窗口():

@@ -89,10 +89,10 @@ const FieldCanvas = (function() {
         const rect = container.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         
+        // 只设置内部绘图尺寸，不设置 style.width/height
+        // 让 CSS 的 width: 100% 控制显示尺寸，实现平滑的容器尺寸变化
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
         
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
@@ -111,10 +111,9 @@ const FieldCanvas = (function() {
             if (rect.width > 0 && rect.height > 0) {
                 const dpr = window.devicePixelRatio || 1;
                 if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+                    // 只设置内部绘图尺寸，不设置 style.width/height
                     canvas.width = rect.width * dpr;
                     canvas.height = rect.height * dpr;
-                    canvas.style.width = rect.width + 'px';
-                    canvas.style.height = rect.height + 'px';
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
                     ctx.scale(dpr, dpr);
                 }

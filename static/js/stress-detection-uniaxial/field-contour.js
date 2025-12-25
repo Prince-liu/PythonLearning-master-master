@@ -293,10 +293,10 @@ const FieldContour = (function() {
         const rect = container.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         
+        // 只设置内部绘图尺寸，不设置 style.width/height
+        // 让 CSS 的 width: 100% 控制显示尺寸，实现平滑的容器尺寸变化
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
         
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
@@ -375,10 +375,9 @@ const FieldContour = (function() {
             if (rect.width > 0 && rect.height > 0) {
                 const dpr = window.devicePixelRatio || 1;
                 if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+                    // 只设置内部绘图尺寸，不设置 style.width/height
                     canvas.width = rect.width * dpr;
                     canvas.height = rect.height * dpr;
-                    canvas.style.width = rect.width + 'px';
-                    canvas.style.height = rect.height + 'px';
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
                     ctx.scale(dpr, dpr);
                 }
@@ -594,9 +593,9 @@ const FieldContour = (function() {
         const baseOffsetX = paddingLeft + (availableWidth - dataWidth * baseScale) / 2 - bounds.minX * baseScale;
         const baseOffsetY = paddingTop + (availableHeight + dataHeight * baseScale) / 2 + bounds.minY * baseScale;
         
-        // 应用用户拖动偏移
-        const offsetX = baseOffsetX + 显示设置.偏移X;
-        const offsetY = baseOffsetY + 显示设置.偏移Y;
+        // 应用用户拖动偏移（添加缩放补偿，防止容器尺寸变化时图形跳动）
+        const offsetX = baseOffsetX * 显示设置.缩放比例 + 显示设置.偏移X + (1 - 显示设置.缩放比例) * canvasWidth / 2;
+        const offsetY = baseOffsetY * 显示设置.缩放比例 + 显示设置.偏移Y + (1 - 显示设置.缩放比例) * canvasHeight / 2;
         
         return { scale, offsetX, offsetY, bounds, flipY: true };
     }

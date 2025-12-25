@@ -152,6 +152,8 @@
     display: flex;
     gap: 10px;
     min-height: 150px;
+    /* 让云图靠右对齐，这样折叠预览时云图的右边界固定 */
+    justify-content: flex-start;
 }
 
 /* 拖拽分割条 */

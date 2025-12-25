@@ -8,6 +8,7 @@ const RealtimeCapture = (function() {
     let canvas, ctx;
     let 已连接 = false;
     let 正在采集 = false;
+    let 示波器正在运行 = true;  // 🆕 示波器运行状态（默认运行）
     let 波形数据 = {
         时间: [],
         电压: [],
@@ -52,13 +53,23 @@ const RealtimeCapture = (function() {
     let 垂直缩放定时器 = null;
     
     // 当前保存格式
-    let 当前保存格式 = 'npy';
+    let 当前保存格式 = 'csv';
     
     // 微调模式状态
     let 微调模式 = false;
     
     // 首次波形显示标志
     let 首次显示波形 = true;
+    
+    // 🆕 通道状态缓存
+    let 通道状态缓存 = {
+        1: true,
+        2: false,
+        3: false,
+        4: false
+    };
+    let 上次检查时间 = 0;
+    const 检查间隔 = 5000; // 5秒检查一次
     
     // ========== DOM 元素 ==========
     let elements = {};
@@ -81,8 +92,7 @@ const RealtimeCapture = (function() {
             saveDropdownBtn: document.getElementById('saveDropdownBtn'),
             saveDropdownMenu: document.getElementById('saveDropdownMenu'),
             autoSetBtn: document.getElementById('autoSetBtn'),
-            runBtn: document.getElementById('runBtn'),
-            stopScopeBtn: document.getElementById('stopScopeBtn'),
+            runStopBtn: document.getElementById('runStopBtn'),
             statusMessage: document.getElementById('statusMessage'),
             waveformTitle: document.getElementById('waveformTitle'),
             sampleRateValue: document.getElementById('sampleRateValue'),
@@ -135,18 +145,39 @@ const RealtimeCapture = (function() {
 
         
         // 通道选择
-        elements.channelSelect.addEventListener('change', () => {
-            const 通道 = elements.channelSelect.value;
-            elements.statusChannelValue.textContent = `CHAN${通道}`;
-            elements.waveformTitle.textContent = `示波器波形显示 - CHAN${通道}`;
+        elements.channelSelect.addEventListener('change', async (e) => {
+            const 选中通道 = parseInt(e.target.value);
+            const 之前通道 = parseInt(e.target.dataset.previousValue || '1');
+            
+            // 强制检查通道是否开启（不使用缓存）
+            const 通道已开启 = await 检查通道状态(选中通道, true);
+            
+            if (!通道已开启) {
+                // 阻止切换，恢复到之前的通道
+                e.target.value = 之前通道;
+                
+                // 显示错误提示
+                显示状态栏信息('❌', `通道 ${选中通道} 未开启`, 
+                    '请在示波器上打开该通道后再切换', 'error', 5000);
+                return;
+            }
+            
+            // 记录当前通道（用于下次恢复）
+            e.target.dataset.previousValue = 选中通道;
+            
+            // 更新UI显示
+            elements.statusChannelValue.textContent = `CHAN${选中通道}`;
+            elements.waveformTitle.textContent = `示波器波形显示 - CHAN${选中通道}`;
+            
+            // 显示成功提示
+            显示状态栏信息('✅', `已切换到通道 ${选中通道}`, '', 'success', 2000);
         });
         
         // 自动设置
         elements.autoSetBtn.addEventListener('click', 自动设置);
         
-        // 运行/停止示波器
-        elements.runBtn.addEventListener('click', 运行示波器);
-        elements.stopScopeBtn.addEventListener('click', 停止示波器);
+        // 运行/停止示波器（切换按钮）
+        elements.runStopBtn.addEventListener('click', 切换运行停止);
         
         // 保存波形
         elements.saveBtn.addEventListener('click', () => 保存波形(当前保存格式));
@@ -163,11 +194,12 @@ const RealtimeCapture = (function() {
         });
         
         // 水平控制
-        elements.hLeftFastBtn.addEventListener('click', () => 水平移动(-2));
-        elements.hLeftBtn.addEventListener('click', () => 水平移动(-0.5));
+        // 修正：左箭头让波形向左移，右箭头让波形向右移
+        elements.hLeftFastBtn.addEventListener('click', () => 水平移动(2));   // 快速左移
+        elements.hLeftBtn.addEventListener('click', () => 水平移动(0.5));     // 左移
         elements.hCenterBtn.addEventListener('click', 水平回中);
-        elements.hRightBtn.addEventListener('click', () => 水平移动(0.5));
-        elements.hRightFastBtn.addEventListener('click', () => 水平移动(2));
+        elements.hRightBtn.addEventListener('click', () => 水平移动(-0.5));   // 右移
+        elements.hRightFastBtn.addEventListener('click', () => 水平移动(-2)); // 快速右移
         
         // 垂直控制
         elements.vCenterBtn.addEventListener('click', 垂直回中);
@@ -223,11 +255,30 @@ const RealtimeCapture = (function() {
                 elements.memoryDepthSelect.disabled = false;
                 elements.timebaseSelect.disabled = false;
                 elements.autoSetBtn.disabled = false;
-                elements.runBtn.disabled = false;
-                elements.stopScopeBtn.disabled = false;
+                elements.runStopBtn.disabled = false;
                 elements.statusMessage.textContent = '设备已连接，可以开始采集';
                 
                 await 更新状态信息();
+                
+                // 🆕 查询示波器实际运行状态
+                try {
+                    const statusResult = await pywebview.api.获取运行状态();
+                    if (statusResult.success) {
+                        示波器正在运行 = statusResult.running;
+                    } else {
+                        示波器正在运行 = true;  // 查询失败默认运行
+                    }
+                } catch (error) {
+                    示波器正在运行 = true;  // 查询失败默认运行
+                }
+                
+                更新运行停止按钮();  // 🆕 根据实际状态更新按钮
+                
+                // 🆕 初始化通道状态
+                await 更新通道状态缓存();
+                
+                // 🆕 记录当前通道为初始值
+                elements.channelSelect.dataset.previousValue = elements.channelSelect.value;
                 
                 // 🆕 显示连接成功信息
                 显示状态栏信息('✅', '示波器连接成功', '', 'success', 3000);
@@ -245,6 +296,7 @@ const RealtimeCapture = (function() {
             const result = await pywebview.api.断开连接();
             
             已连接 = false;
+            示波器正在运行 = true;  // 🆕 重置为默认运行状态
             首次显示波形 = true;  // 重置首次显示标志
             elements.disconnectBtn.disabled = true;
             elements.captureBtn.disabled = true;
@@ -252,8 +304,7 @@ const RealtimeCapture = (function() {
             elements.memoryDepthSelect.disabled = true;
             elements.timebaseSelect.disabled = true;
             elements.autoSetBtn.disabled = true;
-            elements.runBtn.disabled = true;
-            elements.stopScopeBtn.disabled = true;
+            elements.runStopBtn.disabled = true;
             elements.statusMessage.textContent = '已断开连接';
             
             // 清空状态显示
@@ -354,10 +405,23 @@ const RealtimeCapture = (function() {
         }
     }
     
+    // 🆕 切换运行/停止（统一按钮）
+    async function 切换运行停止() {
+        if (示波器正在运行) {
+            // 当前运行中 → 停止
+            await 停止示波器();
+        } else {
+            // 当前停止中 → 运行
+            await 运行示波器();
+        }
+    }
+    
     async function 运行示波器() {
         try {
             const result = await pywebview.api.运行示波器();
             if (result.success) {
+                示波器正在运行 = true;
+                更新运行停止按钮();
                 elements.statusMessage.textContent = result.message;
             } else {
                 显示状态栏信息('❌', '运行示波器失败', result.message, 'error', 4000);
@@ -371,12 +435,27 @@ const RealtimeCapture = (function() {
         try {
             const result = await pywebview.api.停止示波器();
             if (result.success) {
+                示波器正在运行 = false;
+                更新运行停止按钮();
                 elements.statusMessage.textContent = result.message;
             } else {
                 显示状态栏信息('❌', '停止示波器失败', result.message, 'error', 4000);
             }
         } catch (error) {
             显示状态栏信息('❌', '停止示波器失败', error.toString(), 'error', 4000);
+        }
+    }
+    
+    // 🆕 更新运行/停止按钮显示
+    function 更新运行停止按钮() {
+        if (示波器正在运行) {
+            elements.runStopBtn.innerHTML = '⏸ 停止';
+            elements.runStopBtn.classList.remove('btn-secondary');
+            elements.runStopBtn.classList.add('btn-warning');
+        } else {
+            elements.runStopBtn.innerHTML = '▶ 运行';
+            elements.runStopBtn.classList.remove('btn-warning');
+            elements.runStopBtn.classList.add('btn-secondary');
         }
     }
     
@@ -389,8 +468,10 @@ const RealtimeCapture = (function() {
                 elements.memoryDepthValue.textContent = result.memoryDepth;
                 elements.timebaseValue.textContent = CommonUtils.格式化时基(result.timebase);
                 
-                // 更新通道选择（如果有活动通道信息）
-                if (result.activeChannel) {
+                // ❌ 不要覆盖用户的通道选择！
+                // 用户可能正在查看其他通道，不应该被后端强制重置
+                // 只在初次连接时（通道选择器为空）才设置默认通道
+                if (result.activeChannel && !elements.channelSelect.value) {
                     elements.channelSelect.value = result.activeChannel;
                     elements.statusChannelValue.textContent = `CHAN${result.activeChannel}`;
                     elements.waveformTitle.textContent = `示波器波形显示 - CHAN${result.activeChannel}`;
@@ -399,6 +480,72 @@ const RealtimeCapture = (function() {
         } catch (error) {
             // 忽略状态更新错误
         }
+    }
+    
+    // ========== 通道状态检测 ==========
+    async function 检查通道状态(通道, 强制刷新 = false) {
+        if (!已连接) return false;
+        
+        // 如果强制刷新或缓存过期，重新查询
+        const 当前时间 = Date.now();
+        if (强制刷新 || 当前时间 - 上次检查时间 > 检查间隔) {
+            try {
+                const result = await pywebview.api.获取通道状态();
+                
+                if (result.success && result.channels) {
+                    // 更新缓存
+                    通道状态缓存 = result.channels;
+                    上次检查时间 = 当前时间;
+                    
+                    // 更新选择器样式
+                    更新通道选择器样式();
+                    
+                    return result.channels[通道] || false;
+                }
+            } catch (error) {
+                console.error('[通道检测] 查询失败:', error);
+            }
+        }
+        
+        // 使用缓存值
+        return 通道状态缓存[通道] || false;
+    }
+    
+    async function 更新通道状态缓存() {
+        if (!已连接) return;
+        
+        try {
+            const result = await pywebview.api.获取通道状态();
+            
+            if (result.success && result.channels) {
+                通道状态缓存 = result.channels;
+                上次检查时间 = Date.now();
+                
+                // 更新通道选择器的视觉提示
+                更新通道选择器样式();
+            }
+        } catch (error) {
+            // 忽略错误
+        }
+    }
+    
+    function 更新通道选择器样式() {
+        // 禁用未开启的通道，添加视觉提示
+        const options = elements.channelSelect.querySelectorAll('option');
+        options.forEach((option, index) => {
+            const 通道 = index + 1;
+            if (!通道状态缓存[通道]) {
+                // 未开启的通道：禁用并添加标记
+                option.disabled = true;
+                option.textContent = `通道 ${通道} (未开启)`;
+                option.style.color = '#999';
+            } else {
+                // 已开启的通道：启用
+                option.disabled = false;
+                option.textContent = `通道 ${通道}`;
+                option.style.color = '';
+            }
+        });
     }
     
     // ========== 波形采集 ==========
@@ -439,6 +586,11 @@ const RealtimeCapture = (function() {
                 if (采集计数 >= 10) {
                     await 更新状态信息();
                     采集计数 = 0;
+                }
+                
+                // 🆕 每100次采集更新一次通道状态（避免频繁查询）
+                if (采集计数 % 100 === 0) {
+                    更新通道状态缓存(); // 异步执行，不等待
                 }
                 
                 // 20fps = 50ms 刷新间隔

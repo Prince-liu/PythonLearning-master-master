@@ -326,6 +326,27 @@ class OscilloscopeBase:
         except:
             return 1
     
+    def 获取通道状态(self):
+        """获取所有通道的开启状态"""
+        try:
+            if not self.已连接 or self.示波器 is None:
+                return {"success": False, "message": "示波器未连接"}
+            
+            通道状态 = {}
+            for 通道 in range(1, 5):
+                try:
+                    显示状态 = self.示波器.query(f':CHAN{通道}:DISP?').strip()
+                    通道状态[通道] = (显示状态 == '1' or 显示状态.upper() == 'ON')
+                except:
+                    通道状态[通道] = False
+            
+            return {
+                "success": True,
+                "channels": 通道状态
+            }
+        except Exception as e:
+            return {"success": False, "message": f"查询失败: {str(e)}"}
+    
     def 自动设置(self):
         """执行自动设置"""
         try:
@@ -360,6 +381,33 @@ class OscilloscopeBase:
             return {"success": True, "message": "示波器已停止"}
         except Exception as e:
             return {"success": False, "message": f"停止失败: {str(e)}"}
+    
+    def 获取运行状态(self):
+        """查询示波器是否正在运行
+        
+        Returns:
+            {"success": bool, "running": bool}
+            running: True表示运行中，False表示停止
+        """
+        try:
+            if not self.已连接 or self.示波器 is None:
+                return {"success": False, "message": "示波器未连接"}
+            
+            # 查询触发状态，返回值如：RUN, STOP, T'D, WAIT, AUTO
+            状态 = self.示波器.query(':TRIG:STAT?').strip().upper()
+            
+            # RUN, T'D(Triggered), WAIT, AUTO 都表示运行中
+            # STOP 表示停止
+            运行中 = 状态 != 'STOP'
+            
+            return {
+                "success": True,
+                "running": 运行中,
+                "status": 状态
+            }
+        except Exception as e:
+            # 查询失败时默认返回运行状态
+            return {"success": True, "running": True, "status": "UNKNOWN"}
     
     def 设置垂直灵敏度(self, 通道, 灵敏度):
         """设置指定通道的垂直灵敏度（V/div）"""

@@ -123,6 +123,58 @@ class FieldExperiment:
         
         return result
     
+    def load_and_sync_experiment(self, exp_id: str, field_capture=None, contour_generator_class=None) -> Dict[str, Any]:
+        """
+        加载实验并同步到相关模块（业务逻辑层）
+        
+        Args:
+            exp_id: 实验ID
+            field_capture: 数据采集器实例（用于同步标定数据和信号处理配置）
+            contour_generator_class: 云图生成器类（用于初始化）
+        
+        Returns:
+            dict: {"success": bool, "data": {...}, "contour_generator": ContourGenerator}
+        """
+        # 加载实验数据
+        result = self.load_experiment(exp_id)
+        
+        if not result['success']:
+            return result
+        
+        # 同步到采集器
+        if field_capture:
+            exp_data = result['data']['experiment']
+            config_snapshot = result['data'].get('config_snapshot', {})
+            calibration = config_snapshot.get('calibration', {})
+            
+            # 优先从数据库读取 k，其次从 config_snapshot
+            k = exp_data.get('calibration_k') or calibration.get('k', 0)
+            baseline_stress = exp_data.get('baseline_stress', 0) or 0
+            
+            # 设置采集器的当前实验
+            field_capture.set_experiment(
+                exp_id, 
+                self.current_hdf5,
+                k if k > 0 else 1.0,  # 如果没有标定数据，使用默认值1.0
+                baseline_stress  # 传递基准点应力值
+            )
+            
+            # 恢复信号处理配置（从 HDF5 config_snapshot）
+            if 'denoise' in config_snapshot:
+                field_capture.denoise_config.update(config_snapshot['denoise'])
+            if 'bandpass' in config_snapshot:
+                field_capture.bandpass_config.update(config_snapshot['bandpass'])
+        
+        # 初始化云图生成器
+        contour_generator = None
+        if contour_generator_class:
+            contour_generator = contour_generator_class(exp_id)
+        
+        # 返回结果，包含云图生成器实例
+        result['contour_generator'] = contour_generator
+        
+        return result
+    
     def delete_experiment(self, exp_id: str) -> Dict[str, Any]:
         """
         删除实验
@@ -196,13 +248,31 @@ class FieldExperiment:
     
     # ==================== 标定数据加载 ====================
     
-    def load_calibration_from_experiment(self, calib_exp_id: int, direction: str) -> Dict[str, Any]:
+    def _sync_calibration_to_capture(self, calibration_data: Dict[str, Any], field_capture=None) -> None:
+        """
+        同步标定数据到采集器（私有方法）
+        
+        Args:
+            calibration_data: 标定数据 {k, ...}
+            field_capture: 数据采集器实例
+        """
+        if field_capture and self.current_exp_id:
+            k = calibration_data.get('k', 0)
+            if k > 0:
+                field_capture.set_experiment(
+                    self.current_exp_id,
+                    self.current_hdf5,
+                    k
+                )
+    
+    def load_calibration_from_experiment(self, calib_exp_id: int, direction: str, field_capture=None) -> Dict[str, Any]:
         """
         从本地标定实验加载标定系数
         
         Args:
             calib_exp_id: 标定实验ID
             direction: 测试方向 (如 "0°")
+            field_capture: 数据采集器实例（用于同步）
         
         Returns:
             dict: {"success": bool, "data": {...}, "warnings": [...]}
@@ -286,6 +356,9 @@ class FieldExperiment:
                     'calibration_k': k
                 })
             
+            # 同步到采集器
+            self._sync_calibration_to_capture(calibration_data, field_capture)
+            
             return {
                 "success": True,
                 "error_code": 0,
@@ -300,12 +373,13 @@ class FieldExperiment:
                 "message": f"加载标定数据失败: {str(e)}"
             }
     
-    def load_calibration_from_file(self, file_path: str) -> Dict[str, Any]:
+    def load_calibration_from_file(self, file_path: str, field_capture=None) -> Dict[str, Any]:
         """
         从文件导入标定数据
         
         Args:
             file_path: 文件路径 (支持JSON, CSV)
+            field_capture: 数据采集器实例（用于同步）
         
         Returns:
             dict: {"success": bool, "data": {...}, "warnings": [...]}
@@ -374,6 +448,9 @@ class FieldExperiment:
                     'calibration_k': k
                 })
             
+            # 同步到采集器
+            self._sync_calibration_to_capture(calibration_data, field_capture)
+            
             return {
                 "success": True,
                 "error_code": 0,
@@ -420,6 +497,45 @@ class FieldExperiment:
             "is_valid": is_valid,
             "warnings": warnings
         }
+    
+    def save_manual_calibration(self, calibration_data: Dict[str, Any], field_capture=None) -> Dict[str, Any]:
+        """
+        保存手动输入的标定数据（业务逻辑层）
+        
+        Args:
+            calibration_data: 标定数据 {k, source, ...}
+            field_capture: 数据采集器实例（用于同步）
+        
+        Returns:
+            dict: {"success": bool, "message": str}
+        """
+        if not self.current_exp_id:
+            return {"success": False, "message": "没有当前实验"}
+        
+        try:
+            k = calibration_data.get('k', 0)
+            if k == 0:
+                return {"success": False, "message": "无效的应力系数（不能为0）"}
+            
+            # 保存到HDF5配置快照
+            if self.current_hdf5:
+                config = self.current_hdf5.load_config_snapshot().get('data', {})
+                config['calibration'] = calibration_data
+                self.current_hdf5.save_config_snapshot(config)
+            
+            # 保存k到数据库
+            self.db.update_experiment(
+                self.current_exp_id,
+                {'calibration_k': k}
+            )
+            
+            # 同步到采集器
+            self._sync_calibration_to_capture(calibration_data, field_capture)
+            
+            return {"success": True, "message": "手动标定数据已保存"}
+            
+        except Exception as e:
+            return {"success": False, "message": f"保存失败: {str(e)}"}
     
     # ==================== 配置管理 ====================
     

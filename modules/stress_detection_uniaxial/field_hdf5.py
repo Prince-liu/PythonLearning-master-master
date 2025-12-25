@@ -502,7 +502,7 @@ class FieldExperimentHDF5:
                 # 保存元数据
                 meta_grp = contour_grp.create_group('metadata')
                 meta_grp.attrs['interpolation_method'] = metadata.get('interpolation_method', 'cubic')
-                meta_grp.attrs['resolution'] = metadata.get('resolution', 200)
+                meta_grp.attrs['resolution'] = metadata.get('resolution', 100)
                 meta_grp.attrs['n_points'] = metadata.get('n_points', 0)
                 meta_grp.attrs['generated_at'] = datetime.now().isoformat()
                 meta_grp.attrs['vmin'] = metadata.get('vmin', 0.0)

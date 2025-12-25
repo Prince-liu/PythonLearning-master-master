@@ -26,7 +26,7 @@ class StressFieldInterpolation:
     @staticmethod
     def interpolate_stress_field(points: List[Dict[str, Any]], 
                                  shape_config: Dict[str, Any],
-                                 resolution: int = 200,
+                                 resolution: int = 100,
                                  method: str = 'auto',
                                  smoothing: bool = True) -> Dict[str, Any]:
         """
