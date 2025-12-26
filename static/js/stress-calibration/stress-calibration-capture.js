@@ -160,14 +160,18 @@ const StressCalibrationCapture = (function() {
             };
             带通滤波配置.enabled = 带通滤波启用;
             
-            // 调用后端保存（使用当前方向的实验ID，传递信号处理配置）
+            // 🔧 获取示波器采样率（用于双重验证）
+            const 示波器采样率 = 波形数据.sample_rate || null;
+            
+            // 调用后端保存（使用当前方向的实验ID，传递信号处理配置和采样率）
             const result = await pywebview.api.保存基准波形数据(
                 当前方向.实验ID,
                 当前方向.方向名称,
                 波形数据.voltage,
                 波形数据.time,
                 降噪配置,
-                带通滤波配置
+                带通滤波配置,
+                示波器采样率
             );
             
             if (result.success) {
@@ -263,7 +267,10 @@ const StressCalibrationCapture = (function() {
             };
             带通滤波配置.enabled = 带通滤波启用;  // 使用当前复选框状态
             
-            // 调用后端保存并分析（使用当前方向的实验ID）
+            // 🔧 获取示波器采样率（用于双重验证）
+            const 示波器采样率 = 波形数据.sample_rate || null;
+            
+            // 调用后端保存并分析（使用当前方向的实验ID，传递采样率）
             const result = await pywebview.api.保存并分析应力波形数据(
                 当前方向.实验ID,
                 当前方向.方向名称,
@@ -271,7 +278,8 @@ const StressCalibrationCapture = (function() {
                 波形数据.voltage,
                 波形数据.time,
                 降噪配置,
-                带通滤波配置
+                带通滤波配置,
+                示波器采样率
             );
             
             if (result.success) {

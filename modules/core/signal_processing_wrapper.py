@@ -5,6 +5,7 @@
 
 import numpy as np
 from . import signal_processing
+from ..waveform_analysis import waveform_processing
 
 
 class SignalProcessingWrapper:
@@ -69,8 +70,8 @@ class SignalProcessingWrapper:
             # 类型转换
             信号 = np.array(信号数据)
             
-            # 调用底层信号处理函数
-            return signal_processing.calculate_hilbert_envelope(信号)
+            # 调用波形分析模块的信号处理函数
+            return waveform_processing.calculate_hilbert_envelope(信号)
         except Exception as e:
             return {
                 'success': False,
@@ -95,8 +96,8 @@ class SignalProcessingWrapper:
             信号 = np.array(信号数据)
             时间 = np.array(时间数据) if 时间数据 else None
             
-            # 调用底层信号处理函数
-            return signal_processing.detect_peaks(信号, 时间, 最小距离, 突出度)
+            # 调用波形分析模块的信号处理函数
+            return waveform_processing.detect_peaks(信号, 时间, 最小距离, 突出度)
         except Exception as e:
             return {
                 'success': False,
@@ -121,8 +122,8 @@ class SignalProcessingWrapper:
             时间 = np.array(时间数据)
             信号 = np.array(信号数据)
             
-            # 调用底层信号处理函数
-            return signal_processing.find_peak_near_time(时间, 信号, 目标时间, 窗口大小)
+            # 调用波形分析模块的信号处理函数
+            return waveform_processing.find_peak_near_time(时间, 信号, 目标时间, 窗口大小)
         except Exception as e:
             return {
                 'success': False,
@@ -141,8 +142,8 @@ class SignalProcessingWrapper:
             {"success": bool, "time_difference": float, ...}
         """
         try:
-            # 调用底层信号处理函数
-            return signal_processing.calculate_time_difference(时间1, 时间2)
+            # 调用波形分析模块的信号处理函数
+            return waveform_processing.calculate_time_difference(时间1, 时间2)
         except Exception as e:
             return {
                 'success': False,

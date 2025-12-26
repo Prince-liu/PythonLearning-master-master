@@ -358,12 +358,13 @@ class FieldCapture:
             designated_baseline_id = exp_result['data']['experiment'].get('baseline_point_id') if exp_result['success'] else None
             
             # 判断是否是基准点
+            # 🔧 修复：如果是用户指定的基准点，即使已有基准波形也应该覆盖
             is_designated_baseline = designated_baseline_id and point_index == designated_baseline_id
-            is_baseline = (is_designated_baseline and self.baseline_waveform is None) or \
-                         (not designated_baseline_id and self.baseline_waveform is None)
+            is_baseline = is_designated_baseline or (not designated_baseline_id and self.baseline_waveform is None)
             
             if is_baseline:
                 # 设置为基准波形（保存处理后的波形）
+                # 如果是用户指定的基准点，覆盖旧的基准波形
                 self.baseline_waveform = processed_waveform
                 time_diff = 0.0
                 stress = self.baseline_stress
@@ -497,10 +498,31 @@ class FieldCapture:
         Returns:
             dict: 处理后的波形数据
         """
+        # 🔧 双重验证采样率（与标定模块一致）
+        示波器采样率 = waveform.get('sample_rate')
+        时间数组 = np.array(waveform['time'])
+        
+        # 从时间数组计算采样率
+        采样率_计算 = None
+        if len(时间数组) > 1:
+            采样间隔 = 时间数组[1] - 时间数组[0]
+            采样率_计算 = 1.0 / 采样间隔 if 采样间隔 > 0 else 1e9
+        else:
+            采样率_计算 = 1e9
+        
+        # 验证两种采样率是否一致
+        if 示波器采样率 and 采样率_计算:
+            误差 = abs(示波器采样率 - 采样率_计算) / 采样率_计算
+            if 误差 > 0.01:  # 误差>1%
+                print(f"⚠️ [单轴模块] 采样率不一致！示波器: {示波器采样率/1e9:.3f} GSa/s, 计算: {采样率_计算/1e9:.3f} GSa/s, 误差: {误差*100:.2f}%")
+        
+        # 优先使用示波器返回的采样率，否则使用计算值
+        采样率 = 示波器采样率 if 示波器采样率 else 采样率_计算
+        
         processed = {
             'time': waveform['time'],
             'voltage': np.array(waveform['voltage']),
-            'sample_rate': waveform.get('sample_rate', 1e9)
+            'sample_rate': 采样率
         }
         
         # 1. 带通滤波（先滤波）
@@ -582,7 +604,10 @@ class FieldCapture:
         
         # 转换为时间偏移
         中心索引 = len(基准) // 2
+        
+        # 🔧 使用已验证的采样率（waveform已在_process_waveform中验证过）
         sample_rate = waveform.get('sample_rate', 1e9)
+        
         声时差_秒 = (精确偏移 - 中心索引) / sample_rate
         声时差_纳秒 = 声时差_秒 * 1e9
         

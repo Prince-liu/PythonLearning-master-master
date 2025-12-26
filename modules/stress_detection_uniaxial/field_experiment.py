@@ -236,6 +236,10 @@ class FieldExperiment:
             # 清空HDF5中的波形数据
             self.current_hdf5.clear_waveforms()
         
+        # 🔧 修复：清空field_capture中的基准波形缓存
+        if result['success'] and hasattr(self, 'field_capture') and self.field_capture:
+            self.field_capture.baseline_waveform = None
+        
         return result
     
     def get_experiment_list(self) -> Dict[str, Any]:

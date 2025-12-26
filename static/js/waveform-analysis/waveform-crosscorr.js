@@ -142,12 +142,29 @@ const WaveformCrossCorr = (function() {
             const truncateStartInput = document.getElementById('truncateStartInput');
             const truncateEndInput = document.getElementById('truncateEndInput');
             
-            const truncateStart = parseFloat(truncateStartInput.value) || 5.0;
+            // 🔧 支持左侧不截取：
+            // - 空值 = 不截取（从信号开头开始，传null给后端）
+            // - 0 = 从0μs开始截取（这是一个具体的时间点）
+            // - 其他数值 = 从该时间点开始截取
+            const truncateStartValue = truncateStartInput.value.trim();
+            let truncateStart;
+            if (truncateStartValue === '') {
+                truncateStart = null;  // 空值表示不截取
+            } else {
+                truncateStart = parseFloat(truncateStartValue);
+                if (isNaN(truncateStart)) {
+                    if (显示状态栏信息回调) {
+                        显示状态栏信息回调('⚠️', '参数错误', '起始时间必须是有效数字', 'warning', 3000);
+                    }
+                    return;
+                }
+            }
+            
             const truncateEndValue = truncateEndInput.value.trim();
             const truncateEnd = truncateEndValue ? parseFloat(truncateEndValue) : null;
             
             // 验证范围
-            if (truncateEnd !== null && truncateEnd <= truncateStart) {
+            if (truncateStart !== null && truncateEnd !== null && truncateEnd <= truncateStart) {
                 if (显示状态栏信息回调) {
                     显示状态栏信息回调('⚠️', '参数错误', '结束时间必须大于起始时间', 'warning', 3000);
                 }
@@ -315,10 +332,10 @@ const WaveformCrossCorr = (function() {
         if (crossCorrStatus) crossCorrStatus.style.display = 'none';
         if (resultsDisplay) resultsDisplay.style.display = 'none';
         
-        // 重置截取范围输入框
+        // 重置截取范围输入框（空值表示不截取）
         const truncateStartInput = document.getElementById('truncateStartInput');
         const truncateEndInput = document.getElementById('truncateEndInput');
-        if (truncateStartInput) truncateStartInput.value = '5.0';
+        if (truncateStartInput) truncateStartInput.value = '';
         if (truncateEndInput) truncateEndInput.value = '';
         
         // 禁用按钮

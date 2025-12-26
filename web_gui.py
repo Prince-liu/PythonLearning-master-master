@@ -220,13 +220,13 @@ class WebAPI:
         """🆕 创建新的单轴应力检测实验"""
         return self.calibration.创建应力检测实验(材料名称, 测试方向列表)
     
-    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None):
+    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
         """🆕 保存基准波形数据（从订阅获取的波形，含带通滤波和降噪处理）"""
-        return self.calibration.保存基准波形数据(实验ID, 方向名称, 电压数据, 时间数据, 降噪配置, 带通滤波配置)
+        return self.calibration.保存基准波形数据(实验ID, 方向名称, 电压数据, 时间数据, 降噪配置, 带通滤波配置, 示波器采样率)
     
-    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None):
+    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
         """🆕 保存并分析应力波形数据（从订阅获取的波形）"""
-        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置, 带通滤波配置)
+        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置, 带通滤波配置, 示波器采样率)
     
     def 线性拟合应力时间差(self, 实验ID, 方向名称):
         """🆕 线性拟合应力-时间差数据"""
@@ -455,7 +455,13 @@ class WebAPI:
         Returns:
             {"success": bool, "message": str}
         """
-        return self.field_experiment.reset_experiment(exp_id)
+        result = self.field_experiment.reset_experiment(exp_id)
+        
+        # 🔧 修复：清空field_capture中的基准波形缓存
+        if result['success'] and self.field_capture:
+            self.field_capture.baseline_waveform = None
+        
+        return result
     
     def get_field_experiment_list(self):
         """获取所有应力场实验列表

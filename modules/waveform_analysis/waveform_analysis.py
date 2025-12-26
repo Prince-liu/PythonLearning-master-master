@@ -361,14 +361,14 @@ class WaveformAnalysis:
         except Exception as e:
             return {"success": False, "message": f"加载文件失败: {str(e)}"}
     
-    def 计算互相关(self, 参考信号索引, truncate_start=5.0, truncate_end=None):
+    def 计算互相关(self, 参考信号索引, truncate_start=None, truncate_end=None):
         """
         计算参考信号与其他信号的互相关
         
         Args:
             参考信号索引: 参考信号的索引
-            truncate_start: 截取起始时间（微秒），默认5.0
-            truncate_end: 截取结束时间（微秒），None表示不截断右侧
+            truncate_start: 截取起始时间（微秒），None表示从信号开头开始
+            truncate_end: 截取结束时间（微秒），None表示到信号末尾
         """
         try:
             from modules.core.signal_processing import calculate_cross_correlation, truncate_signal_range
@@ -432,7 +432,23 @@ class WaveformAnalysis:
                 # 找到最大相关性位置
                 max_idx = np.argmax(correlation)
                 max_correlation = correlation[max_idx]
-                max_lag = lags[max_idx]
+                
+                # 🔧 抛物线插值（亚采样点精度，与标定/单轴模块一致）
+                if 1 < max_idx < len(correlation) - 2:
+                    y1 = correlation[max_idx - 1]
+                    y2 = correlation[max_idx]
+                    y3 = correlation[max_idx + 1]
+                    
+                    分母 = y1 - 2*y2 + y3
+                    if abs(分母) > 1e-10:
+                        精确峰值索引 = max_idx + 0.5 * (y1 - y3) / 分母
+                    else:
+                        精确峰值索引 = max_idx
+                else:
+                    精确峰值索引 = max_idx
+                
+                # 计算精确的滞后值
+                max_lag = lags[max_idx] + (精确峰值索引 - max_idx)
                 
                 # 计算时间延迟（微秒）
                 # 注意：负值表示对比信号相对于参考信号提前（左移）

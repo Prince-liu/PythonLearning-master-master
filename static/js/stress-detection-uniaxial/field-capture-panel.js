@@ -1271,7 +1271,7 @@ const FieldCapturePanel = (function() {
         
         // 检查基准点是否未采集，如果未采集则跳转到基准点（只跳转，不自动采集）
         let 需要先采集基准点 = false;
-        const baselinePointId = 实验状态.当前实验?.baseline_point_id;
+        const baselinePointId = 实验状态.基准点ID;  // 🔧 修复：使用实验状态.基准点ID而不是当前实验的字段
         if (baselinePointId !== null && baselinePointId !== undefined) {
             const baselinePoint = 实验状态.测点列表.find(p => p.point_index === baselinePointId);
             if (baselinePoint && baselinePoint.status !== 'measured') {
