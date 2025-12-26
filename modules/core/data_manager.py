@@ -82,16 +82,26 @@ class ExperimentDataManager:
         self.conn.commit()
     
     def _清理不完整数据(self):
-        """清理不完整的实验数据（没有基准波形或没有应力数据的方向）"""
+        """清理不完整的实验数据（没有基准波形 且 没有应力数据的方向）
+        
+        修改说明：
+        - 旧逻辑：清理"没有基准波形 或 没有应力数据"的方向
+        - 新逻辑：只清理"没有基准波形 且 没有应力数据"的方向
+        
+        这样可以保留：
+        - 只有基准波形但还没采集应力数据的方向（用户可能暂停了实验）
+        - 有应力数据但基准波形路径丢失的方向（异常情况，保留数据）
+        """
         cursor = self.conn.cursor()
         
-        # 查找不完整的方向：没有基准波形 或 没有应力数据
+        # 查找不完整的方向：没有基准波形 且 没有应力数据
+        # 只有两者都没有时才清理（说明是空的方向记录）
         cursor.execute('''
             SELECT td.id, td.实验ID 
             FROM test_directions td
             LEFT JOIN stress_data sd ON td.id = sd.方向ID
             WHERE td.基准波形路径 IS NULL 
-               OR sd.id IS NULL
+               AND sd.id IS NULL
             GROUP BY td.id
         ''')
         不完整方向列表 = cursor.fetchall()

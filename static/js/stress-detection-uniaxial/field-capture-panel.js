@@ -1,4 +1,4 @@
-﻿// ==================== 采集控制面板模块 ====================
+// ==================== 采集控制面板模块 ====================
 // 功能：实时监控、测点采集、降噪设置、进度管理
 
 const FieldCapturePanel = (function() {
@@ -1269,29 +1269,18 @@ const FieldCapturePanel = (function() {
             return;
         }
         
-        // 🆕 自动采集基准点（如果未采集）
+        // 检查基准点是否未采集，如果未采集则跳转到基准点（只跳转，不自动采集）
+        let 需要先采集基准点 = false;
         const baselinePointId = 实验状态.当前实验?.baseline_point_id;
         if (baselinePointId !== null && baselinePointId !== undefined) {
-            // 检查基准点是否已采集
             const baselinePoint = 实验状态.测点列表.find(p => p.point_index === baselinePointId);
             if (baselinePoint && baselinePoint.status !== 'measured') {
-                callbacks?.显示状态信息('🎯', '正在自动采集基准点...', `基准点 ${baselinePointId} 未采集，自动跳转`, 'info');
-                
-                // 保存当前测点索引
-                const originalIndex = 当前测点索引;
-                
-                // 跳转到基准点并采集
-                const success = await 自动采集基准点(baselinePointId);
-                
-                if (!success) {
-                    callbacks?.显示状态信息('❌', '基准点采集失败', '请手动采集基准点后再开始', 'error');
-                    return;
-                }
-                
-                // 采集成功后，跳回初始点（点0）
-                if (originalIndex !== baselinePointId) {
-                    更新当前测点(0);  // 跳回初始点
-                    callbacks?.显示状态信息('✅', '基准点采集完成', `已跳回初始点 0`, 'success');
+                需要先采集基准点 = true;
+                // 跳转到基准点位置
+                const baselineIndex = 实验状态.测点列表.findIndex(p => p.point_index === baselinePointId);
+                if (baselineIndex !== -1) {
+                    实验状态.当前测点索引 = baselineIndex;
+                    更新当前测点显示();
                 }
             }
         }
@@ -1307,8 +1296,12 @@ const FieldCapturePanel = (function() {
             callbacks?.切换到采集阶段?.();
         }
         
-        callbacks?.显示状态信息('✅', '采集已开始', '可以开始采集测点', 'success');
-
+        // 提示信息
+        if (需要先采集基准点) {
+            callbacks?.显示状态信息('🎯', '请先采集基准点', `已跳转到基准点 ${baselinePointId}，采集后将自动跳回测点1`, 'info');
+        } else {
+            callbacks?.显示状态信息('✅', '采集已开始', '可以开始采集测点', 'success');
+        }
     }
     
     function 暂停采集流程() {
@@ -1327,29 +1320,6 @@ const FieldCapturePanel = (function() {
         启用采集按钮();
         callbacks?.显示状态信息('✅', '采集已恢复', '', 'success');
 
-    }
-    
-    // ========== 自动采集基准点 ==========
-    async function 自动采集基准点(baselinePointId) {
-        try {
-            // 跳转到基准点
-            更新当前测点(baselinePointId);
-            
-            // 等待界面更新
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // 采集基准点
-            const result = await 采集当前测点();
-            
-            if (!result || !result.success) {
-                return false;
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('自动采集基准点失败:', error);
-            return false;
-        }
     }
     
     async function 完成采集() {

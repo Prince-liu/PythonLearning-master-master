@@ -308,37 +308,83 @@ class StressCalibration:
         except Exception as e:
             return {"success": False, "message": f"创建实验失败: {str(e)}"}
     
-    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据):
+    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None):
         """
-        保存基准波形数据（含降噪处理）
+        保存基准波形数据（含带通滤波和降噪处理）
+        
+        处理流程（与应力波形一致）：
+        1. 带通滤波（如果启用）
+        2. 小波降噪（如果启用）
         
         参数:
             实验ID: 实验ID
             方向名称: 测试方向名称
             电压数据: 电压数组
             时间数据: 时间数组
+            降噪配置: 降噪配置字典 {"enabled": bool, "method": str, "wavelet": str, "level": int, "threshold_mode": str}
+            带通滤波配置: 带通滤波配置字典 {"enabled": bool, "lowcut": float, "highcut": float, "order": int}
         
         返回:
             {"success": bool, "文件路径": str}
         """
         try:
             from ..core import signal_processing
+            from scipy import signal as scipy_signal
             
             dm = self._获取数据管理器()
             
-            # 1. 小波降噪
-            降噪结果 = signal_processing.apply_wavelet_denoising(
-                电压数据, 'sym6', 5, 'soft', 'heursure'
-            )
+            处理后波形 = np.array(电压数据)
             
-            if not 降噪结果['success']:
-                return 降噪结果
+            # 1. 带通滤波（如果启用）- 与应力波形处理一致
+            if 带通滤波配置 and 带通滤波配置.get('enabled', False):
+                try:
+                    lowcut = 带通滤波配置.get('lowcut', 1.5) * 1e6  # MHz转Hz
+                    highcut = 带通滤波配置.get('highcut', 3.5) * 1e6
+                    order = 带通滤波配置.get('order', 6)
+                    
+                    # 计算采样率
+                    时间数组 = np.array(时间数据)
+                    if len(时间数组) > 1:
+                        采样间隔 = 时间数组[1] - 时间数组[0]
+                        采样率 = 1.0 / 采样间隔 if 采样间隔 > 0 else 1e9
+                    else:
+                        采样率 = 1e9
+                    
+                    # 设计巴特沃斯带通滤波器
+                    nyquist = 采样率 / 2
+                    low = lowcut / nyquist
+                    high = highcut / nyquist
+                    
+                    if 0 < low < 1 and 0 < high < 1 and low < high:
+                        sos = scipy_signal.butter(order, [low, high], btype='band', output='sos')
+                        处理后波形 = scipy_signal.sosfiltfilt(sos, 处理后波形)
+                except Exception as e:
+                    # 带通滤波失败不影响后续处理
+                    pass
             
-            # 2. 保存到HDF5
+            # 2. 小波降噪（如果启用）
+            if 降噪配置 is None or 降噪配置.get('enabled', True):
+                if 降噪配置:
+                    wavelet = 降噪配置.get('wavelet', 'sym6')
+                    level = 降噪配置.get('level', 5)
+                    threshold_mode = 降噪配置.get('threshold_mode', 'soft')
+                else:
+                    wavelet = 'sym6'
+                    level = 5
+                    threshold_mode = 'soft'
+                
+                降噪结果 = signal_processing.apply_wavelet_denoising(
+                    处理后波形, wavelet, level, threshold_mode, 'heursure'
+                )
+                
+                if 降噪结果['success']:
+                    处理后波形 = 降噪结果['denoised']
+            
+            # 3. 保存到HDF5
             保存结果 = dm.保存基准波形(
                 实验ID,
                 方向名称,
-                降噪结果['denoised'],  # 🔧 修复：使用正确的键名
+                处理后波形,
                 时间数据
             )
             

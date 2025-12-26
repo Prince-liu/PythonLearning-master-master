@@ -86,7 +86,22 @@ class FieldCapture:
         # 加载基准波形（如果存在）
         baseline_result = hdf5.load_baseline()
         if baseline_result['success']:
-            self.baseline_waveform = baseline_result['data']['waveform']
+            baseline_data = baseline_result['data']['waveform']
+            
+            # 检查基准波形是否已经处理过（通过元数据标记）
+            is_processed = baseline_result['data'].get('is_processed', False)
+            
+            if not is_processed:
+                # 旧实验的基准波形未处理，需要重新处理
+                # 注意：这里不修改HDF5文件，只在内存中处理
+                # 用户下次采集基准点时会保存处理后的版本
+                self.baseline_waveform = self._process_waveform(
+                    baseline_data, 
+                    bandpass_enabled=self.bandpass_config.get('enabled', True),
+                    denoise_enabled=self.denoise_config.get('enabled', True)
+                )
+            else:
+                self.baseline_waveform = baseline_data
     
     def set_baseline_stress(self, stress: float) -> Dict[str, Any]:
         """
@@ -152,7 +167,14 @@ class FieldCapture:
     
     def capture_point(self, point_index: int, auto_denoise: bool = True) -> Dict[str, Any]:
         """
-        采集单个测点
+        采集单个测点（直接从示波器采集）
+        
+        处理流程（与标定模块一致）：
+        1. 带通滤波（如果启用）
+        2. 小波降噪（如果启用）
+        3. 质量评估
+        4. 互相关计算时间差
+        5. 计算应力值
         
         Args:
             point_index: 测点索引
@@ -188,24 +210,27 @@ class FieldCapture:
             if not waveform:
                 return {"success": False, "error_code": 4004, "message": "波形采集失败"}
             
-            # 降噪处理
-            if auto_denoise and self.denoise_config.get('enabled', True):
-                waveform = self._apply_denoise(waveform)
+            # ========== 统一信号处理流程 ==========
+            processed_waveform = self._process_waveform(
+                waveform, 
+                bandpass_enabled=self.bandpass_config.get('enabled', True),
+                denoise_enabled=auto_denoise and self.denoise_config.get('enabled', True)
+            )
             
-            # 评估波形质量
-            quality = self.evaluate_waveform_quality(waveform)
+            # 评估波形质量（在处理后的波形上评估）
+            quality = self.evaluate_waveform_quality(processed_waveform)
             
             # 检查是否是第一个测点（自动设为基准）
             is_baseline = self.baseline_waveform is None
             
             if is_baseline:
-                # 设置为基准波形
-                self.baseline_waveform = waveform
+                # 设置为基准波形（保存处理后的波形）
+                self.baseline_waveform = processed_waveform
                 time_diff = 0.0
                 stress = self.baseline_stress  # 基准点使用设定的基准应力值
                 
-                # 保存基准波形
-                self.current_hdf5.save_baseline(point_index, waveform)
+                # 保存基准波形（保存处理后的波形）
+                self.current_hdf5.save_baseline(point_index, processed_waveform)
                 
                 # 更新数据库
                 self.db.update_experiment(self.current_exp_id, {
@@ -213,8 +238,8 @@ class FieldCapture:
                     'baseline_stress': self.baseline_stress
                 })
             else:
-                # 计算时间差
-                time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
+                # 计算时间差（使用简化版互相关，波形已经是处理后的）
+                time_diff = self._calculate_time_diff_simple(processed_waveform, self.baseline_waveform)
                 
                 # 计算应力值（支持绝对应力模式）
                 # σ = σ_基准 + k × Δt
@@ -230,7 +255,7 @@ class FieldCapture:
             is_suspicious = validation_result['is_suspicious']
             validation_warnings = validation_result['warnings']
             
-            # 保存波形数据
+            # 保存波形数据（保存处理后的波形）
             analysis = {
                 'time_diff': time_diff,
                 'stress': stress,
@@ -245,7 +270,7 @@ class FieldCapture:
                 'theta_coord': point.get('theta_coord')
             }
             
-            self.current_hdf5.save_point_waveform(point_index, waveform, analysis, metadata)
+            self.current_hdf5.save_point_waveform(point_index, processed_waveform, analysis, metadata)
             
             # 更新数据库
             self.db.update_point(self.current_exp_id, point_index, {
@@ -290,6 +315,13 @@ class FieldCapture:
         """
         使用前端传入的波形数据采集测点
         
+        处理流程（与标定模块一致）：
+        1. 带通滤波（如果启用）
+        2. 小波降噪（如果启用）
+        3. 质量评估
+        4. 互相关计算时间差
+        5. 计算应力值
+        
         Args:
             point_index: 测点索引
             waveform: 波形数据 {'time': [], 'voltage': [], 'sample_rate': float}
@@ -315,67 +347,52 @@ class FieldCapture:
             if not waveform or not waveform.get('voltage') or not waveform.get('time'):
                 return {"success": False, "error_code": 4004, "message": "波形数据无效"}
             
-            # 临时保存原始带通滤波配置
-            original_bandpass_enabled = self.bandpass_config.get('enabled', True)
+            # ========== 信号处理流程（与标定模块一致）==========
+            processed_waveform = self._process_waveform(waveform, bandpass_enabled, auto_denoise)
             
-            # 根据前端传递的参数临时修改配置
-            self.bandpass_config['enabled'] = bandpass_enabled
+            # 评估波形质量（在处理后的波形上评估）
+            quality = self.evaluate_waveform_quality(processed_waveform)
             
-            try:
-                # 降噪处理
-                if auto_denoise and self.denoise_config.get('enabled', True):
-                    waveform = self._apply_denoise(waveform)
-                
-                # 评估波形质量
-                quality = self.evaluate_waveform_quality(waveform)
-                
-                # 获取用户指定的基准点ID
-                exp_result = self.db.load_experiment(self.current_exp_id)
-                designated_baseline_id = exp_result['data']['experiment'].get('baseline_point_id') if exp_result['success'] else None
-                
-                # 判断是否是基准点：
-                # 1. 如果用户指定了基准点，且当前测点就是指定的基准点，且基准波形还没采集
-                # 2. 如果没有指定基准点，且还没有基准波形（兼容旧逻辑）
-                is_designated_baseline = designated_baseline_id and point_index == designated_baseline_id
-                is_baseline = (is_designated_baseline and self.baseline_waveform is None) or \
-                             (not designated_baseline_id and self.baseline_waveform is None)
-                
-                if is_baseline:
-                    # 设置为基准波形
-                    self.baseline_waveform = waveform
-                    time_diff = 0.0
-                    stress = self.baseline_stress  # 基准点使用设定的基准应力值
-                    
-                    # 保存基准波形
-                    self.current_hdf5.save_baseline(point_index, waveform)
-                    
-                    # 更新数据库
-                    self.db.update_experiment(self.current_exp_id, {
-                        'baseline_point_id': point_index,
-                        'baseline_stress': self.baseline_stress
-                    })
-                else:
-                    # 检查是否有基准波形
-                    if self.baseline_waveform is None:
-                        # 没有基准波形，提示用户先采集基准点
-                        baseline_hint = f"测点 {designated_baseline_id}" if designated_baseline_id else "第一个测点"
-                        return {
-                            "success": False,
-                            "error_code": 4022,
-                            "message": f"请先采集基准点（{baseline_hint}）"
-                        }
-                    
-                    # 计算时间差
-                    time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
-                    
-                    # 计算应力值（支持绝对应力模式）
-                    # σ = σ_基准 + k × Δt
-                    stress = self.baseline_stress + self.calibration_k * time_diff
-            finally:
-                # 恢复原始配置
-                self.bandpass_config['enabled'] = original_bandpass_enabled
+            # 获取用户指定的基准点ID
+            exp_result = self.db.load_experiment(self.current_exp_id)
+            designated_baseline_id = exp_result['data']['experiment'].get('baseline_point_id') if exp_result['success'] else None
             
-            # 验证数据（增强版）
+            # 判断是否是基准点
+            is_designated_baseline = designated_baseline_id and point_index == designated_baseline_id
+            is_baseline = (is_designated_baseline and self.baseline_waveform is None) or \
+                         (not designated_baseline_id and self.baseline_waveform is None)
+            
+            if is_baseline:
+                # 设置为基准波形（保存处理后的波形）
+                self.baseline_waveform = processed_waveform
+                time_diff = 0.0
+                stress = self.baseline_stress
+                
+                # 保存基准波形（保存处理后的波形）
+                self.current_hdf5.save_baseline(point_index, processed_waveform)
+                
+                # 更新数据库
+                self.db.update_experiment(self.current_exp_id, {
+                    'baseline_point_id': point_index,
+                    'baseline_stress': self.baseline_stress
+                })
+            else:
+                # 检查是否有基准波形
+                if self.baseline_waveform is None:
+                    baseline_hint = f"测点 {designated_baseline_id}" if designated_baseline_id else "第一个测点"
+                    return {
+                        "success": False,
+                        "error_code": 4022,
+                        "message": f"请先采集基准点（{baseline_hint}）"
+                    }
+                
+                # 计算时间差（基准波形已经是处理后的，测量波形也是处理后的）
+                time_diff = self._calculate_time_diff_simple(processed_waveform, self.baseline_waveform)
+                
+                # 计算应力值
+                stress = self.baseline_stress + self.calibration_k * time_diff
+            
+            # 验证数据
             validation_result = self._validate_point_data(
                 point_index=point_index,
                 time_diff=time_diff,
@@ -385,7 +402,7 @@ class FieldCapture:
             is_suspicious = validation_result['is_suspicious']
             validation_warnings = validation_result['warnings']
             
-            # 保存波形数据
+            # 保存波形数据（保存处理后的波形）
             analysis = {
                 'time_diff': time_diff,
                 'stress': stress,
@@ -400,7 +417,7 @@ class FieldCapture:
                 'theta_coord': point.get('theta_coord')
             }
             
-            self.current_hdf5.save_point_waveform(point_index, waveform, analysis, metadata)
+            self.current_hdf5.save_point_waveform(point_index, processed_waveform, analysis, metadata)
             
             # 更新数据库
             self.db.update_point(self.current_exp_id, point_index, {
@@ -462,6 +479,115 @@ class FieldCapture:
         # 采集失败
         return None
     
+    def _process_waveform(self, waveform: Dict[str, Any], 
+                          bandpass_enabled: bool = True, 
+                          denoise_enabled: bool = True) -> Dict[str, Any]:
+        """
+        统一的波形处理流程（与标定模块一致）
+        
+        处理顺序：
+        1. 带通滤波（如果启用）
+        2. 小波降噪（如果启用）
+        
+        Args:
+            waveform: 原始波形数据 {'time': [], 'voltage': [], 'sample_rate': float}
+            bandpass_enabled: 是否启用带通滤波
+            denoise_enabled: 是否启用降噪
+        
+        Returns:
+            dict: 处理后的波形数据
+        """
+        processed = {
+            'time': waveform['time'],
+            'voltage': np.array(waveform['voltage']),
+            'sample_rate': waveform.get('sample_rate', 1e9)
+        }
+        
+        # 1. 带通滤波（先滤波）
+        if bandpass_enabled and self.bandpass_config.get('enabled', True):
+            processed['voltage'] = self._apply_bandpass_filter(
+                processed['voltage'], 
+                processed['sample_rate']
+            )
+        
+        # 2. 小波降噪（后降噪）
+        if denoise_enabled and self.denoise_config.get('enabled', True):
+            processed = self._apply_denoise(processed)
+        
+        # 确保 voltage 是 list 类型（便于JSON序列化）
+        if isinstance(processed['voltage'], np.ndarray):
+            processed['voltage'] = processed['voltage'].tolist()
+        
+        return processed
+    
+    def _calculate_time_diff_simple(self, waveform: Dict[str, Any], 
+                                    baseline: Dict[str, Any]) -> float:
+        """
+        简化版互相关计算时间差（波形已经过滤波和降噪处理）
+        
+        Args:
+            waveform: 处理后的测量波形
+            baseline: 处理后的基准波形
+        
+        Returns:
+            float: 时间差 (ns)
+        """
+        from scipy.signal import correlate
+        
+        基准_voltage = np.array(baseline['voltage'])
+        测量_voltage = np.array(waveform['voltage'])
+        基准_time = np.array(baseline.get('time', []))
+        测量_time = np.array(waveform.get('time', []))
+        
+        # 时域对齐（如果有时间数组）
+        if len(基准_time) > 0 and len(测量_time) > 0:
+            t_start = max(基准_time[0], 测量_time[0])
+            t_end = min(基准_time[-1], 测量_time[-1])
+            
+            if t_start < t_end:
+                基准_mask = (基准_time >= t_start) & (基准_time <= t_end)
+                测量_mask = (测量_time >= t_start) & (测量_time <= t_end)
+                
+                基准_aligned = 基准_voltage[基准_mask]
+                测量_aligned = 测量_voltage[测量_mask]
+                
+                if len(基准_aligned) >= 100 and len(测量_aligned) >= 100:
+                    基准_voltage = 基准_aligned
+                    测量_voltage = 测量_aligned
+        
+        # 确保长度一致
+        最小长度 = min(len(基准_voltage), len(测量_voltage))
+        基准 = 基准_voltage[:最小长度]
+        测量 = 测量_voltage[:最小长度]
+        
+        # 频域互相关
+        相关 = correlate(测量, 基准, mode='same', method='fft')
+        
+        # 找到峰值位置
+        峰值索引 = np.argmax(相关)
+        
+        # 抛物线插值（亚采样点精度）
+        if 1 < 峰值索引 < len(相关) - 2:
+            y1 = 相关[峰值索引 - 1]
+            y2 = 相关[峰值索引]
+            y3 = 相关[峰值索引 + 1]
+            
+            分母 = y1 - 2*y2 + y3
+            if abs(分母) > 1e-10:
+                精确偏移 = 峰值索引 + 0.5 * (y1 - y3) / 分母
+            else:
+                精确偏移 = 峰值索引
+        else:
+            精确偏移 = 峰值索引
+        
+        # 转换为时间偏移
+        中心索引 = len(基准) // 2
+        sample_rate = waveform.get('sample_rate', 1e9)
+        声时差_秒 = (精确偏移 - 中心索引) / sample_rate
+        声时差_纳秒 = 声时差_秒 * 1e9
+        
+        return 声时差_纳秒
+
     def _apply_denoise(self, waveform: Dict[str, Any]) -> Dict[str, Any]:
         """应用降噪处理"""
         try:
@@ -505,84 +631,6 @@ class FieldCapture:
             return waveform
         except Exception:
             return waveform
-    
-    def _calculate_time_diff(self, waveform: Dict[str, Any], 
-                            baseline: Dict[str, Any]) -> float:
-        """
-        使用互相关计算时间差（与应力标定模块一致的算法）
-        
-        Args:
-            waveform: 当前波形
-            baseline: 基准波形
-        
-        Returns:
-            float: 时间差 (ns)
-        """
-        from scipy.signal import correlate
-        
-        基准_voltage = np.array(baseline['voltage'])
-        测量_voltage = np.array(waveform['voltage'])
-        基准_time = np.array(baseline.get('time', []))
-        测量_time = np.array(waveform.get('time', []))
-        
-        # 如果有时间数组，先对齐到相同的时间范围
-        if len(基准_time) > 0 and len(测量_time) > 0:
-            # 找到重叠的时间范围
-            t_start = max(基准_time[0], 测量_time[0])
-            t_end = min(基准_time[-1], 测量_time[-1])
-            
-            if t_start < t_end:
-                # 在基准波形中找到对应的索引范围
-                基准_mask = (基准_time >= t_start) & (基准_time <= t_end)
-                测量_mask = (测量_time >= t_start) & (测量_time <= t_end)
-                
-                基准_voltage = 基准_voltage[基准_mask]
-                测量_voltage = 测量_voltage[测量_mask]
-        
-        # 确保长度一致
-        最小长度 = min(len(基准_voltage), len(测量_voltage))
-        if 最小长度 < 100:
-            # 重叠区域太小，回退到原始方法
-            基准_voltage = np.array(baseline['voltage'])
-            测量_voltage = np.array(waveform['voltage'])
-            最小长度 = min(len(基准_voltage), len(测量_voltage))
-        
-        基准 = 基准_voltage[:最小长度]
-        测量 = 测量_voltage[:最小长度]
-        
-        # 🆕 带通滤波（如果启用）
-        if self.bandpass_config and self.bandpass_config.get('enabled', True):
-            sample_rate = waveform.get('sample_rate', 1e9)
-            基准 = self._apply_bandpass_filter(基准, sample_rate)
-            测量 = self._apply_bandpass_filter(测量, sample_rate)
-        
-        # 频域互相关（使用 mode='same'，与标定模块一致）
-        相关 = correlate(测量, 基准, mode='same', method='fft')
-        
-        # 找到峰值位置（不用 abs，找最大正相关）
-        峰值索引 = np.argmax(相关)
-        
-        # 抛物线插值（亚采样点精度）
-        if 1 < 峰值索引 < len(相关) - 2:
-            y1 = 相关[峰值索引 - 1]
-            y2 = 相关[峰值索引]
-            y3 = 相关[峰值索引 + 1]
-            
-            分母 = y1 - 2*y2 + y3
-            if abs(分母) > 1e-10:
-                精确偏移 = 峰值索引 + 0.5 * (y1 - y3) / 分母
-            else:
-                精确偏移 = 峰值索引
-        else:
-            精确偏移 = 峰值索引
-        
-        # 转换为时间偏移
-        中心索引 = len(基准) // 2
-        sample_rate = waveform.get('sample_rate', 1e9)
-        声时差_秒 = (精确偏移 - 中心索引) / sample_rate
-        声时差_纳秒 = 声时差_秒 * 1e9
-        
-        return 声时差_纳秒
     
     def _apply_bandpass_filter(self, signal: np.ndarray, sample_rate: float) -> np.ndarray:
         """
@@ -949,8 +997,8 @@ class FieldCapture:
             
             waveform = waveform_result['data']['waveform']
             
-            # 重新计算时间差和应力
-            time_diff = self._calculate_time_diff(waveform, self.baseline_waveform)
+            # 重新计算时间差和应力（使用简化版互相关，波形已经是处理后的）
+            time_diff = self._calculate_time_diff_simple(waveform, self.baseline_waveform)
             # σ = σ_基准 + k × Δt
             stress = self.baseline_stress + self.calibration_k * time_diff
             

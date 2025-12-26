@@ -106,6 +106,9 @@ class OscilloscopeBase:
             # 获取存储深度
             存储深度 = self.示波器.query(':ACQ:MEMD?').strip()
             
+            # 计算采样率
+            采样率 = 1.0 / x增量 if x增量 > 0 else 1e9
+            
             数据 = {
                 "time": 时间.tolist(),
                 "voltage": 电压.tolist(),
@@ -113,7 +116,8 @@ class OscilloscopeBase:
                 "vOffset": 垂直偏移,
                 "hScale": 时基档位,
                 "points": len(电压),
-                "memoryDepth": 存储深度
+                "memoryDepth": 存储深度,
+                "sample_rate": 采样率  # 添加采样率
             }
             
             return {"success": True, "data": 数据}
@@ -206,13 +210,17 @@ class OscilloscopeBase:
             # 计算对应的时间轴
             时间 = 采集起点时间 + (np.arange(起始索引 - 1, 起始索引 - 1 + len(电压))) * x增量
             
+            # 计算采样率
+            采样率 = 1.0 / x增量 if x增量 > 0 else 1e9
+            
             数据 = {
                 "time": 时间.tolist(),
                 "voltage": 电压.tolist(),
                 "vScale": 垂直档位,
                 "vOffset": 垂直偏移,
                 "hScale": 时基档位,
-                "points": len(电压)
+                "points": len(电压),
+                "sample_rate": 采样率  # 添加采样率
             }
             
             # 恢复示波器运行

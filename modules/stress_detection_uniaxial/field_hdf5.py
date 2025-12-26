@@ -229,13 +229,14 @@ class FieldExperimentHDF5:
     
     # ==================== 基准波形管理 ====================
     
-    def save_baseline(self, point_id: int, waveform: Dict[str, Any]) -> Dict[str, Any]:
+    def save_baseline(self, point_id: int, waveform: Dict[str, Any], is_processed: bool = True) -> Dict[str, Any]:
         """
         保存基准波形
         
         Args:
             point_id: 基准测点ID
             waveform: 波形数据 {time: [], voltage: [], sample_rate: float}
+            is_processed: 波形是否已经过处理（带通滤波+降噪）
         
         Returns:
             dict: {"success": bool, "message": str}
@@ -249,6 +250,7 @@ class FieldExperimentHDF5:
                 baseline_grp = f.create_group('baseline')
                 baseline_grp.attrs['point_id'] = point_id
                 baseline_grp.attrs['captured_at'] = datetime.now().isoformat()
+                baseline_grp.attrs['is_processed'] = is_processed  # 标记是否已处理
                 
                 # 创建waveform子组
                 wf_grp = baseline_grp.create_group('waveform')
@@ -271,6 +273,7 @@ class FieldExperimentHDF5:
         
         Returns:
             dict: {"success": bool, "data": {...}, "message": str}
+                  data包含: point_id, captured_at, waveform, is_processed
         """
         try:
             if not self.file_exists():
@@ -286,6 +289,7 @@ class FieldExperimentHDF5:
                 data = {
                     'point_id': int(baseline_grp.attrs.get('point_id', 0)),
                     'captured_at': str(baseline_grp.attrs.get('captured_at', '')),
+                    'is_processed': bool(baseline_grp.attrs.get('is_processed', False)),  # 读取处理标记
                     'waveform': {
                         'time': wf_grp['time'][:].tolist(),
                         'voltage': wf_grp['voltage'][:].tolist(),
