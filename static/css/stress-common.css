@@ -13,7 +13,7 @@
 
 .field-modal.modal-sm { max-width: 400px; }
 .field-modal.modal-md { max-width: 520px; }
-.field-modal.modal-lg { max-width: 700px; }
+.field-modal.modal-lg { max-width: 900px; }
 
 /* 弹窗头部 */
 .field-modal .modal-header {

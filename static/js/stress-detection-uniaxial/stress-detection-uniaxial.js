@@ -879,7 +879,7 @@ const StressDetectionUniaxialModule = (function() {
                 const result = await pywebview.api.save_manual_calibration(data);
                 if (result.success) {
 
-                    显示状态信息('✅', '标定数据已加载并保存', `K = ${data.k} MPa/ns`, 'success');
+                    显示状态信息('✅', '标定数据已加载并保存', `K = ${data.k.toFixed(3)} MPa/ns`, 'success');
                 } else {
                     console.warn('[应力场] 保存标定数据失败:', result.message);
                     显示状态信息('⚠️', '标定数据已加载但保存失败', result.message, 'warning');
@@ -889,7 +889,7 @@ const StressDetectionUniaxialModule = (function() {
                 显示状态信息('⚠️', '标定数据已加载但保存失败', error.toString(), 'warning');
             }
         } else {
-            显示状态信息('✅', '标定数据已加载', `K = ${data.k} MPa/ns`, 'success');
+            显示状态信息('✅', '标定数据已加载', `K = ${data.k.toFixed(3)} MPa/ns`, 'success');
         }
     }
     
@@ -1059,9 +1059,7 @@ const StressDetectionUniaxialModule = (function() {
         
         // 🆕 自动滚动到当前测点行
         if (自动滚动 && 当前行元素) {
-            setTimeout(() => {
-                当前行元素.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 50);
+            CommonUtils.scrollToTableRow(当前行元素);
         }
     }
 

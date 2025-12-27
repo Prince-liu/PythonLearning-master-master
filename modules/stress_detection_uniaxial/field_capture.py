@@ -554,7 +554,7 @@ class FieldCapture:
         Returns:
             float: 时间差 (ns)
         """
-        from scipy.signal import correlate
+        from ..core.signal_processing import calculate_cross_correlation, find_peak_with_parabolic_interpolation
         
         基准_voltage = np.array(baseline['voltage'])
         测量_voltage = np.array(waveform['voltage'])
@@ -582,84 +582,59 @@ class FieldCapture:
         基准 = 基准_voltage[:最小长度]
         测量 = 测量_voltage[:最小长度]
         
-        # 频域互相关
-        相关 = correlate(测量, 基准, mode='same', method='fft')
+        # 使用共享的互相关函数（FFT加速，mode='full'）
+        相关, lags = calculate_cross_correlation(基准, 测量)
         
-        # 找到峰值位置
-        峰值索引 = np.argmax(相关)
+        # 找到峰值位置（使用抛物线插值获得亚采样点精度）
+        精确峰值索引, 峰值相关性 = find_peak_with_parabolic_interpolation(相关)
+        峰值索引 = int(精确峰值索引)  # 整数索引用于获取对应的lag值
         
-        # 抛物线插值（亚采样点精度）
-        if 1 < 峰值索引 < len(相关) - 2:
-            y1 = 相关[峰值索引 - 1]
-            y2 = 相关[峰值索引]
-            y3 = 相关[峰值索引 + 1]
-            
-            分母 = y1 - 2*y2 + y3
-            if abs(分母) > 1e-10:
-                精确偏移 = 峰值索引 + 0.5 * (y1 - y3) / 分母
-            else:
-                精确偏移 = 峰值索引
-        else:
-            精确偏移 = 峰值索引
-        
-        # 转换为时间偏移
-        中心索引 = len(基准) // 2
+        # 计算精确的滞后值（使用抛物线插值的小数部分）
+        精确滞后 = lags[峰值索引] + (精确峰值索引 - 峰值索引)
         
         # 🔧 使用已验证的采样率（waveform已在_process_waveform中验证过）
         sample_rate = waveform.get('sample_rate', 1e9)
         
-        声时差_秒 = (精确偏移 - 中心索引) / sample_rate
+        # 转换为时间偏移（注意：负值表示测量信号相对于基准信号提前）
+        声时差_秒 = -精确滞后 / sample_rate  # 取反以匹配原有逻辑
         声时差_纳秒 = 声时差_秒 * 1e9
         
         return 声时差_纳秒
 
     def _apply_denoise(self, waveform: Dict[str, Any]) -> Dict[str, Any]:
-        """应用降噪处理"""
+        """应用降噪处理（调用共享的signal_processing模块）"""
         try:
-            import pywt
+            from ..core import signal_processing
             
             voltage = np.array(waveform['voltage'])
             wavelet = self.denoise_config.get('wavelet', 'sym6')
             level = self.denoise_config.get('level', 5)
-            mode = self.denoise_config.get('threshold_mode', 'soft')
+            threshold_mode = self.denoise_config.get('threshold_mode', 'soft')
+            threshold_rule = self.denoise_config.get('threshold_rule', 'heursure')
             
-            # 小波分解
-            coeffs = pywt.wavedec(voltage, wavelet, level=level)
+            # 调用共享的小波降噪函数（与标定模块和波形分析模块一致）
+            降噪结果 = signal_processing.apply_wavelet_denoising(
+                voltage, wavelet, level, threshold_mode, threshold_rule
+            )
             
-            # 计算阈值
-            sigma = np.median(np.abs(coeffs[-1])) / 0.6745
-            threshold = sigma * np.sqrt(2 * np.log(len(voltage)))
+            if 降噪结果['success']:
+                denoised = 降噪结果['denoised']
+                return {
+                    'time': waveform['time'],
+                    'voltage': denoised.tolist() if isinstance(denoised, np.ndarray) else denoised,
+                    'sample_rate': waveform['sample_rate']
+                }
+            else:
+                # 降噪失败，返回原始波形
+                return waveform
             
-            # 应用阈值
-            denoised_coeffs = [coeffs[0]]
-            for c in coeffs[1:]:
-                if mode == 'soft':
-                    denoised_coeffs.append(pywt.threshold(c, threshold, mode='soft'))
-                else:
-                    denoised_coeffs.append(pywt.threshold(c, threshold, mode='hard'))
-            
-            # 重构信号
-            denoised = pywt.waverec(denoised_coeffs, wavelet)
-            
-            # 确保长度一致
-            if len(denoised) > len(voltage):
-                denoised = denoised[:len(voltage)]
-            
-            return {
-                'time': waveform['time'],
-                'voltage': denoised.tolist(),
-                'sample_rate': waveform['sample_rate']
-            }
-            
-        except ImportError:
-            # pywavelets未安装，返回原始波形
-            return waveform
         except Exception:
+            # 发生异常，返回原始波形
             return waveform
     
     def _apply_bandpass_filter(self, signal: np.ndarray, sample_rate: float) -> np.ndarray:
         """
-        应用巴特沃斯带通滤波器
+        应用巴特沃斯带通滤波器（使用 core 模块的统一函数）
         
         Args:
             signal: 输入信号
@@ -669,31 +644,23 @@ class FieldCapture:
             np.ndarray: 滤波后的信号
         """
         try:
-            from scipy.signal import butter, sosfiltfilt
+            from ..core import signal_processing
             
             # 获取滤波参数（MHz转Hz）
             lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6
             highcut = self.bandpass_config.get('highcut', 3.5) * 1e6
             order = self.bandpass_config.get('order', 6)
             
-            # 奈奎斯特频率
-            nyq = 0.5 * sample_rate
-            low = lowcut / nyq
-            high = highcut / nyq
+            # 调用统一的带通滤波函数
+            result = signal_processing.apply_bandpass_filter(
+                signal, sample_rate, lowcut, highcut, order
+            )
             
-            # 参数检查
-            if low <= 0 or low >= 1 or high <= 0 or high >= 1 or low >= high:
-                # 参数无效，返回原始信号
+            if result['success']:
+                return np.array(result['filtered'])
+            else:
+                # 滤波失败时返回原信号
                 return signal
-            
-            # 设计巴特沃斯带通滤波器（使用SOS形式，数值更稳定）
-            # 注意：高阶滤波器使用 b,a 形式会有数值不稳定问题
-            sos = butter(order, [low, high], btype='band', output='sos')
-            
-            # 零相位滤波（前向后向滤波，使用SOS形式）
-            filtered = sosfiltfilt(sos, signal)
-            
-            return filtered
             
         except Exception as e:
             # 滤波失败，返回原始信号

@@ -185,8 +185,18 @@ class ExperimentDataManager:
         except Exception as e:
             return {"success": False, "exists": False, "message": f"检查失败: {str(e)}"}
     
-    def 保存基准波形(self, 实验ID, 方向名称, 波形数据, 时间轴):
-        """保存基准波形到HDF5"""
+    def 保存基准波形(self, 实验ID, 方向名称, 波形数据, 时间轴, 降噪配置=None, 带通滤波配置=None):
+        """
+        保存基准波形到HDF5
+        
+        Args:
+            实验ID: 实验ID
+            方向名称: 方向名称
+            波形数据: 波形数据数组
+            时间轴: 时间轴数组
+            降噪配置: 降噪配置字典（可选）
+            带通滤波配置: 带通滤波配置字典（可选）
+        """
         方向ID = self.获取方向ID(实验ID, 方向名称)
         if not 方向ID:
             return {"success": False, "message": "方向不存在"}
@@ -200,6 +210,22 @@ class ExperimentDataManager:
             f.create_dataset('waveform', data=np.array(波形数据), compression='gzip')
             f.create_dataset('time', data=np.array(时间轴), compression='gzip')
             f.attrs['采集时间'] = datetime.now().isoformat()
+            
+            # 🆕 保存信号处理配置
+            if 降噪配置:
+                config_group = f.create_group('signal_processing_config')
+                denoise_group = config_group.create_group('denoise')
+                for key, value in 降噪配置.items():
+                    denoise_group.attrs[key] = value
+            
+            if 带通滤波配置:
+                if 'signal_processing_config' not in f:
+                    config_group = f.create_group('signal_processing_config')
+                else:
+                    config_group = f['signal_processing_config']
+                bandpass_group = config_group.create_group('bandpass')
+                for key, value in 带通滤波配置.items():
+                    bandpass_group.attrs[key] = value
         
         # 更新数据库
         cursor = self.conn.cursor()
@@ -211,8 +237,19 @@ class ExperimentDataManager:
         
         return {"success": True, "文件路径": 文件路径}
     
-    def 保存应力波形(self, 实验ID, 方向名称, 应力值, 波形数据, 时间轴):
-        """保存应力波形到HDF5"""
+    def 保存应力波形(self, 实验ID, 方向名称, 应力值, 波形数据, 时间轴, 降噪配置=None, 带通滤波配置=None):
+        """
+        保存应力波形到HDF5
+        
+        Args:
+            实验ID: 实验ID
+            方向名称: 方向名称
+            应力值: 应力值 (MPa)
+            波形数据: 波形数据数组
+            时间轴: 时间轴数组
+            降噪配置: 降噪配置字典（可选）
+            带通滤波配置: 带通滤波配置字典（可选）
+        """
         方向ID = self.获取方向ID(实验ID, 方向名称)
         if not 方向ID:
             return {"success": False, "message": "方向不存在"}
@@ -227,6 +264,22 @@ class ExperimentDataManager:
             f.create_dataset('time', data=np.array(时间轴), compression='gzip')
             f.attrs['应力值'] = 应力值
             f.attrs['采集时间'] = datetime.now().isoformat()
+            
+            # 🆕 保存信号处理配置
+            if 降噪配置:
+                config_group = f.create_group('signal_processing_config')
+                denoise_group = config_group.create_group('denoise')
+                for key, value in 降噪配置.items():
+                    denoise_group.attrs[key] = value
+            
+            if 带通滤波配置:
+                if 'signal_processing_config' not in f:
+                    config_group = f.create_group('signal_processing_config')
+                else:
+                    config_group = f['signal_processing_config']
+                bandpass_group = config_group.create_group('bandpass')
+                for key, value in 带通滤波配置.items():
+                    bandpass_group.attrs[key] = value
         
         # 保存到数据库
         cursor = self.conn.cursor()
@@ -273,6 +326,57 @@ class ExperimentDataManager:
                 'data': f['waveform'][:].tolist(),
                 'time': f['time'][:].tolist()
             }
+    
+    def 加载信号处理配置(self, 文件路径):
+        """
+        从HDF5文件加载信号处理配置
+        
+        Args:
+            文件路径: HDF5文件路径
+        
+        Returns:
+            dict: {"success": bool, "denoise_config": dict, "bandpass_config": dict}
+        """
+        if not os.path.exists(文件路径):
+            return {"success": False, "message": "文件不存在"}
+        
+        try:
+            with h5py.File(文件路径, 'r') as f:
+                denoise_config = None
+                bandpass_config = None
+                
+                if 'signal_processing_config' in f:
+                    config_group = f['signal_processing_config']
+                    
+                    # 加载降噪配置
+                    if 'denoise' in config_group:
+                        denoise_group = config_group['denoise']
+                        denoise_config = {}
+                        for key in denoise_group.attrs:
+                            value = denoise_group.attrs[key]
+                            # 处理numpy类型
+                            if hasattr(value, 'item'):
+                                value = value.item()
+                            denoise_config[key] = value
+                    
+                    # 加载带通滤波配置
+                    if 'bandpass' in config_group:
+                        bandpass_group = config_group['bandpass']
+                        bandpass_config = {}
+                        for key in bandpass_group.attrs:
+                            value = bandpass_group.attrs[key]
+                            # 处理numpy类型
+                            if hasattr(value, 'item'):
+                                value = value.item()
+                            bandpass_config[key] = value
+                
+                return {
+                    "success": True,
+                    "denoise_config": denoise_config,
+                    "bandpass_config": bandpass_config
+                }
+        except Exception as e:
+            return {"success": False, "message": f"加载配置失败: {str(e)}"}
     
     def 获取应力数据列表(self, 实验ID, 方向名称):
         """获取某个方向的所有应力数据"""

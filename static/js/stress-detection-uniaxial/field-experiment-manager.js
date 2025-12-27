@@ -295,6 +295,9 @@ const FieldExperimentManager = (function() {
                         </div>
                     </div>
                     <div class="experiment-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="FieldExperimentManager.编辑实验('${exp.experiment_id}')" title="编辑">
+                            ✏️ 编辑
+                        </button>
                         <button class="btn btn-sm btn-primary" onclick="FieldExperimentManager.加载实验('${exp.experiment_id}')" title="加载">
                             📂 加载
                         </button>
@@ -472,6 +475,224 @@ const FieldExperimentManager = (function() {
         }
     }
     
+    // ========== 编辑实验 ==========
+    async function 编辑实验(expId) {
+        try {
+            // 获取实验详情
+            const result = await pywebview.api.load_field_experiment(expId);
+            
+            if (!result.success) {
+                callbacks?.显示状态信息('❌', '加载失败', result.message, 'error');
+                return;
+            }
+            
+            // 🔧 修复：实验数据在 result.data.experiment 中
+            const exp = result.data.experiment;
+            打开编辑对话框(exp);
+            
+        } catch (error) {
+            console.error('[实验管理] 加载实验详情失败:', error);
+            callbacks?.显示状态信息('❌', '操作失败', error.toString(), 'error');
+        }
+    }
+    
+    function 打开编辑对话框(exp) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.id = 'field-edit-experiment-modal';
+        overlay.style.display = 'flex';
+        
+        // 判断实验状态，用于提示
+        const isInProgress = exp.status !== 'planning';
+        
+        overlay.innerHTML = `
+            <div class="modal-content field-modal">
+                <div class="modal-header">
+                    <h3>✏️ 编辑实验信息</h3>
+                    <button class="modal-close" onclick="FieldExperimentManager.关闭编辑对话框()">×</button>
+                </div>
+                <div class="modal-body">
+                    ${isInProgress ? '<div class="warning-banner">⚠️ 实验已开始，修改关键参数可能影响数据准确性</div>' : ''}
+                    
+                    <!-- 必填信息区 -->
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <span class="section-icon">📌</span>
+                            <span>基本信息</span>
+                            <span class="required-hint">* 必填</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>实验名称 <span class="required">*</span></label>
+                                <input type="text" id="field-edit-name" class="form-input" value="${exp.name || ''}" placeholder="例如：铝板应力分布测试">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>试件材料 <span class="required">*</span></label>
+                                    <input type="text" id="field-edit-material" class="form-input" value="${exp.sample_material || ''}" placeholder="例如：6061铝合金">
+                                </div>
+                                <div class="form-group">
+                                    <label>试件厚度 (mm) <span class="required">*</span></label>
+                                    <input type="number" id="field-edit-thickness" class="form-input" value="${exp.sample_thickness || 10}" min="0.1" step="0.1">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>应力方向 <span class="required">*</span></label>
+                                    <input type="text" id="field-edit-stress-direction" class="form-input" value="${exp.stress_direction || ''}" placeholder="例如：0°">
+                                    <small style="color: #666; display: block; margin-top: 4px;">ℹ️ 单轴应力方向，与标定实验方向一致</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>楔块角度 (°) <span class="required">*</span></label>
+                                    <input type="number" id="field-edit-wedge-angle" class="form-input" value="${exp.wedge_angle || ''}" min="0" max="90" step="0.1">
+                                    <small style="color: #666; display: block; margin-top: 4px;">ℹ️ 临界折射角度</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 可选信息区 -->
+                    <div class="form-section optional">
+                        <div class="form-section-title">
+                            <span class="section-icon">📝</span>
+                            <span>补充信息</span>
+                            <span class="optional-hint">可选</span>
+                        </div>
+                        <div class="form-section-content">
+                            <div class="form-group">
+                                <label>测试目的</label>
+                                <textarea id="field-edit-purpose" class="form-input" rows="2" placeholder="描述本次测试的目的...">${exp.test_purpose || ''}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>操作员</label>
+                                <input type="text" id="field-edit-operator" class="form-input" value="${exp.operator || ''}" placeholder="操作员姓名">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>环境温度 (°C)</label>
+                                    <input type="number" id="field-edit-temperature" class="form-input" value="${exp.temperature || 25}" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>环境湿度 (%)</label>
+                                    <input type="number" id="field-edit-humidity" class="form-input" value="${exp.humidity || 50}" min="0" max="100">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="FieldExperimentManager.关闭编辑对话框()">取消</button>
+                    <button class="btn btn-primary" onclick="FieldExperimentManager.保存编辑('${exp.id || exp.experiment_id}', '${exp.status}')">保存修改</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // 聚焦到名称输入框
+        setTimeout(() => {
+            document.getElementById('field-edit-name')?.focus();
+        }, 100);
+    }
+    
+    function 关闭编辑对话框() {
+        const modal = document.getElementById('field-edit-experiment-modal');
+        if (modal) {
+            document.body.removeChild(modal);
+        }
+    }
+    
+    async function 保存编辑(expId, expStatus) {
+        // 获取表单数据
+        const name = document.getElementById('field-edit-name')?.value.trim();
+        const material = document.getElementById('field-edit-material')?.value.trim();
+        const thickness = parseFloat(document.getElementById('field-edit-thickness')?.value);
+        const stressDirection = document.getElementById('field-edit-stress-direction')?.value.trim();
+        const wedgeAngle = parseFloat(document.getElementById('field-edit-wedge-angle')?.value);
+        const purpose = document.getElementById('field-edit-purpose')?.value.trim();
+        const operator = document.getElementById('field-edit-operator')?.value.trim();
+        const temperature = parseFloat(document.getElementById('field-edit-temperature')?.value);
+        const humidity = parseFloat(document.getElementById('field-edit-humidity')?.value);
+        
+        // 验证必填字段
+        
+        if (!name) {
+            callbacks?.显示状态信息('⚠️', '请输入实验名称', '', 'warning');
+            document.getElementById('field-edit-name')?.focus();
+            return;
+        }
+        if (!material) {
+            callbacks?.显示状态信息('⚠️', '请输入试件材料', '', 'warning');
+            document.getElementById('field-edit-material')?.focus();
+            return;
+        }
+        if (!thickness || thickness <= 0) {
+            callbacks?.显示状态信息('⚠️', '请输入有效的试件厚度', '', 'warning');
+            document.getElementById('field-edit-thickness')?.focus();
+            return;
+        }
+        if (!stressDirection) {
+            callbacks?.显示状态信息('⚠️', '请输入应力方向', '', 'warning');
+            document.getElementById('field-edit-stress-direction')?.focus();
+            return;
+        }
+        if (isNaN(wedgeAngle) || wedgeAngle <= 0 || wedgeAngle >= 90) {
+            callbacks?.显示状态信息('⚠️', '请输入有效的楔块角度', '角度范围：0° ~ 90°', 'warning');
+            document.getElementById('field-edit-wedge-angle')?.focus();
+            return;
+        }
+        
+        // 如果实验已开始，修改关键参数需要确认
+        if (expStatus !== 'planning') {
+            const confirmed = await StressDetectionUniaxialModule.显示确认对话框(
+                '修改关键参数',
+                '实验已开始，修改试件材料、厚度、应力方向或楔块角度可能影响已采集数据的准确性。\n\n确定要修改吗？'
+            );
+            if (!confirmed) {
+                return;
+            }
+        }
+        
+        // 构建更新数据（所有字段都可以修改）
+        const updates = {
+            name: name,
+            sample_material: material,
+            sample_thickness: thickness,
+            stress_direction: stressDirection,
+            wedge_angle: wedgeAngle,
+            test_purpose: purpose || null,
+            operator: operator || null,
+            temperature: isNaN(temperature) ? null : temperature,
+            humidity: isNaN(humidity) ? null : humidity
+        };
+        
+        try {
+            const result = await pywebview.api.update_field_experiment(expId, updates);
+            
+            
+            if (!result.success) {
+                callbacks?.显示状态信息('❌', '保存失败', result.message, 'error');
+                return;
+            }
+            
+            callbacks?.显示状态信息('✅', '保存成功', '实验信息已更新', 'success');
+            关闭编辑对话框();
+            
+            // 刷新实验列表
+            await 加载实验列表();
+            
+            // 如果编辑的是当前实验，刷新显示
+            const currentExpId = 实验状态?.当前实验?.id || 实验状态?.当前实验?.experiment_id;
+            if (currentExpId === expId) {
+                await callbacks?.加载实验数据(expId);
+            }
+            
+        } catch (error) {
+            console.error('[实验管理] 保存编辑失败:', error);
+            callbacks?.显示状态信息('❌', '保存失败', error.toString(), 'error');
+        }
+    }
+    
     // ========== 工具函数 ==========
     function getStatusText(status) {
         const map = {
@@ -503,6 +724,9 @@ const FieldExperimentManager = (function() {
         加载实验,
         删除实验,
         导出实验,
-        执行导出
+        执行导出,
+        编辑实验,
+        关闭编辑对话框,
+        保存编辑
     };
 })();

@@ -8,7 +8,7 @@
 
 body {
     font-family: 'Microsoft YaHei', 'Segoe UI', Arial, sans-serif;
-    background: #f5f5f5;
+    background: #000000;  /* body底层背景（黑色测试） */
     color: #333;
     overflow: hidden;
     opacity: 0;
@@ -74,6 +74,7 @@ body {
     display: flex;
     flex-direction: column;
     padding: 15px;
+    background: #f5f5f5;  /* 主界面固定背景（不受body影响） */
 }
 
 /* 主内容区域 */

@@ -451,7 +451,10 @@ const FieldCanvas = (function() {
             const py = point.y_coord ?? point.y ?? 0;
             const x = px * scale + offsetX;
             const y = offsetY - py * scale;  // Y轴翻转
-            const radius = 6;
+            
+            // 根据缩放比例调整测点半径（缩小时变小，放大时保持原大小，范围3-6）
+            const baseRadius = 6;
+            const radius = Math.max(3, Math.min(baseRadius, baseRadius * 显示设置.缩放比例));
             
             // 确定颜色
             let fillColor, strokeColor;

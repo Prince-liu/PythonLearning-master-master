@@ -56,6 +56,42 @@ class SignalProcessingWrapper:
                 'message': f'小波降噪失败: {str(e)}'
             }
     
+    def 带通滤波(self, 信号数据, 采样率, 低频截止, 高频截止, 滤波器阶数=6):
+        """
+        应用带通滤波（Web API 包装）
+        
+        参数:
+            信号数据: 信号数组（可能是列表或numpy数组）
+            采样率: 采样率（Hz）
+            低频截止: 低频截止频率（Hz）
+            高频截止: 高频截止频率（Hz）
+            滤波器阶数: 滤波器阶数（默认6）
+        
+        返回:
+            {"success": bool, "filtered": array, ...}
+        """
+        try:
+            # 类型转换：JavaScript 数组 → numpy 数组
+            信号 = np.array(信号数据)
+            
+            # 参数验证和类型转换
+            采样率 = float(采样率)
+            低频截止 = float(低频截止)
+            高频截止 = float(高频截止)
+            
+            if not isinstance(滤波器阶数, int):
+                滤波器阶数 = int(滤波器阶数) if 滤波器阶数 else 6
+            
+            # 调用底层信号处理函数
+            return signal_processing.apply_bandpass_filter(
+                信号, 采样率, 低频截止, 高频截止, 滤波器阶数
+            )
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'带通滤波失败: {str(e)}'
+            }
+    
     def Hilbert变换(self, 信号数据):
         """
         计算Hilbert包络（Web API 包装）
@@ -158,8 +194,8 @@ class SignalProcessingWrapper:
             {"success": bool, "wavelets": list}
         """
         try:
-            # 调用底层信号处理函数
-            return signal_processing.get_available_wavelets()
+            # 调用波形分析模块的信号处理函数
+            return waveform_processing.get_available_wavelets()
         except Exception as e:
             return {
                 'success': False,

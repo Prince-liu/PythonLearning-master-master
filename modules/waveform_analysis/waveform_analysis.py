@@ -26,6 +26,24 @@ class WaveformAnalysis:
         self.window = window
         self.互相关信号列表 = []  # 存储多个信号用于互相关分析
         self.互相关结果 = []  # 存储互相关计算结果
+        
+        # 🆕 降噪配置（与标定/单轴模块一致）
+        self.denoise_config = {
+            'enabled': True,
+            'method': 'wavelet',
+            'wavelet': 'sym6',
+            'level': 5,
+            'threshold_mode': 'soft',
+            'threshold_rule': 'heursure'
+        }
+        
+        # 🆕 带通滤波配置（与标定/单轴模块一致）
+        self.bandpass_config = {
+            'enabled': False,  # 默认关闭（保持向后兼容）
+            'lowcut': 1.5,  # MHz
+            'highcut': 3.5,  # MHz
+            'order': 6
+        }
     
     def 选择打开文件(self):
         """打开文件选择对话框"""
@@ -271,11 +289,62 @@ class WaveformAnalysis:
         except Exception as e:
             return {"success": False, "message": f"选择文件失败: {str(e)}"}
     
-    def 加载多个CSV文件(self, 文件路径列表):
-        """加载多个CSV文件用于互相关分析"""
-        try:
-            from modules.core.signal_processing import apply_wavelet_denoising, truncate_signal
+    # ==================== 信号处理配置 ====================
+    
+    def set_denoise_config(self, config):
+        """
+        设置降噪配置
+        
+        Args:
+            config: 降噪配置字典
             
+        Returns:
+            dict: 操作结果
+        """
+        self.denoise_config.update(config)
+        return {"success": True, "message": "降噪配置已更新"}
+    
+    def get_denoise_config(self):
+        """
+        获取当前降噪配置
+        
+        Returns:
+            dict: 降噪配置
+        """
+        return {"success": True, "data": self.denoise_config}
+    
+    def set_bandpass_config(self, config):
+        """
+        设置带通滤波配置
+        
+        Args:
+            config: 带通滤波配置字典
+            
+        Returns:
+            dict: 操作结果
+        """
+        self.bandpass_config.update(config)
+        return {"success": True, "message": "带通滤波配置已更新"}
+    
+    def get_bandpass_config(self):
+        """
+        获取当前带通滤波配置
+        
+        Returns:
+            dict: 带通滤波配置
+        """
+        return {"success": True, "data": self.bandpass_config}
+    
+    # ==================== 互相关分析 ====================
+    
+    def 加载多个CSV文件(self, 文件路径列表):
+        """
+        加载多个CSV文件用于互相关分析
+        
+        只加载原始数据，不进行信号处理
+        信号处理在计算互相关时进行
+        """
+        try:
             self.互相关信号列表 = []
             
             for idx, 文件路径 in enumerate(文件路径列表):
@@ -325,29 +394,25 @@ class WaveformAnalysis:
                 电压 = np.array(电压列表)
                 
                 # 检测时间单位并转换为微秒
-                # 如果时间最大值 < 1，说明单位是秒，需要转换为微秒
                 if 时间[-1] < 1.0:
                     时间 = 时间 * 1e6  # 秒转微秒
                 
-                # 自动降噪（使用默认配置）
-                降噪结果 = apply_wavelet_denoising(电压, 'sym6', 5, 'soft', 'heursure')
-                if not 降噪结果['success']:
-                    continue
+                # 计算采样率（用于带通滤波）
+                采样率 = None
+                if len(时间) > 1:
+                    采样间隔 = (时间[1] - 时间[0]) * 1e-6  # 微秒转秒
+                    采样率 = 1.0 / 采样间隔 if 采样间隔 > 0 else 1e9
+                else:
+                    采样率 = 1e9
                 
-                降噪后电压 = np.array(降噪结果['denoised'])
-                
-                # 自动截断前N微秒（默认5微秒）
-                截断后时间, 截断后电压 = truncate_signal(时间, 降噪后电压, DEFAULT_TRUNCATE_START_US)
-                
-                # 保存信号信息
+                # 保存原始信号信息（不进行任何处理）
                 文件名 = os.path.basename(文件路径)
                 self.互相关信号列表.append({
                     'name': 文件名,
                     'path': 文件路径,
-                    'time': 截断后时间.tolist(),
-                    'voltage': 截断后电压.tolist(),
                     'original_time': 时间.tolist(),
-                    'original_voltage': 降噪后电压.tolist()  # 使用降噪后的数据作为"原始"数据供截取使用
+                    'original_voltage': 电压.tolist(),
+                    'sampling_rate': 采样率
                 })
             
             if len(self.互相关信号列表) < 2:
@@ -365,13 +430,24 @@ class WaveformAnalysis:
         """
         计算参考信号与其他信号的互相关
         
+        处理流程：
+        1. 带通滤波（如果启用）
+        2. 小波降噪（如果启用）
+        3. 信号截取
+        4. 计算互相关
+        
         Args:
             参考信号索引: 参考信号的索引
             truncate_start: 截取起始时间（微秒），None表示从信号开头开始
             truncate_end: 截取结束时间（微秒），None表示到信号末尾
         """
         try:
-            from modules.core.signal_processing import calculate_cross_correlation, truncate_signal_range
+            from modules.core import signal_processing
+            from modules.core.signal_processing import (
+                calculate_cross_correlation, 
+                find_peak_with_parabolic_interpolation
+            )
+            from . import waveform_processing
             
             if len(self.互相关信号列表) < 2:
                 return {"success": False, "message": "信号数量不足"}
@@ -379,13 +455,43 @@ class WaveformAnalysis:
             if 参考信号索引 < 0 or 参考信号索引 >= len(self.互相关信号列表):
                 return {"success": False, "message": "参考信号索引无效"}
             
-            # 获取参考信号（使用原始数据，重新截取）
+            # 使用频域互相关
+            cross_corr_func = calculate_cross_correlation
+            
+            # ========== 处理参考信号 ==========
             参考信号 = self.互相关信号列表[参考信号索引]
             参考时间原始 = np.array(参考信号['original_time'])
             参考电压原始 = np.array(参考信号['original_voltage'])
+            参考采样率 = 参考信号['sampling_rate']
             
-            # 根据用户指定范围截取参考信号
-            参考时间, 参考电压 = truncate_signal_range(参考时间原始, 参考电压原始, truncate_start, truncate_end)
+            # 1. 带通滤波（如果启用）
+            if self.bandpass_config.get('enabled', False):
+                lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6  # MHz转Hz
+                highcut = self.bandpass_config.get('highcut', 3.5) * 1e6
+                order = self.bandpass_config.get('order', 6)
+                
+                滤波结果 = signal_processing.apply_bandpass_filter(
+                    参考电压原始, 参考采样率, lowcut, highcut, order
+                )
+                
+                if 滤波结果['success']:
+                    参考电压原始 = np.array(滤波结果['filtered'])
+            
+            # 2. 小波降噪（如果启用）
+            if self.denoise_config.get('enabled', True):
+                wavelet = self.denoise_config.get('wavelet', 'sym6')
+                level = self.denoise_config.get('level', 5)
+                threshold_mode = self.denoise_config.get('threshold_mode', 'soft')
+                
+                降噪结果 = signal_processing.apply_wavelet_denoising(
+                    参考电压原始, wavelet, level, threshold_mode, 'heursure'
+                )
+                
+                if 降噪结果['success']:
+                    参考电压原始 = np.array(降噪结果['denoised'])
+            
+            # 3. 根据用户指定范围截取参考信号
+            参考时间, 参考电压 = waveform_processing.truncate_signal_range(参考时间原始, 参考电压原始, truncate_start, truncate_end)
             
             # 验证截取后的数据
             if len(参考时间) < MIN_DATA_POINTS:
@@ -405,15 +511,44 @@ class WaveformAnalysis:
             
             self.互相关结果 = []
             
-            # 计算参考信号与其他信号的互相关
+            # ========== 计算参考信号与其他信号的互相关 ==========
             for i, 信号 in enumerate(self.互相关信号列表):
                 if i == 参考信号索引:
                     continue  # 跳过参考信号自己
                 
-                # 对比信号也使用相同的截取范围
+                # 处理对比信号
                 对比时间原始 = np.array(信号['original_time'])
                 对比电压原始 = np.array(信号['original_voltage'])
-                _, 对比电压 = truncate_signal_range(对比时间原始, 对比电压原始, truncate_start, truncate_end)
+                对比采样率 = 信号['sampling_rate']
+                
+                # 1. 带通滤波（如果启用）
+                if self.bandpass_config.get('enabled', False):
+                    lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6
+                    highcut = self.bandpass_config.get('highcut', 3.5) * 1e6
+                    order = self.bandpass_config.get('order', 6)
+                    
+                    滤波结果 = signal_processing.apply_bandpass_filter(
+                        对比电压原始, 对比采样率, lowcut, highcut, order
+                    )
+                    
+                    if 滤波结果['success']:
+                        对比电压原始 = np.array(滤波结果['filtered'])
+                
+                # 2. 小波降噪（如果启用）
+                if self.denoise_config.get('enabled', True):
+                    wavelet = self.denoise_config.get('wavelet', 'sym6')
+                    level = self.denoise_config.get('level', 5)
+                    threshold_mode = self.denoise_config.get('threshold_mode', 'soft')
+                    
+                    降噪结果 = signal_processing.apply_wavelet_denoising(
+                        对比电压原始, wavelet, level, threshold_mode, 'heursure'
+                    )
+                    
+                    if 降噪结果['success']:
+                        对比电压原始 = np.array(降噪结果['denoised'])
+                
+                # 3. 对比信号也使用相同的截取范围
+                _, 对比电压 = waveform_processing.truncate_signal_range(对比时间原始, 对比电压原始, truncate_start, truncate_end)
                 
                 # 验证对比信号数据
                 if len(对比电压) < MIN_DATA_POINTS:
@@ -423,29 +558,15 @@ class WaveformAnalysis:
                 if abs(len(参考电压) - len(对比电压)) > len(参考电压) * MAX_LENGTH_DIFF_RATIO:
                     continue
                 
-                # 使用FFT加速的互相关
+                # 使用选定的互相关函数
                 try:
-                    correlation, lags = calculate_cross_correlation(参考电压, 对比电压)
+                    correlation, lags = cross_corr_func(参考电压, 对比电压)
                 except Exception as e:
                     continue
                 
-                # 找到最大相关性位置
-                max_idx = np.argmax(correlation)
-                max_correlation = correlation[max_idx]
-                
-                # 🔧 抛物线插值（亚采样点精度，与标定/单轴模块一致）
-                if 1 < max_idx < len(correlation) - 2:
-                    y1 = correlation[max_idx - 1]
-                    y2 = correlation[max_idx]
-                    y3 = correlation[max_idx + 1]
-                    
-                    分母 = y1 - 2*y2 + y3
-                    if abs(分母) > 1e-10:
-                        精确峰值索引 = max_idx + 0.5 * (y1 - y3) / 分母
-                    else:
-                        精确峰值索引 = max_idx
-                else:
-                    精确峰值索引 = max_idx
+                # 找到最大相关性位置（使用抛物线插值获得亚采样点精度）
+                精确峰值索引, max_correlation = find_peak_with_parabolic_interpolation(correlation)
+                max_idx = int(精确峰值索引)  # 整数索引用于获取对应的lag值
                 
                 # 计算精确的滞后值
                 max_lag = lags[max_idx] + (精确峰值索引 - max_idx)
@@ -454,8 +575,6 @@ class WaveformAnalysis:
                 # 注意：负值表示对比信号相对于参考信号提前（左移）
                 time_delay_us = -max_lag * dt  # 取反，单位为微秒
                 time_lags_us = -lags * dt  # 时滞轴也取反，单位为微秒
-                
-
                 
                 # 为了减少数据传输量，对互相关结果进行降采样
                 # 保留每10个点中的1个点用于绘图

@@ -738,12 +738,13 @@ const StressCalibrationModule = (function() {
         };
         
         try {
-            const denoiseResult = await pywebview.api.get_denoise_config();
+            // 🔧 修复：使用标定模块专用的配置API
+            const denoiseResult = await pywebview.api.获取标定降噪配置();
             if (denoiseResult.success && denoiseResult.data) {
                 currentConfig.denoise = denoiseResult.data;
             }
             
-            const bandpassResult = await pywebview.api.get_bandpass_config();
+            const bandpassResult = await pywebview.api.获取标定带通滤波配置();
             if (bandpassResult.success && bandpassResult.data) {
                 currentConfig.bandpass = bandpassResult.data;
             }
@@ -889,7 +890,7 @@ const StressCalibrationModule = (function() {
                 };
                 
                 // 保存降噪配置到后端
-                await pywebview.api.set_denoise_config({
+                await pywebview.api.设置标定降噪配置({
                     enabled: denoiseEnabled,
                     method: method,
                     wavelet: wavelet,
@@ -898,7 +899,7 @@ const StressCalibrationModule = (function() {
                 });
                 
                 // 保存带通滤波配置到后端
-                await pywebview.api.set_bandpass_config({
+                await pywebview.api.设置标定带通滤波配置({
                     enabled: bandpassEnabled,
                     lowcut: lowcut,
                     highcut: highcut,

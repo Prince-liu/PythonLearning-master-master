@@ -4,5 +4,6 @@
 """
 
 from .stress_calibration import StressCalibration
+from .experiment_data_manager import ExperimentDataManager
 
-__all__ = ['StressCalibration']
+__all__ = ['StressCalibration', 'ExperimentDataManager']

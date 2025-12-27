@@ -721,9 +721,14 @@ const FieldContour = (function() {
             const pointIndex = point.point_index ?? point.id;
             const isMeasured = 已测点列表.includes(pointIndex) || point.status === 'measured';
             
+            // 根据缩放比例调整测点半径（缩小时变小，放大时保持原大小）
+            const baseRadius = isMeasured ? 5 : 3;
+            const minRadius = isMeasured ? 2 : 2;
+            const radius = Math.max(minRadius, Math.min(baseRadius, baseRadius * 显示设置.缩放比例));
+            
             // 绘制测点标记
             ctx.beginPath();
-            ctx.arc(x, y, isMeasured ? 5 : 3, 0, Math.PI * 2);
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
             
             if (isMeasured) {
                 ctx.fillStyle = '#28a745';  // 绿色表示已测

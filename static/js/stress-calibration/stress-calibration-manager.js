@@ -166,6 +166,32 @@ const StressCalibrationManager = (function() {
                 // 先调整画布尺寸，再绘制拟合曲线
                 调整拟合画布();
                 绘制拟合曲线图();
+                
+                // 🆕 加载信号处理配置（从第一个方向的HDF5文件恢复）
+                const 第一个方向 = 实验数据.测试方向列表[0];
+                if (第一个方向 && 第一个方向.基准波形路径) {
+                    try {
+                        const configResult = await pywebview.api.加载标定实验配置(
+                            实验数据.实验ID, 
+                            第一个方向.方向名称
+                        );
+                        if (configResult.success && configResult.data) {
+                            // 更新前端状态
+                            if (!实验状态.信号处理配置) {
+                                实验状态.信号处理配置 = {};
+                            }
+                            if (configResult.data.denoise_config) {
+                                实验状态.信号处理配置.降噪 = configResult.data.denoise_config;
+                            }
+                            if (configResult.data.bandpass_config) {
+                                实验状态.信号处理配置.带通滤波 = configResult.data.bandpass_config;
+                            }
+                        }
+                    } catch (e) {
+                        // 配置加载失败不影响主流程，使用默认配置
+                        console.warn('加载信号处理配置失败:', e);
+                    }
+                }
             }
             // 如果已有标签，保持当前方向不变，只更新标签选择器
             
@@ -335,7 +361,7 @@ const StressCalibrationManager = (function() {
         // 添加应力数据点
         排序后数据.forEach((data, index) => {
             const row = document.createElement('tr');
-            const 时间差ns = (data.时间差 * 1e9).toFixed(3);
+            const 时间差ns = (data.时间差 * 1e9).toFixed(2);
             
             // 🆕 采集结束后或重测模式下禁用删除按钮
             const 禁用删除 = 当前方向.采集已结束 || 当前方向.重测状态?.启用 ? 'disabled' : '';
@@ -353,6 +379,12 @@ const StressCalibrationManager = (function() {
             `;
             elements.dataTableBody.appendChild(row);
         });
+        
+        // 使用公共函数自动滚动到最后一行
+        const 最后一行 = elements.dataTableBody.lastElementChild;
+        if (最后一行 && 排序后数据.length > 0) {
+            CommonUtils.scrollToTableRow(最后一行);
+        }
     }
     
     async function 删除数据点(index) {
@@ -377,7 +409,24 @@ const StressCalibrationManager = (function() {
         
         if (选择结果 === 'cancel') return;
         
-        // 删除数据点
+        // 🔧 修复：调用后端API删除数据库中的数据
+        try {
+            const result = await pywebview.api.删除应力数据点(
+                当前方向.实验ID,
+                当前方向.方向名称,
+                数据.应力值
+            );
+            
+            if (!result.success) {
+                显示状态栏信息('❌', `删除失败：${result.message}`, '', 'warning', 3000);
+                return;
+            }
+        } catch (error) {
+            显示状态栏信息('❌', `删除失败：${error}`, '', 'warning', 3000);
+            return;
+        }
+        
+        // 删除前端数据点
         当前方向.应力数据.splice(index, 1);
         
         // 如果数据点不足，清除拟合结果

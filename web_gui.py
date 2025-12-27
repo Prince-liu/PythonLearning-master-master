@@ -190,6 +190,23 @@ class WebAPI:
         """从NPY文件加载波形数据"""
         return self.analysis.加载波形文件(文件路径)
     
+    # 🆕 波形分析模块 - 信号处理配置
+    def 设置波形分析降噪配置(self, config):
+        """设置波形分析模块的降噪配置"""
+        return self.analysis.set_denoise_config(config)
+    
+    def 获取波形分析降噪配置(self):
+        """获取波形分析模块的降噪配置"""
+        return self.analysis.get_denoise_config()
+    
+    def 设置波形分析带通滤波配置(self, config):
+        """设置波形分析模块的带通滤波配置"""
+        return self.analysis.set_bandpass_config(config)
+    
+    def 获取波形分析带通滤波配置(self):
+        """获取波形分析模块的带通滤波配置"""
+        return self.analysis.get_bandpass_config()
+    
     # ==================== 应力系数标定功能 ====================
     
     def 计算互相关声时差(self, 基准波形, 测量波形, 采样率):
@@ -210,7 +227,7 @@ class WebAPI:
     
     def 检查方向是否存在(self, 材料名称, 方向名称):
         """🆕 检查指定材料的指定方向是否已存在于数据库中（只检查有基准波形的完整数据）"""
-        from modules.core.data_manager import ExperimentDataManager
+        from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
         dm = ExperimentDataManager()
         result = dm.检查方向是否存在(材料名称, 方向名称)
         dm.关闭()
@@ -220,13 +237,19 @@ class WebAPI:
         """🆕 创建新的单轴应力检测实验"""
         return self.calibration.创建应力检测实验(材料名称, 测试方向列表)
     
-    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
-        """🆕 保存基准波形数据（从订阅获取的波形，含带通滤波和降噪处理）"""
-        return self.calibration.保存基准波形数据(实验ID, 方向名称, 电压数据, 时间数据, 降噪配置, 带通滤波配置, 示波器采样率)
+    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 示波器采样率=None):
+        """🆕 保存基准波形数据（从订阅获取的波形，含带通滤波和降噪处理）
+        
+        注意：降噪和带通滤波配置从后端对象读取，不再通过参数传递
+        """
+        return self.calibration.保存基准波形数据(实验ID, 方向名称, 电压数据, 时间数据, 示波器采样率)
     
-    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
-        """🆕 保存并分析应力波形数据（从订阅获取的波形）"""
-        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置, 带通滤波配置, 示波器采样率)
+    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 示波器采样率=None):
+        """🆕 保存并分析应力波形数据（从订阅获取的波形）
+        
+        注意：降噪和带通滤波配置从后端对象读取，不再通过参数传递
+        """
+        return self.calibration.保存并分析应力波形数据(实验ID, 方向名称, 应力值, 电压数据, 时间数据, 示波器采样率)
     
     def 线性拟合应力时间差(self, 实验ID, 方向名称):
         """🆕 线性拟合应力-时间差数据"""
@@ -240,12 +263,34 @@ class WebAPI:
         """🆕 删除某个应力数据点"""
         return self.calibration.删除应力数据点(实验ID, 方向名称, 应力值)
     
+    # ==================== 标定模块配置管理 ====================
+    
+    def 设置标定降噪配置(self, config):
+        """🆕 设置标定模块的降噪配置"""
+        return self.calibration.set_denoise_config(config)
+    
+    def 获取标定降噪配置(self):
+        """🆕 获取标定模块的降噪配置"""
+        return self.calibration.get_denoise_config()
+    
+    def 设置标定带通滤波配置(self, config):
+        """🆕 设置标定模块的带通滤波配置"""
+        return self.calibration.set_bandpass_config(config)
+    
+    def 获取标定带通滤波配置(self):
+        """🆕 获取标定模块的带通滤波配置"""
+        return self.calibration.get_bandpass_config()
+    
+    def 加载标定实验配置(self, 实验ID, 方向名称):
+        """🆕 从已有实验的HDF5文件加载信号处理配置并恢复到后端对象"""
+        return self.calibration.加载实验配置(实验ID, 方向名称)
+    
     # ==================== 实验数据管理 ====================
     
     def 加载实验完整数据(self, 实验ID):
         """🆕 加载指定实验的完整数据"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             实验数据 = dm.加载实验完整数据(实验ID)
             dm.关闭()
@@ -256,7 +301,7 @@ class WebAPI:
     def 获取所有实验列表(self):
         """🆕 获取所有实验列表（嵌套结构，用于应力场测绘模块）"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             实验列表 = dm.获取所有实验列表()
             dm.关闭()  # 确保关闭连接
@@ -267,7 +312,7 @@ class WebAPI:
     def 获取所有方向列表(self):
         """🆕 获取所有方向列表（扁平化结构，用于标定模块）"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             方向列表 = dm.获取所有方向列表()
             dm.关闭()
@@ -278,7 +323,7 @@ class WebAPI:
     def 删除方向数据(self, 实验ID, 方向ID):
         """🆕 删除指定方向的数据"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             result = dm.删除方向(实验ID, 方向ID)
             dm.关闭()  # 确保关闭连接，提交所有更改
@@ -289,7 +334,7 @@ class WebAPI:
     def 删除全部数据(self):
         """🆕 删除所有实验数据并重置ID计数器"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             result = dm.删除全部数据()
             dm.关闭()  # 确保关闭连接，提交所有更改
@@ -300,7 +345,7 @@ class WebAPI:
     def 导出方向CSV数据(self, 实验ID, 方向ID):
         """🆕 导出指定方向的数据为CSV"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             dm.window = self.window  # 传递window对象
             result = dm.导出方向CSV(实验ID, 方向ID)
@@ -312,7 +357,7 @@ class WebAPI:
     def 导出全部CSV数据(self):
         """🆕 导出所有实验数据为CSV"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             dm.window = self.window  # 传递window对象
             result = dm.导出全部CSV()
@@ -324,7 +369,7 @@ class WebAPI:
     def 重置方向数据(self, 实验ID, 方向名称):
         """🆕 重置指定方向的实验数据"""
         try:
-            from modules.core.data_manager import ExperimentDataManager
+            from modules.stress_calibration.experiment_data_manager import ExperimentDataManager
             dm = ExperimentDataManager()
             result = dm.重置方向(实验ID, 方向名称)
             dm.关闭()
@@ -337,6 +382,10 @@ class WebAPI:
     def 小波降噪(self, 信号数据, 小波类型='sym6', 分解层数=5, 阈值方法='soft', 阈值模式='heursure'):
         """应用小波降噪"""
         return self.signal_proc.小波降噪(信号数据, 小波类型, 分解层数, 阈值方法, 阈值模式)
+    
+    def 带通滤波(self, 信号数据, 采样率, 低频截止, 高频截止, 滤波器阶数=6):
+        """应用带通滤波"""
+        return self.signal_proc.带通滤波(信号数据, 采样率, 低频截止, 高频截止, 滤波器阶数)
     
     def Hilbert变换(self, 信号数据):
         """计算Hilbert包络"""
@@ -369,7 +418,14 @@ class WebAPI:
         return self.analysis.加载多个CSV文件(文件路径列表)
     
     def 计算互相关(self, 参考信号索引, truncate_start=5.0, truncate_end=None):
-        """计算互相关"""
+        """
+        计算互相关
+        
+        Args:
+            参考信号索引: 参考信号的索引
+            truncate_start: 截取起始时间（微秒）
+            truncate_end: 截取结束时间（微秒）
+        """
         return self.analysis.计算互相关(参考信号索引, truncate_start, truncate_end)
     
     def 导出互相关结果(self, 文件路径):
@@ -434,6 +490,18 @@ class WebAPI:
             {"success": bool, "message": str}
         """
         return self.field_experiment.delete_experiment(exp_id)
+    
+    def update_field_experiment(self, exp_id, updates):
+        """更新应力场实验信息
+        
+        Args:
+            exp_id: 实验ID
+            updates: 要更新的字段字典
+        
+        Returns:
+            {"success": bool, "message": str}
+        """
+        return self.field_experiment.db.update_experiment(exp_id, updates)
     
     def complete_field_experiment(self, exp_id=None):
         """完成应力场实验
@@ -1076,7 +1144,7 @@ def 创建窗口():
         resizable=True,
         fullscreen=False,
         min_size=(1024, 600),
-        background_color='#1e3c72',  # 与开屏背景色一致
+        background_color='#0a0a0a',  # 与示波器开屏背景色一致（黑色）
     )
     
     # 设置窗口引用到API对象

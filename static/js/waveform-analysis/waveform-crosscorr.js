@@ -24,6 +24,9 @@ const WaveformCrossCorr = (function() {
         const selectMultipleFilesBtn = document.getElementById('selectMultipleFilesBtn');
         const calculateCrossCorr = document.getElementById('calculateCrossCorr');
         const exportCrossCorr = document.getElementById('exportCrossCorr');
+        const openSignalProcessingConfig = document.getElementById('openSignalProcessingConfig');
+        const waDenoiseCheckbox = document.getElementById('wa-denoise-checkbox');
+        const waBandpassCheckbox = document.getElementById('wa-bandpass-checkbox');
         
         if (selectMultipleFilesBtn) {
             selectMultipleFilesBtn.addEventListener('click', 选择多个文件);
@@ -34,7 +37,170 @@ const WaveformCrossCorr = (function() {
         if (exportCrossCorr) {
             exportCrossCorr.addEventListener('click', 导出结果);
         }
+        if (openSignalProcessingConfig) {
+            openSignalProcessingConfig.addEventListener('click', 打开配置弹窗);
+        }
+        
+        // 绑定复选框事件 - 直接切换配置
+        if (waDenoiseCheckbox) {
+            waDenoiseCheckbox.addEventListener('change', async (e) => {
+                try {
+                    const enabled = e.target.checked;
+                    // 获取当前配置
+                    const result = await pywebview.api.获取波形分析降噪配置();
+                    if (result.success && result.data) {
+                        const config = result.data;
+                        config.enabled = enabled;
+                        // 保存配置
+                        await pywebview.api.设置波形分析降噪配置(config);
+                        if (显示状态栏信息回调) {
+                            显示状态栏信息回调('✓', '配置已更新', `降噪已${enabled ? '启用' : '禁用'}，重新计算互相关后生效`, 'success', 2000);
+                        }
+                    }
+                } catch (error) {
+                    console.error('切换降噪配置失败:', error);
+                    e.target.checked = !e.target.checked; // 恢复原状态
+                }
+            });
+        }
+        
+        if (waBandpassCheckbox) {
+            waBandpassCheckbox.addEventListener('change', async (e) => {
+                try {
+                    const enabled = e.target.checked;
+                    // 获取当前配置
+                    const result = await pywebview.api.获取波形分析带通滤波配置();
+                    if (result.success && result.data) {
+                        const config = result.data;
+                        config.enabled = enabled;
+                        // 保存配置
+                        await pywebview.api.设置波形分析带通滤波配置(config);
+                        if (显示状态栏信息回调) {
+                            显示状态栏信息回调('✓', '配置已更新', `带通滤波已${enabled ? '启用' : '禁用'}，重新计算互相关后生效`, 'success', 2000);
+                        }
+                    }
+                } catch (error) {
+                    console.error('切换带通滤波配置失败:', error);
+                    e.target.checked = !e.target.checked; // 恢复原状态
+                }
+            });
+        }
+        
+        // 初始化配置状态显示
+        更新配置状态显示();
     }
+    
+    // ========== 配置管理 ==========
+    async function 打开配置弹窗() {
+        try {
+            // 从后端加载当前配置
+            const denoiseResult = await pywebview.api.获取波形分析降噪配置();
+            const bandpassResult = await pywebview.api.获取波形分析带通滤波配置();
+            
+            if (denoiseResult.success && denoiseResult.data) {
+                const config = denoiseResult.data;
+                document.getElementById('wa-denoise-wavelet').value = config.wavelet || 'sym6';
+                document.getElementById('wa-denoise-level').value = config.level || 5;
+                document.getElementById('wa-denoise-threshold-mode').value = config.threshold_mode || 'soft';
+            }
+            
+            if (bandpassResult.success && bandpassResult.data) {
+                const config = bandpassResult.data;
+                document.getElementById('wa-bandpass-lowcut').value = config.lowcut || 1.5;
+                document.getElementById('wa-bandpass-highcut').value = config.highcut || 3.5;
+                document.getElementById('wa-bandpass-order').value = config.order || 6;
+            }
+            
+            // 显示弹窗
+            document.getElementById('waveformAnalysisConfigModal').style.display = 'flex';
+        } catch (error) {
+            console.error('打开配置弹窗失败:', error);
+            alert('打开配置弹窗失败');
+        }
+    }
+    
+    async function 更新配置状态显示() {
+        try {
+            const denoiseResult = await pywebview.api.获取波形分析降噪配置();
+            const bandpassResult = await pywebview.api.获取波形分析带通滤波配置();
+            
+            const denoiseCheckbox = document.getElementById('wa-denoise-checkbox');
+            const bandpassCheckbox = document.getElementById('wa-bandpass-checkbox');
+            
+            if (denoiseResult.success && denoiseResult.data) {
+                const enabled = denoiseResult.data.enabled !== false;
+                if (denoiseCheckbox) {
+                    denoiseCheckbox.checked = enabled;
+                }
+            }
+            
+            if (bandpassResult.success && bandpassResult.data) {
+                const enabled = bandpassResult.data.enabled === true;
+                if (bandpassCheckbox) {
+                    bandpassCheckbox.checked = enabled;
+                }
+            }
+        } catch (error) {
+            console.error('更新配置状态显示失败:', error);
+        }
+    }
+    
+    // 全局函数：关闭配置弹窗
+    window.closeWaveformAnalysisConfigModal = function() {
+        document.getElementById('waveformAnalysisConfigModal').style.display = 'none';
+    };
+    
+    // 全局函数：保存配置
+    window.saveWaveformAnalysisConfig = async function() {
+        try {
+            // 读取降噪配置（保持当前的enabled状态）
+            const denoiseResult = await pywebview.api.获取波形分析降噪配置();
+            const denoiseConfig = denoiseResult.success && denoiseResult.data ? denoiseResult.data : {};
+            
+            denoiseConfig.method = 'wavelet';
+            denoiseConfig.wavelet = document.getElementById('wa-denoise-wavelet').value;
+            denoiseConfig.level = parseInt(document.getElementById('wa-denoise-level').value);
+            denoiseConfig.threshold_mode = document.getElementById('wa-denoise-threshold-mode').value;
+            denoiseConfig.threshold_rule = 'heursure';
+            
+            // 读取带通滤波配置（保持当前的enabled状态）
+            const bandpassResult = await pywebview.api.获取波形分析带通滤波配置();
+            const bandpassConfig = bandpassResult.success && bandpassResult.data ? bandpassResult.data : {};
+            
+            bandpassConfig.lowcut = parseFloat(document.getElementById('wa-bandpass-lowcut').value);
+            bandpassConfig.highcut = parseFloat(document.getElementById('wa-bandpass-highcut').value);
+            bandpassConfig.order = parseInt(document.getElementById('wa-bandpass-order').value);
+            
+            // 验证参数
+            if (bandpassConfig.lowcut >= bandpassConfig.highcut) {
+                alert('低频截止必须小于高频截止');
+                return;
+            }
+            
+            if (bandpassConfig.lowcut < 1 || bandpassConfig.lowcut > 6 || bandpassConfig.highcut < 1 || bandpassConfig.highcut > 6) {
+                alert('频率范围必须在 1-6 MHz 之间');
+                return;
+            }
+            
+            // 保存到后端
+            await pywebview.api.设置波形分析降噪配置(denoiseConfig);
+            await pywebview.api.设置波形分析带通滤波配置(bandpassConfig);
+            
+            // 更新状态显示
+            await 更新配置状态显示();
+            
+            // 关闭弹窗
+            window.closeWaveformAnalysisConfigModal();
+            
+            // 提示用户
+            if (显示状态栏信息回调) {
+                显示状态栏信息回调('✓', '配置已保存', '重新计算互相关后生效', 'success', 2000);
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            alert('保存配置失败');
+        }
+    };
     
     // ========== 选择多个文件 ==========
     async function 选择多个文件() {
@@ -58,6 +224,12 @@ const WaveformCrossCorr = (function() {
                     // 填充参考信号下拉框
                     填充参考信号选择框(已加载文件列表);
                     
+                    // 显示配置面板
+                    const signalProcessingConfigGroup = document.getElementById('signalProcessingConfigGroup');
+                    if (signalProcessingConfigGroup) {
+                        signalProcessingConfigGroup.style.display = 'block';
+                    }
+                    
                     // 启用计算按钮
                     document.getElementById('calculateCrossCorr').disabled = false;
                     
@@ -67,7 +239,7 @@ const WaveformCrossCorr = (function() {
                     const statusBox = document.getElementById('crossCorrStatus');
                     const statusText = document.getElementById('crossCorrStatusText');
                     if (statusBox && statusText) {
-                        statusText.textContent = `已加载 ${loadResult.count} 个文件，已自动降噪和截断`;
+                        statusText.textContent = `已加载 ${loadResult.count} 个文件，已应用信号处理配置`;
                         statusBox.style.display = 'block';
                     }
                 } else {
@@ -193,7 +365,13 @@ const WaveformCrossCorr = (function() {
                 // 更新状态
                 const statusText = document.getElementById('crossCorrStatusText');
                 if (statusText) {
-                    statusText.textContent = `计算完成，共 ${互相关结果.length} 对互相关结果`;
+                    const methodNames = {
+                        'standard': '频域互相关',
+                        'normalized': '广域互相关',
+                        'gcc_phat': 'GCC-PHAT'
+                    };
+                    const methodText = methodNames[result.method] || result.method;
+                    statusText.textContent = `计算完成（${methodText}），共 ${互相关结果.length} 对互相关结果`;
                 }
             } else {
                 if (显示状态栏信息回调) {

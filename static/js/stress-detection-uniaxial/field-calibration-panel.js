@@ -126,7 +126,7 @@ const FieldCalibrationPanel = (function() {
                     if (dir.拟合结果) {
                         const dirName = dir.方向名称 || dir.direction || dir.name || '未知方向';
                         const k = dir.拟合结果.k;
-                        const kFormatted = k.toFixed(2);  // 保留两位小数
+                        const kFormatted = k.toFixed(3);  // 保留三位小数
                         html += `
                             <div class="calibration-item" onclick="FieldCalibrationPanel.选择标定数据(${expId}, '${dirName}')">
                                 <div class="direction-name">${material} - ${dirName}</div>
@@ -244,8 +244,8 @@ const FieldCalibrationPanel = (function() {
             }
         }
         
-        // 格式化K值：保留两位小数
-        const kFormatted = k.toFixed(2);
+        // 格式化K值：保留三位小数
+        const kFormatted = k.toFixed(3);
         
         // 更新信息显示
         const infoPanel = document.getElementById('field-calib-info');

@@ -139,38 +139,15 @@ const StressCalibrationCapture = (function() {
             
             elements.monitorMessage.textContent = '正在保存基准波形...';
             
-            // 🔧 获取信号处理配置（与应力波形采集一致）
-            const 降噪启用 = document.getElementById('sd-auto-denoise')?.checked ?? true;
-            const 带通滤波启用 = document.getElementById('sd-bandpass-filter')?.checked ?? true;
-            
-            const 降噪配置 = 实验状态.信号处理配置?.降噪 || {
-                enabled: 降噪启用,
-                method: 'wavelet',
-                wavelet: 'sym6',
-                level: 5,
-                threshold_mode: 'soft'
-            };
-            降噪配置.enabled = 降噪启用;
-            
-            const 带通滤波配置 = 实验状态.信号处理配置?.带通滤波 || {
-                enabled: 带通滤波启用,
-                lowcut: 1.5,
-                highcut: 3.5,
-                order: 6
-            };
-            带通滤波配置.enabled = 带通滤波启用;
-            
             // 🔧 获取示波器采样率（用于双重验证）
             const 示波器采样率 = 波形数据.sample_rate || null;
             
-            // 调用后端保存（使用当前方向的实验ID，传递信号处理配置和采样率）
+            // 调用后端保存（配置从后端对象读取，不再传递）
             const result = await pywebview.api.保存基准波形数据(
                 当前方向.实验ID,
                 当前方向.方向名称,
                 波形数据.voltage,
                 波形数据.time,
-                降噪配置,
-                带通滤波配置,
                 示波器采样率
             );
             
@@ -246,39 +223,16 @@ const StressCalibrationCapture = (function() {
             
             elements.monitorMessage.textContent = `正在分析 ${应力值} MPa 波形...`;
             
-            // 获取信号处理配置
-            const 降噪启用 = document.getElementById('sd-auto-denoise')?.checked ?? true;
-            const 带通滤波启用 = document.getElementById('sd-bandpass-filter')?.checked ?? true;
-            
-            const 降噪配置 = 实验状态.信号处理配置?.降噪 || {
-                enabled: 降噪启用,
-                method: 'wavelet',
-                wavelet: 'sym6',
-                level: 5,
-                threshold_mode: 'soft'
-            };
-            降噪配置.enabled = 降噪启用;  // 使用当前复选框状态
-            
-            const 带通滤波配置 = 实验状态.信号处理配置?.带通滤波 || {
-                enabled: 带通滤波启用,
-                lowcut: 1.5,
-                highcut: 3.5,
-                order: 6
-            };
-            带通滤波配置.enabled = 带通滤波启用;  // 使用当前复选框状态
-            
             // 🔧 获取示波器采样率（用于双重验证）
             const 示波器采样率 = 波形数据.sample_rate || null;
             
-            // 调用后端保存并分析（使用当前方向的实验ID，传递采样率）
+            // 调用后端保存并分析（配置从后端对象读取，不再传递）
             const result = await pywebview.api.保存并分析应力波形数据(
                 当前方向.实验ID,
                 当前方向.方向名称,
                 应力值,
                 波形数据.voltage,
                 波形数据.time,
-                降噪配置,
-                带通滤波配置,
                 示波器采样率
             );
             

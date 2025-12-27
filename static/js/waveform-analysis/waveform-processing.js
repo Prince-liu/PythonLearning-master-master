@@ -6,12 +6,19 @@ const WaveformProcessing = (function() {
     
     // ========== 私有变量 ==========
     let canvas;
+    let 滤波后的波形 = null;
     let 降噪后的波形 = null;
     let 包络数据 = null;
     let 选中的峰值 = [];
     let 等待点击 = false;
     
     // 配置参数
+    let 滤波配置 = {
+        lowcut: 1.5,
+        highcut: 3.5,
+        order: 6
+    };
+    
     let 降噪配置 = {
         wavelet: 'sym6',
         level: 5,
@@ -45,6 +52,14 @@ const WaveformProcessing = (function() {
         显示状态栏信息回调 = 配置.显示状态栏信息回调;
         
         elements = {
+            lowcutSlider: document.getElementById('lowcutFreq'),
+            lowcutValue: document.getElementById('lowcutValue'),
+            highcutSlider: document.getElementById('highcutFreq'),
+            highcutValue: document.getElementById('highcutValue'),
+            filterOrder: document.getElementById('filterOrder'),
+            applyBandpassBtn: document.getElementById('applyBandpassBtn'),
+            toggleBandpassViewBtn: document.getElementById('toggleBandpassViewBtn'),
+            bandpassResult: document.getElementById('bandpassResult'),
             waveletSelect: document.getElementById('waveletType'),
             levelSlider: document.getElementById('decompLevel'),
             levelValue: document.getElementById('decompLevelValue'),
@@ -66,6 +81,38 @@ const WaveformProcessing = (function() {
             startPointValue: document.getElementById('startPointValue'),
             timeDiffResult: document.getElementById('timeDiffResult')
         };
+        
+        // 绑定带通滤波事件
+        if (elements.lowcutSlider) {
+            elements.lowcutSlider.addEventListener('input', (e) => {
+                const lowcut = parseFloat(e.target.value);
+                elements.lowcutValue.textContent = lowcut.toFixed(1);
+                // 确保低频 < 高频
+                const highcut = parseFloat(elements.highcutSlider.value);
+                if (lowcut >= highcut) {
+                    elements.highcutSlider.value = (lowcut + 0.5).toFixed(1);
+                    elements.highcutValue.textContent = (lowcut + 0.5).toFixed(1);
+                }
+            });
+        }
+        if (elements.highcutSlider) {
+            elements.highcutSlider.addEventListener('input', (e) => {
+                const highcut = parseFloat(e.target.value);
+                elements.highcutValue.textContent = highcut.toFixed(1);
+                // 确保高频 > 低频
+                const lowcut = parseFloat(elements.lowcutSlider.value);
+                if (highcut <= lowcut) {
+                    elements.lowcutSlider.value = (highcut - 0.5).toFixed(1);
+                    elements.lowcutValue.textContent = (highcut - 0.5).toFixed(1);
+                }
+            });
+        }
+        if (elements.applyBandpassBtn) {
+            elements.applyBandpassBtn.addEventListener('click', 应用带通滤波);
+        }
+        if (elements.toggleBandpassViewBtn) {
+            elements.toggleBandpassViewBtn.addEventListener('click', 切换滤波视图);
+        }
         
         // 绑定事件
         if (elements.levelSlider) {
@@ -117,6 +164,101 @@ const WaveformProcessing = (function() {
         // 保持HTML中定义的默认选项（sym6, db4, db5, coif2）
         // 不从后端加载完整列表，避免选项过多
         // 如果需要更多小波类型，可以直接在HTML中添加
+    }
+    
+    // ========== 带通滤波功能 ==========
+    async function 应用带通滤波() {
+        const 波形数据 = 获取波形数据回调();
+        if (!波形数据 || !波形数据.voltage || 波形数据.voltage.length === 0) {
+            if (显示状态栏信息回调) {
+                显示状态栏信息回调('⚠️', '无法应用滤波', '请先加载波形文件', 'warning', 3000);
+            }
+            return;
+        }
+        
+        try {
+            状态回调('正在应用带通滤波...');
+            
+            // 获取配置参数
+            const lowcut = parseFloat(elements.lowcutSlider?.value || '1.5');
+            const highcut = parseFloat(elements.highcutSlider?.value || '3.5');
+            const order = parseInt(elements.filterOrder?.value || '6');
+            
+            // 验证参数
+            if (lowcut >= highcut) {
+                if (显示状态栏信息回调) {
+                    显示状态栏信息回调('⚠️', '参数错误', '低频截止必须小于高频截止', 'warning', 3000);
+                }
+                状态回调('');
+                return;
+            }
+            
+            滤波配置.lowcut = lowcut;
+            滤波配置.highcut = highcut;
+            滤波配置.order = order;
+            
+            // 计算采样率（从时间数组推算）
+            const dt = 波形数据.time[1] - 波形数据.time[0]; // 秒
+            const fs = 1.0 / dt; // Hz
+            
+            // 调用后端 API
+            const result = await pywebview.api.带通滤波(
+                波形数据.voltage,
+                fs,
+                lowcut * 1e6,  // MHz -> Hz
+                highcut * 1e6, // MHz -> Hz
+                order
+            );
+            
+            if (result.success) {
+                滤波后的波形 = result.filtered;
+                
+                if (elements.bandpassResult) {
+                    elements.bandpassResult.innerHTML = `
+                        <div class="highlight">滤波完成</div>
+                        <div>低频: ${lowcut.toFixed(1)} MHz</div>
+                        <div>高频: ${highcut.toFixed(1)} MHz</div>
+                        <div>阶数: ${order}</div>
+                    `;
+                    elements.bandpassResult.style.display = 'block';
+                    
+                    // 更新结果显示
+                    const resultLowcut = document.getElementById('resultLowcut');
+                    const resultHighcut = document.getElementById('resultHighcut');
+                    const resultOrder = document.getElementById('resultOrder');
+                    if (resultLowcut) resultLowcut.textContent = lowcut.toFixed(1);
+                    if (resultHighcut) resultHighcut.textContent = highcut.toFixed(1);
+                    if (resultOrder) resultOrder.textContent = order;
+                }
+                
+                if (elements.toggleBandpassViewBtn) {
+                    elements.toggleBandpassViewBtn.disabled = false;
+                    elements.toggleBandpassViewBtn.textContent = '查看滤波';
+                }
+                
+                // 自动切换到滤波视图
+                重绘回调({ 切换到滤波视图: true });
+                状态回调('带通滤波完成');
+                setTimeout(() => 状态回调(''), 2000);
+            } else {
+                状态回调('滤波失败: ' + result.message);
+            }
+        } catch (error) {
+            console.error('带通滤波失败:', error);
+            状态回调('滤波失败');
+        }
+    }
+    
+    function 切换滤波视图() {
+        if (!滤波后的波形) {
+            if (显示状态栏信息回调) {
+                显示状态栏信息回调('⚠️', '无法切换视图', '请先应用带通滤波', 'warning', 3000);
+            }
+            return;
+        }
+        
+        // 通知主模块切换视图
+        重绘回调({ 切换滤波视图: true });
     }
     
     // ========== 小波降噪功能 ==========
@@ -450,16 +592,28 @@ const WaveformProcessing = (function() {
     
     // ========== 清除所有处理状态 ==========
     function 清除处理状态() {
+        滤波后的波形 = null;
         降噪后的波形 = null;
         包络数据 = null;
         选中的峰值 = [];
         等待点击 = false;
         
+        // 重置UI配置到初始值
+        重置UI配置();
+        
+        if (elements.toggleBandpassViewBtn) {
+            elements.toggleBandpassViewBtn.disabled = true;
+            elements.toggleBandpassViewBtn.textContent = '切换视图';
+        }
         if (elements.toggleViewBtn) {
             elements.toggleViewBtn.disabled = true;
             elements.toggleViewBtn.textContent = '切换视图';
         }
         
+        if (elements.bandpassResult) {
+            elements.bandpassResult.innerHTML = '';
+            elements.bandpassResult.style.display = 'none';
+        }
         if (elements.denoisingResult) {
             elements.denoisingResult.innerHTML = '';
             elements.denoisingResult.style.display = 'none';
@@ -470,7 +624,79 @@ const WaveformProcessing = (function() {
         }
     }
     
+    // ========== 重置UI配置到初始值 ==========
+    function 重置UI配置() {
+        // 重置带通滤波配置
+        if (elements.lowcutSlider) {
+            elements.lowcutSlider.value = 1.5;
+            if (elements.lowcutValue) elements.lowcutValue.textContent = '1.5';
+        }
+        if (elements.highcutSlider) {
+            elements.highcutSlider.value = 3.5;
+            if (elements.highcutValue) elements.highcutValue.textContent = '3.5';
+        }
+        if (elements.filterOrder) {
+            elements.filterOrder.value = 6;
+        }
+        滤波配置 = { lowcut: 1.5, highcut: 3.5, order: 6 };
+        
+        // 重置小波降噪配置
+        if (elements.waveletSelect) {
+            elements.waveletSelect.value = 'sym6';
+        }
+        if (elements.levelSlider) {
+            elements.levelSlider.value = 5;
+            if (elements.levelValue) elements.levelValue.textContent = '5';
+        }
+        if (elements.thresholdMethod) {
+            elements.thresholdMethod.value = 'soft';
+        }
+        if (elements.thresholdMode) {
+            elements.thresholdMode.value = 'heursure';
+        }
+        降噪配置 = {
+            wavelet: 'sym6',
+            level: 5,
+            threshold_method: 'soft',
+            threshold_mode: 'heursure'
+        };
+        
+        // 重置Hilbert配置
+        if (elements.showOriginalCheck) {
+            elements.showOriginalCheck.checked = true;
+        }
+        if (elements.envelopeColor) {
+            elements.envelopeColor.value = '#ff6b6b';
+        }
+        if (elements.envelopeWidth) {
+            elements.envelopeWidth.value = 1;
+            if (elements.widthValue) elements.widthValue.textContent = '1';
+        }
+        Hilbert配置 = {
+            color: '#ff6b6b',
+            lineWidth: 1,
+            showOriginal: true
+        };
+        
+        // 重置时间差配置
+        if (elements.startPointValue) {
+            elements.startPointValue.textContent = '0.0000 μs';
+        }
+        if (elements.useZeroBtn) {
+            elements.useZeroBtn.classList.remove('btn-secondary');
+            elements.useZeroBtn.classList.add('btn-primary');
+        }
+        if (elements.selectStartBtn) {
+            elements.selectStartBtn.classList.remove('btn-primary');
+            elements.selectStartBtn.classList.add('btn-secondary');
+        }
+    }
+    
     // ========== 获取当前状态 ==========
+    function 获取滤波后的波形() {
+        return 滤波后的波形;
+    }
+    
     function 获取降噪后的波形() {
         return 降噪后的波形;
     }
@@ -495,6 +721,7 @@ const WaveformProcessing = (function() {
     return {
         初始化,
         清除处理状态,
+        获取滤波后的波形,
         获取降噪后的波形,
         获取包络数据,
         获取选中的峰值,

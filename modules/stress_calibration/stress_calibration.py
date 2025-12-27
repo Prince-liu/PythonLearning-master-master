@@ -17,6 +17,68 @@ class StressCalibration:
         """
         self.window = window
         self.data_manager = None  # 延迟初始化
+        
+        # 🆕 降噪配置（与单轴模块一致）
+        self.denoise_config = {
+            'enabled': True,
+            'method': 'wavelet',
+            'wavelet': 'sym6',
+            'level': 5,
+            'threshold_mode': 'soft',
+            'threshold_rule': 'heursure'
+        }
+        
+        # 🆕 带通滤波配置（与单轴模块一致）
+        self.bandpass_config = {
+            'enabled': True,
+            'lowcut': 1.5,  # MHz
+            'highcut': 3.5,  # MHz
+            'order': 6
+        }
+    
+    def set_denoise_config(self, config):
+        """
+        设置降噪配置
+        
+        Args:
+            config: 降噪配置字典
+            
+        Returns:
+            dict: 操作结果
+        """
+        self.denoise_config.update(config)
+        return {"success": True, "message": "降噪配置已更新"}
+    
+    def get_denoise_config(self):
+        """
+        获取当前降噪配置
+        
+        Returns:
+            dict: 降噪配置
+        """
+        return {"success": True, "data": self.denoise_config}
+    
+    def set_bandpass_config(self, config):
+        """
+        设置带通滤波配置
+        
+        Args:
+            config: 带通滤波配置字典
+            
+        Returns:
+            dict: 操作结果
+        """
+        self.bandpass_config.update(config)
+        return {"success": True, "message": "带通滤波配置已更新"}
+    
+    def get_bandpass_config(self):
+        """
+        获取当前带通滤波配置
+        
+        Returns:
+            dict: 带通滤波配置
+        """
+        return {"success": True, "data": self.bandpass_config}
     
     def 计算互相关声时差(self, 基准波形, 测量波形, 采样率, 基准时间=None, 测量时间=None):
         """
@@ -31,7 +93,7 @@ class StressCalibration:
             测量时间: 测量波形的时间数组（可选）
         """
         try:
-            from scipy.signal import correlate
+            from modules.core.signal_processing import calculate_cross_correlation, find_peak_with_parabolic_interpolation
             
             基准 = np.array(基准波形)
             测量 = np.array(测量波形)
@@ -64,35 +126,24 @@ class StressCalibration:
             基准 = 基准[:最小长度]
             测量 = 测量[:最小长度]
             
-            # 频域互相关（快速）
-            相关 = correlate(测量, 基准, mode='same', method='fft')
+            # 使用共享的互相关函数（FFT加速，mode='full'）
+            相关, lags = calculate_cross_correlation(基准, 测量)
             
-            # 找到峰值位置
-            峰值索引 = np.argmax(相关)
+            # 找到峰值位置（使用抛物线插值获得亚采样点精度）
+            精确峰值索引, 峰值相关性 = find_peak_with_parabolic_interpolation(相关)
+            峰值索引 = int(精确峰值索引)  # 整数索引用于获取对应的lag值
             
-            # 抛物线插值（亚采样点精度）
-            if 1 < 峰值索引 < len(相关) - 2:
-                y1 = 相关[峰值索引 - 1]
-                y2 = 相关[峰值索引]
-                y3 = 相关[峰值索引 + 1]
-                
-                分母 = y1 - 2*y2 + y3
-                if abs(分母) > 1e-10:
-                    精确偏移 = 峰值索引 + 0.5 * (y1 - y3) / 分母
-                else:
-                    精确偏移 = 峰值索引
-            else:
-                精确偏移 = 峰值索引
+            # 计算精确的滞后值（使用抛物线插值的小数部分）
+            精确滞后 = lags[峰值索引] + (精确峰值索引 - 峰值索引)
             
-            # 转换为时间偏移
-            中心索引 = len(基准) // 2
-            声时差_秒 = (精确偏移 - 中心索引) / 采样率
+            # 转换为时间偏移（注意：负值表示测量信号相对于基准信号提前）
+            声时差_秒 = -精确滞后 / 采样率  # 取反以匹配原有逻辑
             声时差_纳秒 = 声时差_秒 * 1e9
             
             return {
                 "success": True,
                 "time_shift_ns": 声时差_纳秒,
-                "correlation_peak": float(相关[峰值索引])
+                "correlation_peak": float(峰值相关性)
             }
         except Exception as e:
             return {"success": False, "message": f"互相关计算失败: {str(e)}"}
@@ -273,7 +324,7 @@ class StressCalibration:
     def _获取数据管理器(self):
         """获取数据管理器实例（延迟初始化）"""
         if self.data_manager is None:
-            from ..core.data_manager import ExperimentDataManager
+            from .experiment_data_manager import ExperimentDataManager
             self.data_manager = ExperimentDataManager()
         return self.data_manager
     
@@ -308,7 +359,7 @@ class StressCalibration:
         except Exception as e:
             return {"success": False, "message": f"创建实验失败: {str(e)}"}
     
-    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
+    def 保存基准波形数据(self, 实验ID, 方向名称, 电压数据, 时间数据, 示波器采样率=None):
         """
         保存基准波形数据（含带通滤波和降噪处理）
         
@@ -321,108 +372,15 @@ class StressCalibration:
             方向名称: 测试方向名称
             电压数据: 电压数组
             时间数据: 时间数组
-            降噪配置: 降噪配置字典 {"enabled": bool, "method": str, "wavelet": str, "level": int, "threshold_mode": str}
-            带通滤波配置: 带通滤波配置字典 {"enabled": bool, "lowcut": float, "highcut": float, "order": int}
             示波器采样率: 示波器返回的采样率 (Hz)，可选
+        
+        注意：降噪和带通滤波配置从 self.denoise_config 和 self.bandpass_config 读取
         
         返回:
             {"success": bool, "文件路径": str}
         """
         try:
             from ..core import signal_processing
-            from scipy import signal as scipy_signal
-            
-            dm = self._获取数据管理器()
-            
-            处理后波形 = np.array(电压数据)
-            
-            # 1. 带通滤波（如果启用）- 与应力波形处理一致
-            if 带通滤波配置 and 带通滤波配置.get('enabled', False):
-                try:
-                    lowcut = 带通滤波配置.get('lowcut', 1.5) * 1e6  # MHz转Hz
-                    highcut = 带通滤波配置.get('highcut', 3.5) * 1e6
-                    order = 带通滤波配置.get('order', 6)
-                    
-                    # 🔧 双重验证采样率
-                    时间数组 = np.array(时间数据)
-                    采样率_计算 = None
-                    if len(时间数组) > 1:
-                        采样间隔 = 时间数组[1] - 时间数组[0]
-                        采样率_计算 = 1.0 / 采样间隔 if 采样间隔 > 0 else 1e9
-                    else:
-                        采样率_计算 = 1e9
-                    
-                    # 验证两种采样率是否一致
-                    if 示波器采样率 and 采样率_计算:
-                        误差 = abs(示波器采样率 - 采样率_计算) / 采样率_计算
-                        if 误差 > 0.01:  # 误差>1%
-                            print(f"⚠️ 采样率不一致！示波器: {示波器采样率/1e9:.3f} GSa/s, 计算: {采样率_计算/1e9:.3f} GSa/s, 误差: {误差*100:.2f}%")
-                    
-                    # 优先使用示波器返回的采样率，否则使用计算值
-                    采样率 = 示波器采样率 if 示波器采样率 else 采样率_计算
-                    
-                    # 设计巴特沃斯带通滤波器
-                    nyquist = 采样率 / 2
-                    low = lowcut / nyquist
-                    high = highcut / nyquist
-                    
-                    if 0 < low < 1 and 0 < high < 1 and low < high:
-                        sos = scipy_signal.butter(order, [low, high], btype='band', output='sos')
-                        处理后波形 = scipy_signal.sosfiltfilt(sos, 处理后波形)
-                except Exception as e:
-                    # 带通滤波失败不影响后续处理
-                    pass
-            
-            # 2. 小波降噪（如果启用）
-            if 降噪配置 is None or 降噪配置.get('enabled', True):
-                if 降噪配置:
-                    wavelet = 降噪配置.get('wavelet', 'sym6')
-                    level = 降噪配置.get('level', 5)
-                    threshold_mode = 降噪配置.get('threshold_mode', 'soft')
-                else:
-                    wavelet = 'sym6'
-                    level = 5
-                    threshold_mode = 'soft'
-                
-                降噪结果 = signal_processing.apply_wavelet_denoising(
-                    处理后波形, wavelet, level, threshold_mode, 'heursure'
-                )
-                
-                if 降噪结果['success']:
-                    处理后波形 = 降噪结果['denoised']
-            
-            # 3. 保存到HDF5
-            保存结果 = dm.保存基准波形(
-                实验ID,
-                方向名称,
-                处理后波形,
-                时间数据
-            )
-            
-            return 保存结果
-        except Exception as e:
-            return {"success": False, "message": f"保存基准波形失败: {str(e)}"}
-    
-    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 降噪配置=None, 带通滤波配置=None, 示波器采样率=None):
-        """
-        保存并分析应力波形数据（含降噪、互相关计算）
-        
-        参数:
-            实验ID: 实验ID
-            方向名称: 测试方向名称
-            应力值: 应力值 (MPa)
-            电压数据: 电压数组
-            时间数据: 时间数组
-            降噪配置: 降噪配置字典 {"enabled": bool, "method": str, "wavelet": str, "level": int, "threshold_mode": str}
-            带通滤波配置: 带通滤波配置字典 {"enabled": bool, "lowcut": float, "highcut": float, "order": int}
-            示波器采样率: 示波器返回的采样率 (Hz)，可选
-        
-        返回:
-            {"success": bool, "data": {"时间差": float, "文件路径": str}}
-        """
-        try:
-            from ..core import signal_processing
-            from scipy import signal as scipy_signal
             
             dm = self._获取数据管理器()
             
@@ -441,38 +399,114 @@ class StressCalibration:
             if 示波器采样率 and 采样率_计算:
                 误差 = abs(示波器采样率 - 采样率_计算) / 采样率_计算
                 if 误差 > 0.01:  # 误差>1%
-                    print(f"⚠️ [标定模块] 采样率不一致！示波器: {示波器采样率/1e9:.3f} GSa/s, 计算: {采样率_计算/1e9:.3f} GSa/s, 误差: {误差*100:.2f}%")
+                    print(f"⚠️ [标定模块-基准] 采样率不一致！示波器: {示波器采样率/1e9:.3f} GSa/s, 计算: {采样率_计算/1e9:.3f} GSa/s, 误差: {误差*100:.2f}%")
             
             # 优先使用示波器返回的采样率，否则使用计算值（整个函数使用此值）
             采样率 = 示波器采样率 if 示波器采样率 else 采样率_计算
             
-            # 1. 带通滤波（如果启用）
-            if 带通滤波配置 and 带通滤波配置.get('enabled', False):
-                try:
-                    lowcut = 带通滤波配置.get('lowcut', 1.5) * 1e6  # MHz转Hz
-                    highcut = 带通滤波配置.get('highcut', 3.5) * 1e6
-                    order = 带通滤波配置.get('order', 6)
-                    
-                    # 设计巴特沃斯带通滤波器
-                    nyquist = 采样率 / 2
-                    low = lowcut / nyquist
-                    high = highcut / nyquist
-                    
-                    if 0 < low < 1 and 0 < high < 1 and low < high:
-                        sos = scipy_signal.butter(order, [low, high], btype='band', output='sos')
-                        处理后波形 = scipy_signal.sosfiltfilt(sos, 处理后波形)
-                except Exception as e:
-                    # 带通滤波失败不影响后续处理
-                    pass
+            # 1. 带通滤波（如果启用）- 使用 core 模块的统一函数
+            if self.bandpass_config.get('enabled', False):
+                lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6  # MHz转Hz
+                highcut = self.bandpass_config.get('highcut', 3.5) * 1e6
+                order = self.bandpass_config.get('order', 6)
+                
+                滤波结果 = signal_processing.apply_bandpass_filter(
+                    处理后波形, 采样率, lowcut, highcut, order
+                )
+                
+                if 滤波结果['success']:
+                    处理后波形 = np.array(滤波结果['filtered'])
             
-            # 2. 小波降噪（如果启用）
-            if 降噪配置 and 降噪配置.get('enabled', True):
-                method = 降噪配置.get('method', 'wavelet')
+            # 2. 小波降噪（如果启用）- 从 self.denoise_config 读取
+            if self.denoise_config.get('enabled', True):
+                wavelet = self.denoise_config.get('wavelet', 'sym6')
+                level = self.denoise_config.get('level', 5)
+                threshold_mode = self.denoise_config.get('threshold_mode', 'soft')
+                
+                降噪结果 = signal_processing.apply_wavelet_denoising(
+                    处理后波形, wavelet, level, threshold_mode, 'heursure'
+                )
+                
+                if 降噪结果['success']:
+                    处理后波形 = 降噪结果['denoised']
+            
+            # 3. 保存到HDF5（包含配置信息）
+            保存结果 = dm.保存基准波形(
+                实验ID,
+                方向名称,
+                处理后波形,
+                时间数据,
+                self.denoise_config,
+                self.bandpass_config
+            )
+            
+            return 保存结果
+        except Exception as e:
+            return {"success": False, "message": f"保存基准波形失败: {str(e)}"}
+    
+    def 保存并分析应力波形数据(self, 实验ID, 方向名称, 应力值, 电压数据, 时间数据, 示波器采样率=None):
+        """
+        保存并分析应力波形数据（含降噪、互相关计算）
+        
+        参数:
+            实验ID: 实验ID
+            方向名称: 测试方向名称
+            应力值: 应力值 (MPa)
+            电压数据: 电压数组
+            时间数据: 时间数组
+            示波器采样率: 示波器返回的采样率 (Hz)，可选
+        
+        注意：降噪和带通滤波配置从 self.denoise_config 和 self.bandpass_config 读取
+        
+        返回:
+            {"success": bool, "data": {"时间差": float, "文件路径": str}}
+        """
+        try:
+            from ..core import signal_processing
+            
+            dm = self._获取数据管理器()
+            
+            处理后波形 = np.array(电压数据)
+            
+            # 🔧 双重验证采样率（在函数开始时验证一次，整个函数使用同一个值）
+            时间数组 = np.array(时间数据)
+            采样率_计算 = None
+            if len(时间数组) > 1:
+                采样间隔 = 时间数组[1] - 时间数组[0]
+                采样率_计算 = 1.0 / 采样间隔 if 采样间隔 > 0 else 1e9
+            else:
+                采样率_计算 = 1e9
+            
+            # 验证两种采样率是否一致
+            if 示波器采样率 and 采样率_计算:
+                误差 = abs(示波器采样率 - 采样率_计算) / 采样率_计算
+                if 误差 > 0.01:  # 误差>1%
+                    print(f"⚠️ [标定模块-应力] 采样率不一致！示波器: {示波器采样率/1e9:.3f} GSa/s, 计算: {采样率_计算/1e9:.3f} GSa/s, 误差: {误差*100:.2f}%")
+            
+            # 优先使用示波器返回的采样率，否则使用计算值（整个函数使用此值）
+            采样率 = 示波器采样率 if 示波器采样率 else 采样率_计算
+            
+            # 1. 带通滤波（如果启用）- 使用 core 模块的统一函数
+            if self.bandpass_config.get('enabled', False):
+                lowcut = self.bandpass_config.get('lowcut', 1.5) * 1e6  # MHz转Hz
+                highcut = self.bandpass_config.get('highcut', 3.5) * 1e6
+                order = self.bandpass_config.get('order', 6)
+                
+                滤波结果 = signal_processing.apply_bandpass_filter(
+                    处理后波形, 采样率, lowcut, highcut, order
+                )
+                
+                if 滤波结果['success']:
+                    处理后波形 = np.array(滤波结果['filtered'])
+            
+            # 2. 小波降噪（如果启用）- 从 self.denoise_config 读取
+            if self.denoise_config.get('enabled', True):
+                method = self.denoise_config.get('method', 'wavelet')
                 
                 if method == 'wavelet':
-                    wavelet = 降噪配置.get('wavelet', 'sym6')
-                    level = 降噪配置.get('level', 5)
-                    threshold_mode = 降噪配置.get('threshold_mode', 'soft')
+                    wavelet = self.denoise_config.get('wavelet', 'sym6')
+                    level = self.denoise_config.get('level', 5)
+                    threshold_mode = self.denoise_config.get('threshold_mode', 'soft')
                     
                     降噪结果 = signal_processing.apply_wavelet_denoising(
                         处理后波形, wavelet, level, threshold_mode, 'heursure'
@@ -481,13 +515,15 @@ class StressCalibration:
                     if 降噪结果['success']:
                         处理后波形 = 降噪结果['denoised']
             
-            # 3. 保存应力波形
+            # 3. 保存应力波形（包含配置信息）
             保存结果 = dm.保存应力波形(
                 实验ID,
                 方向名称,
                 应力值,
                 处理后波形,
-                时间数据
+                时间数据,
+                self.denoise_config,
+                self.bandpass_config
             )
             
             if not 保存结果['success']:
@@ -598,3 +634,45 @@ class StressCalibration:
             return dm.删除应力数据点(实验ID, 方向名称, 应力值)
         except Exception as e:
             return {"success": False, "message": f"删除失败: {str(e)}"}
+    
+    def 加载实验配置(self, 实验ID, 方向名称):
+        """
+        从已有实验的HDF5文件加载信号处理配置并恢复到后端对象
+        
+        Args:
+            实验ID: 实验ID
+            方向名称: 方向名称
+        
+        Returns:
+            dict: {"success": bool, "data": {"denoise_config": dict, "bandpass_config": dict}}
+        """
+        try:
+            dm = self._获取数据管理器()
+            
+            # 获取基准波形路径
+            基准路径 = dm.获取基准波形路径(实验ID, 方向名称)
+            if not 基准路径:
+                return {"success": False, "message": "基准波形不存在，无法加载配置"}
+            
+            # 从HDF5加载配置
+            配置结果 = dm.加载信号处理配置(基准路径)
+            
+            if not 配置结果['success']:
+                return 配置结果
+            
+            # 恢复配置到后端对象
+            if 配置结果.get('denoise_config'):
+                self.denoise_config.update(配置结果['denoise_config'])
+            
+            if 配置结果.get('bandpass_config'):
+                self.bandpass_config.update(配置结果['bandpass_config'])
+            
+            return {
+                "success": True,
+                "data": {
+                    "denoise_config": self.denoise_config,
+                    "bandpass_config": self.bandpass_config
+                }
+            }
+        except Exception as e:
+            return {"success": False, "message": f"加载配置失败: {str(e)}"}

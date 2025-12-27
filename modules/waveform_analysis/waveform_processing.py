@@ -143,3 +143,96 @@ def calculate_time_difference(time1, time2):
         }
     except Exception as e:
         return {'success': False, 'message': f'计算时间差失败: {str(e)}'}
+
+
+def get_available_wavelets():
+    """
+    获取可用的小波类型列表
+    
+    Returns:
+        dict: {'success': bool, 'wavelets': dict}
+    """
+    try:
+        wavelets = {
+            'Daubechies': [f'db{i}' for i in range(1, 11)],
+            'Symlets': [f'sym{i}' for i in range(2, 11)],
+            'Coiflets': [f'coif{i}' for i in range(1, 6)],
+            'Biorthogonal': [f'bior{i}.{j}' for i in range(1, 4) for j in range(1, 4)],
+            'Haar': ['haar']
+        }
+        
+        return {
+            'success': True,
+            'wavelets': wavelets
+        }
+    except Exception as e:
+        return {'success': False, 'message': f'获取小波类型失败: {str(e)}'}
+
+
+def truncate_signal(time_array, signal_array, truncate_time_us=5.0):
+    """
+    截断信号前面的数据
+    
+    Args:
+        time_array: 时间数组（微秒）
+        signal_array: 信号数组
+        truncate_time_us: 截断时间（微秒）
+        
+    Returns:
+        tuple: (truncated_time, truncated_signal)
+    """
+    # 找到截断点
+    truncate_idx = np.searchsorted(time_array, truncate_time_us)
+    
+    if truncate_idx >= len(time_array):
+        truncate_idx = 0
+    
+    # 截断数据
+    truncated_time = time_array[truncate_idx:]
+    truncated_signal = signal_array[truncate_idx:]
+    
+    # 重置时间起点为0
+    if len(truncated_time) > 0:
+        truncated_time = truncated_time - truncated_time[0]
+    
+    return truncated_time, truncated_signal
+
+
+def truncate_signal_range(time_array, signal_array, start_time_us=None, end_time_us=None):
+    """
+    截取信号指定时间范围的数据
+    
+    Args:
+        time_array: 时间数组（微秒）
+        signal_array: 信号数组
+        start_time_us: 起始时间（微秒），None表示从信号开头开始
+        end_time_us: 结束时间（微秒），None表示到信号末尾
+        
+    Returns:
+        tuple: (truncated_time, truncated_signal)
+    """
+    # 找到起始截断点
+    if start_time_us is not None:
+        start_idx = np.searchsorted(time_array, start_time_us)
+        if start_idx >= len(time_array):
+            start_idx = 0
+    else:
+        start_idx = 0  # None表示从头开始
+    
+    # 找到结束截断点
+    if end_time_us is not None:
+        end_idx = np.searchsorted(time_array, end_time_us)
+        if end_idx > len(time_array):
+            end_idx = len(time_array)
+    else:
+        end_idx = len(time_array)  # None表示到末尾
+    
+    # 截取数据
+    truncated_time = time_array[start_idx:end_idx]
+    truncated_signal = signal_array[start_idx:end_idx]
+    
+    # 重置时间起点为0
+    if len(truncated_time) > 0:
+        truncated_time = truncated_time - truncated_time[0]
+    
+    return truncated_time, truncated_signal

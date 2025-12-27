@@ -571,3 +571,24 @@ CommonUtils.enableModalDrag = function(modalContent) {
     
     observer.observe(document.body, { childList: true, subtree: true });
 })();
+
+// ========== 表格自动滚动工具 ==========
+CommonUtils.scrollToTableRow = function(row, options = {}) {
+    /**
+     * 表格行自动滚动
+     * @param {HTMLElement} row - 要滚动到的行元素
+     * @param {Object} options - 配置选项
+     * @param {string} options.behavior - 滚动行为 ('smooth' | 'auto')，默认 'smooth'
+     * @param {string} options.block - 垂直对齐 ('start' | 'center' | 'end' | 'nearest')，默认 'center'
+     * @param {number} options.delay - 延迟时间（毫秒），默认 50
+     */
+    if (!row) return;
+    
+    const behavior = options.behavior || 'smooth';
+    const block = options.block || 'center';
+    const delay = options.delay !== undefined ? options.delay : 50;
+    
+    setTimeout(() => {
+        row.scrollIntoView({ behavior, block });
+    }, delay);
+};

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>普源示波器实时波形显示系统</title>
+    <title>超声波应力检测系统</title>
     <link rel="stylesheet" href="style.css">
     <!-- 应力模块样式（拆分后） -->
     <link rel="stylesheet" href="css/stress-calibration.css">
@@ -15,17 +15,13 @@
     <link rel="stylesheet" href="css/stress-detection-uniaxial/display.css">
     <link rel="stylesheet" href="css/stress-detection-uniaxial/modals.css">
     <style>
-        /* 开屏画面样式 */
+        /* ========== 开屏画面容器（iframe 方式）========== */
         #splashScreen {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
             z-index: 99999;
             transition: opacity 0.5s ease-out;
         }
@@ -34,132 +30,12 @@
             opacity: 0;
             pointer-events: none;
         }
-        
-        .splash-content {
-            text-align: center;
-            color: white;
-            animation: splashFadeIn 0.6s ease-out;
-        }
-        
-        @keyframes splashFadeIn {
-            from { opacity: 0; transform: translateY(-30px) scale(0.95); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        
-        .splash-logo {
-            font-size: 96px;
-            margin-bottom: 30px;
-            animation: splashPulse 2s ease-in-out infinite;
-            filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
-        }
-        
-        @keyframes splashPulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.85; }
-        }
-        
-        .splash-title {
-            font-size: 42px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            letter-spacing: 3px;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        }
-        
-        .splash-subtitle {
-            font-size: 18px;
-            color: rgba(255, 255, 255, 0.85);
-            margin-bottom: 60px;
-            letter-spacing: 1px;
-        }
-        
-        .splash-loading-spinner {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 12px;
-            margin: 0 auto;
-        }
-        
-        .splash-dot {
-            width: 16px;
-            height: 16px;
-            background: #4CAF50;
-            border-radius: 50%;
-            animation: splashDotBounce 1.4s ease-in-out infinite;
-            box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
-        }
-        
-        .splash-dot:nth-child(1) {
-            animation-delay: 0s;
-            background: #4CAF50;
-        }
-        
-        .splash-dot:nth-child(2) {
-            animation-delay: 0.2s;
-            background: #66BB6A;
-        }
-        
-        .splash-dot:nth-child(3) {
-            animation-delay: 0.4s;
-            background: #8BC34A;
-        }
-        
-        .splash-dot:nth-child(4) {
-            animation-delay: 0.6s;
-            background: #AED581;
-        }
-        
-        .splash-dot:nth-child(5) {
-            animation-delay: 0.8s;
-            background: #C5E1A5;
-        }
-        
-        @keyframes splashDotBounce {
-            0%, 80%, 100% {
-                transform: scale(0.8) translateY(0);
-                opacity: 0.6;
-            }
-            40% {
-                transform: scale(1.2) translateY(-20px);
-                opacity: 1;
-            }
-        }
-        
-        .splash-loading-text {
-            margin-top: 20px;
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.7);
-        }
-        
-        .splash-version {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.6);
-            letter-spacing: 1px;
-        }
     </style>
 </head>
 <body>
-    <!-- 开屏画面 -->
+    <!-- 开屏画面（iframe 独立加载）-->
     <div id="splashScreen">
-        <div class="splash-content">
-            <div class="splash-logo">📊</div>
-            <div class="splash-title">普源示波器实时波形显示系统</div>
-            <div class="splash-subtitle">RIGOL Oscilloscope Waveform Display System</div>
-            <div class="splash-loading-spinner">
-                <div class="splash-dot"></div>
-                <div class="splash-dot"></div>
-                <div class="splash-dot"></div>
-                <div class="splash-dot"></div>
-                <div class="splash-dot"></div>
-            </div>
-            <div class="splash-loading-text">正在初始化系统<span class="dots"></span></div>
-        </div>
-        <div class="splash-version">v1.0.0 | Python + pywebview</div>
+        <iframe id="splashFrame" src="splash-oscilloscope.html" style="width:100%;height:100%;border:none;background:#0a0a0a;"></iframe>
     </div>
     
     <div class="container">
@@ -339,6 +215,7 @@
                 
                 <!-- 功能按钮 -->
                 <div style="margin-left: auto; display: flex; gap: 10px;">
+                    <button id="bandpassBtn" class="btn btn-secondary">🎛️ 带通滤波</button>
                     <button id="denoisingBtn" class="btn btn-secondary">🔊 小波降噪</button>
                     <button id="hilbertBtn" class="btn btn-secondary">📈 Hilbert变换</button>
                     <button id="timeDiffBtn" class="btn btn-secondary">⏱️ 时间差</button>
@@ -353,6 +230,34 @@
                     <div class="sidebar-header">
                         <h3 id="sidebarTitle">配置</h3>
                         <button id="closeSidebarBtn" class="btn-close-sidebar" title="关闭侧边栏">×</button>
+                    </div>
+                    
+                    <!-- 带通滤波面板 -->
+                    <div id="bandpassPanel" class="analysis-panel" style="display: none;">
+                        <div class="config-group">
+                            <label>低频截止 (MHz): <span id="lowcutValue">1.5</span></label>
+                            <input type="range" id="lowcutFreq" min="0.5" max="5.0" step="0.1" value="1.5" class="config-slider">
+                        </div>
+                        <div class="config-group">
+                            <label>高频截止 (MHz): <span id="highcutValue">3.5</span></label>
+                            <input type="range" id="highcutFreq" min="0.5" max="10.0" step="0.1" value="3.5" class="config-slider">
+                        </div>
+                        <div class="config-group">
+                            <label>滤波器阶数</label>
+                            <select id="filterOrder" class="config-input">
+                                <option value="2">2阶</option>
+                                <option value="4">4阶</option>
+                                <option value="6" selected>6阶（推荐）</option>
+                                <option value="8">8阶</option>
+                            </select>
+                        </div>
+                        <button id="applyBandpassBtn" class="btn btn-primary btn-block">应用滤波</button>
+                        <button id="toggleBandpassViewBtn" class="btn btn-secondary btn-block" disabled>切换视图</button>
+                        <div id="bandpassResult" class="result-box" style="display: none;">
+                            <p>低频: <span id="resultLowcut">--</span> MHz</p>
+                            <p>高频: <span id="resultHighcut">--</span> MHz</p>
+                            <p>阶数: <span id="resultOrder">--</span></p>
+                        </div>
                     </div>
                     
                     <!-- 小波降噪面板 -->
@@ -451,6 +356,26 @@
                             <select id="referenceSignalSelect" class="config-input">
                                 <option value="">请选择参考信号</option>
                             </select>
+                        </div>
+                        
+                        <!-- 🆕 信号处理配置面板 -->
+                        <div class="config-group" id="signalProcessingConfigGroup" style="display: none;">
+                            <label style="font-weight: 600; color: #374151; margin-bottom: 10px; display: block;">信号处理配置</label>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                        <input type="checkbox" id="wa-denoise-checkbox">
+                                        <span>自动降噪</span>
+                                    </label>
+                                    <button id="openSignalProcessingConfig" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">⚙️</button>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                                        <input type="checkbox" id="wa-bandpass-checkbox">
+                                        <span>带通滤波</span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         
                         <!-- 信号截取范围 -->
@@ -1246,19 +1171,108 @@
         </div>
     </div>
 
+    <!-- 🆕 波形分析 - 信号处理配置弹窗 -->
+    <div id="waveformAnalysisConfigModal" class="modal" style="display: none;">
+        <div class="modal-content field-modal modal-sm">
+            <div class="modal-header">
+                <h3>🔧 信号处理设置</h3>
+                <button class="modal-close" onclick="window.closeWaveformAnalysisConfigModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 降噪配置 -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <span class="section-icon">📉</span>
+                        <span>降噪参数</span>
+                    </div>
+                    <div class="form-section-content">
+                        <div class="form-group">
+                            <label>降噪方法</label>
+                            <select id="wa-denoise-method" class="form-input">
+                                <option value="wavelet">小波降噪</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>小波基</label>
+                            <select id="wa-denoise-wavelet" class="form-input">
+                                <option value="sym6">sym6</option>
+                                <option value="db4">db4</option>
+                                <option value="coif2">coif2</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>分解层数</label>
+                            <input type="number" id="wa-denoise-level" class="form-input" value="5" min="1" max="10">
+                        </div>
+                        <div class="form-group">
+                            <label>阈值模式</label>
+                            <select id="wa-denoise-threshold-mode" class="form-input">
+                                <option value="soft">软阈值</option>
+                                <option value="hard">硬阈值</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 带通滤波配置 -->
+                <div class="form-section" style="margin-top: 15px;">
+                    <div class="form-section-title">
+                        <span class="section-icon">🎛️</span>
+                        <span>带通滤波参数</span>
+                    </div>
+                    <div class="form-section-content">
+                        <div class="form-group">
+                            <label>低频截止 (MHz)</label>
+                            <input type="number" id="wa-bandpass-lowcut" class="form-input" value="1.5" min="1" max="6" step="0.1">
+                            <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                        </div>
+                        <div class="form-group">
+                            <label>高频截止 (MHz)</label>
+                            <input type="number" id="wa-bandpass-highcut" class="form-input" value="3.5" min="1" max="6" step="0.1">
+                            <small style="color: #666; font-size: 11px;">范围: 1-6 MHz</small>
+                        </div>
+                        <div class="form-group">
+                            <label>滤波器阶数</label>
+                            <select id="wa-bandpass-order" class="form-input">
+                                <option value="2">2阶</option>
+                                <option value="4">4阶</option>
+                                <option value="6" selected>6阶（推荐）</option>
+                                <option value="8">8阶</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeWaveformAnalysisConfigModal()">取消</button>
+                <button class="btn btn-primary" onclick="window.saveWaveformAnalysisConfig()">保存</button>
+            </div>
+        </div>
+    </div>
+
 
 
     <!-- 开屏画面控制脚本 -->
     <script>
-        // 隐藏开屏画面的函数
+        // 隐藏开屏画面的函数（iframe 方式）
         window.hideSplash = function() {
             const splash = document.getElementById('splashScreen');
+            const frame = document.getElementById('splashFrame');
+            
             if (splash) {
-                splash.classList.add('hidden');
-                // 动画结束后移除元素（0.5秒）
+                // 先通知 iframe 内部开始淡出动画
+                if (frame && frame.contentWindow && frame.contentWindow.startFadeOut) {
+                    frame.contentWindow.startFadeOut();
+                }
+                
+                // 然后隐藏整个容器
                 setTimeout(() => {
-                    splash.remove();
-                }, 500);
+                    splash.classList.add('hidden');
+                    // 动画结束后移除元素
+                    setTimeout(() => {
+                        splash.remove();
+                    }, 500);
+                }, 300);
             }
         };
     </script>

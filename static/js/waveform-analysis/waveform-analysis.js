@@ -43,12 +43,22 @@ const WaveformAnalysis = (function() {
             重绘回调: (选项) => {
                 if (选项 && 选项.切换视图) {
                     切换降噪视图();
+                } else if (选项 && 选项.切换滤波视图) {
+                    切换滤波视图();
                 } else if (选项 && 选项.切换到降噪视图) {
                     // 降噪完成后自动切换到降噪视图
                     当前视图 = 'denoised';
                     const toggleViewBtn = document.getElementById('toggleViewBtn');
                     if (toggleViewBtn) {
                         toggleViewBtn.textContent = '查看原始';
+                    }
+                    绘制波形();
+                } else if (选项 && 选项.切换到滤波视图) {
+                    // 滤波完成后自动切换到滤波视图
+                    当前视图 = 'bandpass';
+                    const toggleBandpassViewBtn = document.getElementById('toggleBandpassViewBtn');
+                    if (toggleBandpassViewBtn) {
+                        toggleBandpassViewBtn.textContent = '查看原始';
                     }
                     绘制波形();
                 } else {
@@ -83,12 +93,14 @@ const WaveformAnalysis = (function() {
             screenshotBtn: document.getElementById('analysisScreenshotBtn'),
             fitBtn: document.getElementById('analysisFitBtn'),
             resetBtn: document.getElementById('analysisResetBtn'),
+            bandpassBtn: document.getElementById('bandpassBtn'),
             denoisingBtn: document.getElementById('denoisingBtn'),
             hilbertBtn: document.getElementById('hilbertBtn'),
             timeDiffBtn: document.getElementById('timeDiffBtn'),
             sidebar: document.getElementById('analysisSidebar'),
             sidebarTitle: document.getElementById('sidebarTitle'),
             closeSidebarBtn: document.getElementById('closeSidebarBtn'),
+            bandpassPanel: document.getElementById('bandpassPanel'),
             denoisingPanel: document.getElementById('denoisingPanel'),
             hilbertPanel: document.getElementById('hilbertPanel'),
             timeDiffPanel: document.getElementById('timeDiffPanel'),
@@ -123,6 +135,9 @@ const WaveformAnalysis = (function() {
             elements.resetBtn.addEventListener('click', () => WaveformZoom.重置视图());
         }
         
+        if (elements.bandpassBtn) {
+            elements.bandpassBtn.addEventListener('click', () => 切换面板('bandpass'));
+        }
         if (elements.denoisingBtn) {
             elements.denoisingBtn.addEventListener('click', () => 切换面板('denoising'));
         }
@@ -208,8 +223,15 @@ const WaveformAnalysis = (function() {
     function 获取当前显示的波形数据() {
         if (!当前波形数据) return null;
         
+        const 滤波后的波形 = WaveformProcessing.获取滤波后的波形();
         const 降噪后的波形 = WaveformProcessing.获取降噪后的波形();
-        const 电压 = (当前视图 === 'denoised' && 降噪后的波形) ? 降噪后的波形 : 当前波形数据.voltage;
+        
+        let 电压 = 当前波形数据.voltage;
+        if (当前视图 === 'bandpass' && 滤波后的波形) {
+            电压 = 滤波后的波形;
+        } else if (当前视图 === 'denoised' && 降噪后的波形) {
+            电压 = 降噪后的波形;
+        }
         
         return {
             time: 当前波形数据.time,
@@ -267,6 +289,24 @@ const WaveformAnalysis = (function() {
         const toggleViewBtn = document.getElementById('toggleViewBtn');
         if (toggleViewBtn) {
             toggleViewBtn.textContent = (当前视图 === 'original') ? '查看降噪' : '查看原始';
+        }
+        
+        绘制波形();
+    }
+    
+    // ========== 切换滤波视图 ==========
+    function 切换滤波视图() {
+        const 滤波后的波形 = WaveformProcessing.获取滤波后的波形();
+        if (!滤波后的波形) {
+            显示状态栏信息('⚠️', '无法切换视图', '请先应用带通滤波', 'warning', 3000);
+            return;
+        }
+        
+        当前视图 = (当前视图 === 'original') ? 'bandpass' : 'original';
+        
+        const toggleBandpassViewBtn = document.getElementById('toggleBandpassViewBtn');
+        if (toggleBandpassViewBtn) {
+            toggleBandpassViewBtn.textContent = (当前视图 === 'original') ? '查看滤波' : '查看原始';
         }
         
         绘制波形();
@@ -383,6 +423,12 @@ const WaveformAnalysis = (function() {
             }
         });
         
+        const bandpassBtn = document.getElementById('bandpassBtn');
+        if (bandpassBtn) {
+            bandpassBtn.classList.remove('btn-primary');
+            bandpassBtn.classList.add('btn-secondary');
+        }
+        
         // 使用 requestAnimationFrame 确保 DOM 更新后再调整画布，并启用动画
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -402,13 +448,15 @@ const WaveformAnalysis = (function() {
         显示侧边栏();
         
         const crossCorrPanel = document.getElementById('crossCorrPanel');
-        const panels = [elements.denoisingPanel, elements.hilbertPanel, elements.timeDiffPanel, crossCorrPanel];
+        const bandpassPanel = document.getElementById('bandpassPanel');
+        const panels = [bandpassPanel, elements.denoisingPanel, elements.hilbertPanel, elements.timeDiffPanel, crossCorrPanel];
         panels.forEach(panel => {
             if (panel) panel.style.display = 'none';
         });
         
         const crossCorrBtn = document.getElementById('crossCorrBtn');
-        [elements.denoisingBtn, elements.hilbertBtn, elements.timeDiffBtn, crossCorrBtn].forEach(btn => {
+        const bandpassBtn = document.getElementById('bandpassBtn');
+        [bandpassBtn, elements.denoisingBtn, elements.hilbertBtn, elements.timeDiffBtn, crossCorrBtn].forEach(btn => {
             if (btn) {
                 btn.classList.remove('btn-primary');
                 btn.classList.add('btn-secondary');
@@ -416,6 +464,7 @@ const WaveformAnalysis = (function() {
         });
         
         const panelMap = {
+            'bandpass': bandpassPanel,
             'denoising': elements.denoisingPanel,
             'hilbert': elements.hilbertPanel,
             'timeDiff': elements.timeDiffPanel,
@@ -423,6 +472,7 @@ const WaveformAnalysis = (function() {
         };
         
         const buttonMap = {
+            'bandpass': bandpassBtn,
             'denoising': elements.denoisingBtn,
             'hilbert': elements.hilbertBtn,
             'timeDiff': elements.timeDiffBtn,
@@ -430,6 +480,7 @@ const WaveformAnalysis = (function() {
         };
         
         const titleMap = {
+            'bandpass': '带通滤波配置',
             'denoising': '小波降噪配置',
             'hilbert': 'Hilbert变换配置',
             'timeDiff': '时间差计算',
