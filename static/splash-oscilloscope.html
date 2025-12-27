@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>启动中...</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .splash-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* 示波器画布容器 */
+        .oscilloscope-container {
+            width: 1000px;
+            height: 400px;
+            background: #0a0a0a;
+            border: 2px solid #1a1a1a;
+            border-radius: 8px;
+            box-shadow: 
+                0 0 30px rgba(0, 255, 0, 0.15),
+                inset 0 0 80px rgba(0, 255, 0, 0.03);
+            margin-bottom: 50px;
+            position: relative;
+            animation: containerGlow 0.8s ease-out;
+        }
+
+        @keyframes containerGlow {
+            from { 
+                opacity: 0;
+                transform: scale(0.95);
+                box-shadow: 0 0 0 rgba(0, 255, 0, 0);
+            }
+            to { 
+                opacity: 1;
+                transform: scale(1);
+                box-shadow: 
+                    0 0 30px rgba(0, 255, 0, 0.15),
+                    inset 0 0 80px rgba(0, 255, 0, 0.03);
+            }
+        }
+
+        #oscilloscopeCanvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        /* 标题区域 */
+        .title-area {
+            text-align: center;
+            animation: titleFadeIn 1s ease-out 0.3s both;
+        }
+
+        @keyframes titleFadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(20px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0);
+            }
+        }
+
+        .main-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00ff00;
+            text-shadow: 
+                0 0 10px rgba(0, 255, 0, 0.8),
+                0 0 20px rgba(0, 255, 0, 0.4),
+                0 0 30px rgba(0, 255, 0, 0.2);
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #00ff00;
+            opacity: 0.6;
+            letter-spacing: 2px;
+            margin-bottom: 25px;
+        }
+
+        .status-text {
+            font-size: 12px;
+            color: #00ff00;
+            opacity: 0.5;
+            letter-spacing: 1px;
+        }
+
+        .status-text .cursor {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* 功能标签 */
+        .features {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 25px;
+            animation: featuresFadeIn 1s ease-out 0.8s both;
+        }
+
+        @keyframes featuresFadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateX(-50%) translateY(10px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .feature-tag {
+            font-size: 11px;
+            color: #00ff00;
+            opacity: 0.4;
+            padding: 5px 15px;
+            border: 1px solid rgba(0, 255, 0, 0.2);
+            border-radius: 3px;
+            background: rgba(0, 255, 0, 0.03);
+            letter-spacing: 1px;
+        }
+
+        /* 版本信息 */
+        .version {
+            position: absolute;
+            bottom: 35px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: #00ff00;
+            opacity: 0.3;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-container">
+        <!-- 示波器画布 -->
+        <div class="oscilloscope-container">
+            <canvas id="oscilloscopeCanvas"></canvas>
+        </div>
+
+        <!-- 标题区域 -->
+        <div class="title-area">
+            <div class="main-title">ULTRASONIC STRESS DETECTION SYSTEM</div>
+            <div class="subtitle">超声波应力检测系统</div>
+            <div class="status-text">INITIALIZING SYSTEM<span class="cursor">_</span></div>
+        </div>
+
+        <!-- 功能标签 -->
+        <div class="features">
+            <div class="feature-tag">REAL-TIME CAPTURE</div>
+            <div class="feature-tag">WAVEFORM ANALYSIS</div>
+            <div class="feature-tag">STRESS CALIBRATION</div>
+        </div>
+
+        <!-- 版本信息 -->
+        <div class="version">v1.0.0 | Python + pywebview | EdgeChromium</div>
+    </div>
+
+    <script>
+        // 获取画布和上下文
+        const canvas = document.getElementById('oscilloscopeCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 设置画布尺寸
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        resizeCanvas();
+
+        // 绘制参数
+        const gridColor = '#1a1a1a';
+        const waveColor = '#00ff00';
+        const glowColor = 'rgba(0, 255, 0, 0.3)';
+        
+        let phase = 0;
+        let progress = 0;
+        const totalDuration = 2000; // 2秒完成绘制
+        const startTime = Date.now();
+
+        // 绘制网格
+        function drawGrid() {
+            ctx.strokeStyle = gridColor;
+            ctx.lineWidth = 1;
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const gridSize = 40;
+
+            // 垂直线
+            for (let x = 0; x <= width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+
+            // 水平线
+            for (let y = 0; y <= height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+
+            // 中心十字线（加粗）
+            ctx.strokeStyle = '#2a2a2a';
+            ctx.lineWidth = 2;
+            
+            // 垂直中心线
+            ctx.beginPath();
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.stroke();
+            
+            // 水平中心线
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+        }
+
+        // 波形生成函数 - 超声脉冲回波
+        function getWaveValue(x, width) {
+            const t = (x / width) * 8 * Math.PI; // 扩展范围
+            
+            // 生成多个脉冲波包（模拟超声回波）
+            let signal = 0;
+            
+            // 第一个脉冲（发射波）
+            const pulse1Center = 1.5 * Math.PI;
+            const pulse1Envelope = Math.exp(-Math.pow((t - pulse1Center) / 0.8, 2));
+            signal += Math.sin(t * 5 + phase) * pulse1Envelope * 0.8;
+            
+            // 第二个脉冲（第一次回波）
+            const pulse2Center = 4 * Math.PI;
+            const pulse2Envelope = Math.exp(-Math.pow((t - pulse2Center) / 0.8, 2));
+            signal += Math.sin(t * 5 + phase) * pulse2Envelope * 1.0;
+            
+            // 第三个脉冲（第二次回波）
+            const pulse3Center = 6.5 * Math.PI;
+            const pulse3Envelope = Math.exp(-Math.pow((t - pulse3Center) / 0.8, 2));
+            signal += Math.sin(t * 5 + phase) * pulse3Envelope * 0.6;
+            
+            return signal;
+        }
+
+        // 绘制波形
+        function drawWaveform() {
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerY = height / 2;
+            const amplitude = height * 0.3;
+            
+            // 计算当前进度（0-1）
+            const elapsed = Date.now() - startTime;
+            progress = Math.min(elapsed / totalDuration, 1);
+            
+            // 绘制到当前进度的位置（初始绘制阶段）或整个宽度（完成后）
+            const endX = progress >= 1 ? width : width * progress;
+            
+            // 绘制发光效果（多层）
+            for (let i = 3; i >= 1; i--) {
+                ctx.strokeStyle = glowColor;
+                ctx.lineWidth = i * 3;
+                ctx.globalAlpha = 0.3 / i;
+                
+                ctx.beginPath();
+                for (let x = 0; x <= endX; x += 2) {
+                    const waveValue = getWaveValue(x, width);
+                    const y = centerY + waveValue * amplitude;
+                    
+                    if (x === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // 绘制主波形
+            ctx.strokeStyle = waveColor;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 1;
+            
+            ctx.beginPath();
+            for (let x = 0; x <= endX; x += 2) {
+                const waveValue = getWaveValue(x, width);
+                const y = centerY + waveValue * amplitude;
+                
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // 绘制扫描光标（在波形末端，仅在初始绘制阶段）
+            if (progress < 1) {
+                ctx.strokeStyle = waveColor;
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.6;
+                ctx.beginPath();
+                ctx.moveTo(endX, 0);
+                ctx.lineTo(endX, height);
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // 动画循环
+        function animate() {
+            // 清空画布
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制网格
+            drawGrid();
+            
+            // 绘制波形
+            drawWaveform();
+            
+            // 更新相位（波形完成后开始滚动）
+            if (progress >= 1) {
+                phase += 0.02;
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // 启动动画
+        animate();
+
+        // 淡出函数
+        function fadeOut() {
+            const container = document.querySelector('.splash-container');
+            container.style.transition = 'opacity 0.8s ease-out';
+            container.style.opacity = '0';
+            
+            document.body.style.transition = 'opacity 0.8s ease-out';
+            document.body.style.opacity = '0';
+        }
+
+        // 暴露给 Python 调用
+        window.startFadeOut = fadeOut;
+    </script>
+</body>
+</html>
