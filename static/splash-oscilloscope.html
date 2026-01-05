@@ -262,27 +262,35 @@
             ctx.stroke();
         }
 
-        // 波形生成函数 - 超声脉冲回波
+        // 波形生成函数 - 多重超声回波（更真实的衰减效果）
         function getWaveValue(x, width) {
-            const t = (x / width) * 8 * Math.PI; // 扩展范围
+            const t = (x / width) * 10 * Math.PI;
             
-            // 生成多个脉冲波包（模拟超声回波）
             let signal = 0;
+            const carrierFreq = 8; // 高频载波（模拟超声频率）
             
-            // 第一个脉冲（发射波）
-            const pulse1Center = 1.5 * Math.PI;
-            const pulse1Envelope = Math.exp(-Math.pow((t - pulse1Center) / 0.8, 2));
-            signal += Math.sin(t * 5 + phase) * pulse1Envelope * 0.8;
+            // 定义多个回波脉冲（模拟超声在材料中的多次反射）
+            const echoes = [
+                { center: 1.2 * Math.PI, amplitude: 1.0, width: 0.6 },   // 发射脉冲
+                { center: 3.5 * Math.PI, amplitude: 0.75, width: 0.65 }, // 第一次回波（底面反射）
+                { center: 5.8 * Math.PI, amplitude: 0.50, width: 0.7 },  // 第二次回波
+                { center: 8.0 * Math.PI, amplitude: 0.30, width: 0.75 }, // 第三次回波（衰减明显）
+                { center: 9.8 * Math.PI, amplitude: 0.15, width: 0.8 }   // 第四次回波（微弱）
+            ];
             
-            // 第二个脉冲（第一次回波）
-            const pulse2Center = 4 * Math.PI;
-            const pulse2Envelope = Math.exp(-Math.pow((t - pulse2Center) / 0.8, 2));
-            signal += Math.sin(t * 5 + phase) * pulse2Envelope * 1.0;
+            // 叠加所有回波
+            echoes.forEach(echo => {
+                // 高斯包络（模拟脉冲形状）
+                const envelope = Math.exp(-Math.pow((t - echo.center) / echo.width, 2));
+                
+                // 高频载波 + 包络 + 振幅衰减
+                const pulse = Math.sin(t * carrierFreq + phase) * envelope * echo.amplitude;
+                
+                signal += pulse;
+            });
             
-            // 第三个脉冲（第二次回波）
-            const pulse3Center = 6.5 * Math.PI;
-            const pulse3Envelope = Math.exp(-Math.pow((t - pulse3Center) / 0.8, 2));
-            signal += Math.sin(t * 5 + phase) * pulse3Envelope * 0.6;
+            // 添加微弱的噪声（模拟真实信号）
+            signal += (Math.random() - 0.5) * 0.02 * (progress >= 1 ? 1 : 0);
             
             return signal;
         }
@@ -292,7 +300,7 @@
             const width = canvas.width;
             const height = canvas.height;
             const centerY = height / 2;
-            const amplitude = height * 0.3;
+            const amplitude = height * 0.35;
             
             // 计算当前进度（0-1）
             const elapsed = Date.now() - startTime;
@@ -301,11 +309,11 @@
             // 绘制到当前进度的位置（初始绘制阶段）或整个宽度（完成后）
             const endX = progress >= 1 ? width : width * progress;
             
-            // 绘制发光效果（多层）
-            for (let i = 3; i >= 1; i--) {
+            // 绘制发光效果（多层，更强的辉光）
+            for (let i = 4; i >= 1; i--) {
                 ctx.strokeStyle = glowColor;
-                ctx.lineWidth = i * 3;
-                ctx.globalAlpha = 0.3 / i;
+                ctx.lineWidth = i * 4;
+                ctx.globalAlpha = 0.25 / i;
                 
                 ctx.beginPath();
                 for (let x = 0; x <= endX; x += 2) {
@@ -323,7 +331,7 @@
             
             // 绘制主波形
             ctx.strokeStyle = waveColor;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.5;
             ctx.globalAlpha = 1;
             
             ctx.beginPath();
@@ -339,15 +347,56 @@
             }
             ctx.stroke();
             
+            // 绘制回波标记（完成后显示）
+            if (progress >= 1) {
+                const echoPositions = [
+                    { x: width * 0.12, label: 'T₀', color: 'rgba(0, 255, 0, 0.6)' },
+                    { x: width * 0.35, label: 'E₁', color: 'rgba(0, 255, 0, 0.5)' },
+                    { x: width * 0.58, label: 'E₂', color: 'rgba(0, 255, 0, 0.4)' },
+                    { x: width * 0.80, label: 'E₃', color: 'rgba(0, 255, 0, 0.3)' },
+                    { x: width * 0.98, label: 'E₄', color: 'rgba(0, 255, 0, 0.2)' }
+                ];
+                
+                ctx.font = '11px Consolas';
+                ctx.textAlign = 'center';
+                
+                echoPositions.forEach(echo => {
+                    // 绘制垂直标记线
+                    ctx.strokeStyle = echo.color;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(echo.x, height * 0.15);
+                    ctx.lineTo(echo.x, height * 0.85);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // 绘制标签
+                    ctx.fillStyle = echo.color;
+                    ctx.fillText(echo.label, echo.x, height * 0.1);
+                });
+            }
+            
             // 绘制扫描光标（在波形末端，仅在初始绘制阶段）
             if (progress < 1) {
+                // 光标主线
                 ctx.strokeStyle = waveColor;
-                ctx.lineWidth = 1;
-                ctx.globalAlpha = 0.6;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.8;
                 ctx.beginPath();
                 ctx.moveTo(endX, 0);
                 ctx.lineTo(endX, height);
                 ctx.stroke();
+                
+                // 光标辉光
+                ctx.strokeStyle = glowColor;
+                ctx.lineWidth = 8;
+                ctx.globalAlpha = 0.3;
+                ctx.beginPath();
+                ctx.moveTo(endX, 0);
+                ctx.lineTo(endX, height);
+                ctx.stroke();
+                
                 ctx.globalAlpha = 1;
             }
         }
