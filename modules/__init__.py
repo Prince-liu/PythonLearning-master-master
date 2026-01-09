@@ -6,6 +6,7 @@
 from .core import (
     OscilloscopeBase,
     SignalProcessingWrapper,
+    UltrasonicPulserController,
     signal_processing
 )
 
@@ -32,6 +33,7 @@ __all__ = [
     # 核心基础设施
     'OscilloscopeBase',
     'SignalProcessingWrapper',
+    'UltrasonicPulserController',
     'signal_processing',
     # 功能模块
     'RealtimeCapture',

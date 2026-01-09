@@ -10,7 +10,7 @@
 
 import webview
 import os
-from modules import OscilloscopeBase, RealtimeCapture, WaveformAnalysis, StressCalibration, SignalProcessingWrapper
+from modules import OscilloscopeBase, RealtimeCapture, WaveformAnalysis, StressCalibration, SignalProcessingWrapper, UltrasonicPulserController
 from modules.stress_detection_uniaxial import (
     FieldDatabaseManager, FieldExperimentHDF5, ShapeUtils, PointGenerator,
     StressFieldInterpolation, ContourGenerator,
@@ -28,6 +28,7 @@ class WebAPI:
         self.realtime = None  # 需要window实例，稍后初始化
         self.analysis = None  # 需要window实例，稍后初始化
         self.calibration = None  # 需要window实例，稍后初始化
+        self.pulser = UltrasonicPulserController()  # 🆕 超声波脉冲发生器控制器
         self.field_experiment = None  # 应力场实验管理器
         self.field_capture = None  # 应力场数据采集器
         self.contour_generator = None  # 云图生成器
@@ -165,6 +166,84 @@ class WebAPI:
     def 获取垂直灵敏度(self, 通道):
         """获取指定通道的垂直灵敏度（V/div）"""
         return self.osc.获取垂直灵敏度(通道)
+    
+    # ==================== 脉冲发生器控制功能 ====================
+    
+    def 搜索脉冲发生器设备(self):
+        """搜索可用的脉冲发生器设备"""
+        return self.pulser.搜索设备()
+    
+    def 连接脉冲发生器(self, port):
+        """连接脉冲发生器
+        
+        Args:
+            port: COM口号（整数）
+        """
+        return self.pulser.连接设备(port)
+    
+    def 断开脉冲发生器(self):
+        """断开脉冲发生器连接"""
+        return self.pulser.断开设备()
+    
+    def 获取脉冲发生器参数(self):
+        """获取脉冲发生器当前参数"""
+        return self.pulser.获取参数()
+    
+    def 设置脉冲发生器发射电压(self, voltage_index):
+        """设置发射电压
+        
+        Args:
+            voltage_index: 电压档位索引 (1-8)
+        """
+        return self.pulser.设置发射电压(voltage_index)
+    
+    def 设置脉冲发生器脉冲宽度(self, width):
+        """设置脉冲宽度
+        
+        Args:
+            width: 脉冲宽度倍数 (1-40)
+        """
+        return self.pulser.设置脉冲宽度(width)
+    
+    def 设置脉冲发生器重复频率(self, prf_index):
+        """设置重复频率
+        
+        Args:
+            prf_index: 频率档位索引 (1-8)
+        """
+        return self.pulser.设置重复频率(prf_index)
+    
+    def 设置脉冲发生器触发源(self, trigger_source):
+        """设置触发源
+        
+        Args:
+            trigger_source: 触发源 (0=内部, 1=外部)
+        """
+        return self.pulser.设置触发源(trigger_source)
+    
+    def 设置脉冲发生器单双晶模式(self, mode):
+        """设置单/双晶模式
+        
+        Args:
+            mode: 晶体模式 (1=单晶, 2=双晶)
+        """
+        return self.pulser.设置单双晶模式(mode)
+    
+    def 设置脉冲发生器阻尼(self, damp_index):
+        """设置阻尼
+        
+        Args:
+            damp_index: 阻尼档位索引 (0-3)
+        """
+        return self.pulser.设置阻尼(damp_index)
+    
+    def 设置脉冲发生器增益(self, gain):
+        """设置增益
+        
+        Args:
+            gain: 增益值 (0-60 dB)
+        """
+        return self.pulser.设置增益(gain)
     
     # ==================== 实时采集功能 ====================
     

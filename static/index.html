@@ -53,22 +53,21 @@
         <div class="main-content">
             <!-- 左侧配置面板 -->
             <div class="config-panel">
-                <!-- 设备连接控制 -->
-                <div class="device-controls">
-                    <button id="searchBtn" class="btn btn-primary btn-device">🔍 搜索设备</button>
-                    <button id="disconnectBtn" class="btn btn-danger btn-device" disabled>✕ 断开</button>
-                </div>
-                
+                <!-- 示波器控制 -->
                 <div class="config-section">
+                    <h3 class="section-title">示波器控制</h3>
+                    
+                    <!-- 设备连接控制 -->
+                    <div class="device-controls">
+                        <button id="searchBtn" class="btn btn-primary btn-device">🔍 搜索设备</button>
+                        <button id="disconnectBtn" class="btn btn-danger btn-device" disabled>✕ 断开</button>
+                    </div>
+                    
                     <label class="config-label">可用设备</label>
                     <select id="deviceSelect" class="config-select">
                         <option value="">请先搜索设备</option>
                     </select>
-                </div>
 
-                <div class="config-section">
-                    <h3 class="section-title">采集设置</h3>
-                    
                     <label class="config-label">通道</label>
                     <select id="channelSelect" class="config-select">
                         <option value="1">通道 1</option>
@@ -114,22 +113,121 @@
                         <button id="autoSetBtn" class="btn btn-secondary" disabled>自动</button>
                         <button id="runStopBtn" class="btn btn-secondary" disabled>▶ 运行</button>
                     </div>
-                </div>
 
-                <button id="captureBtn" class="btn btn-primary btn-large" disabled>
-                    ⬇ 采集波形
-                </button>
+                    <button id="captureBtn" class="btn btn-primary btn-large" disabled style="width: 100%; margin-top: 8px;">
+                        ⬇ 采集波形
+                    </button>
+                    
+                    <div class="btn-group" style="margin-top: 8px;">
+                        <button id="saveBtn" class="btn btn-success btn-large" disabled>
+                            📊 保存为 CSV
+                        </button>
+                        <button id="saveDropdownBtn" class="btn btn-success btn-dropdown" disabled>
+                            ▼
+                        </button>
+                        <div id="saveDropdownMenu" class="dropdown-menu">
+                            <div class="dropdown-item" data-format="npy">💾 保存为 NPY</div>
+                            <div class="dropdown-item" data-format="csv">📊 保存为 CSV</div>
+                        </div>
+                    </div>
+                </div>
                 
-                <div class="btn-group">
-                    <button id="saveBtn" class="btn btn-success btn-large" disabled>
-                        📊 保存为 CSV
-                    </button>
-                    <button id="saveDropdownBtn" class="btn btn-success btn-dropdown" disabled>
-                        ▼
-                    </button>
-                    <div id="saveDropdownMenu" class="dropdown-menu">
-                        <div class="dropdown-item" data-format="npy">💾 保存为 NPY</div>
-                        <div class="dropdown-item" data-format="csv">📊 保存为 CSV</div>
+                <!-- 脉冲发生器控制 -->
+                <div class="config-section">
+                    <h3 class="section-title" style="cursor: pointer; user-select: none;" id="pulserSectionTitle">
+                        <span id="pulserToggleIcon">▼</span> 脉冲发生器
+                    </h3>
+                    
+                    <div id="pulserControlPanel" class="pulser-control-panel">
+                        <!-- 设备选择 -->
+                        <div class="pulser-device-selector">
+                            <select id="pulserDeviceSelect" class="config-select">
+                                <option value="">未连接</option>
+                            </select>
+                            <button id="pulserConnectBtn" class="btn btn-primary">
+                                连接
+                            </button>
+                        </div>
+                        
+                        <!-- 发射参数 -->
+                        <div class="config-subsection">
+                            <label class="config-label" style="font-weight: 600;">📡 发射参数</label>
+                            
+                            <label class="config-label" style="margin-top: 8px;">发射电压</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="pulserVoltage" value="1" checked><span>60V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="2"><span>110V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="3"><span>150V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="4"><span>200V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="5"><span>250V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="6"><span>300V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="7"><span>350V</span></label>
+                                <label><input type="radio" name="pulserVoltage" value="8"><span>400V</span></label>
+                            </div>
+                            
+                            <label class="config-label" style="margin-top: 8px;">脉冲宽度</label>
+                            <div class="slider-spinner-control">
+                                <input type="range" id="pulseWidthSlider" class="slider-spinner-slider" min="1" max="40" value="1">
+                                <div class="slider-spinner-right">
+                                    <div class="spinner-buttons">
+                                        <button id="pulseWidthUp" class="spinner-btn spinner-btn-up">▲</button>
+                                        <button id="pulseWidthDown" class="spinner-btn spinner-btn-down">▼</button>
+                                    </div>
+                                    <span id="pulseWidthValue" class="slider-spinner-value">28 ns</span>
+                                </div>
+                            </div>
+                            
+                            <label class="config-label" style="margin-top: 8px;">重复频率</label>
+                            <select id="pulserPrfSelect" class="config-select">
+                                <option value="1">4 Hz</option>
+                                <option value="2">8 Hz</option>
+                                <option value="3">16 Hz</option>
+                                <option value="4" selected>20 Hz</option>
+                                <option value="5">100 Hz</option>
+                                <option value="6">500 Hz</option>
+                                <option value="7">1 kHz</option>
+                                <option value="8">2 kHz</option>
+                            </select>
+                            
+                            <label class="config-label" style="margin-top: 8px;">触发源</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="pulserTrigger" value="0" checked><span>内部</span></label>
+                                <label><input type="radio" name="pulserTrigger" value="1"><span>外部</span></label>
+                            </div>
+                        </div>
+                        
+                        <!-- 接收参数 -->
+                        <div class="config-subsection" style="margin-top: 12px;">
+                            <label class="config-label" style="font-weight: 600;">📻 接收参数</label>
+                            
+                            <label class="config-label" style="margin-top: 8px;">单/双晶</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="pulserCrystal" value="1" checked><span>单晶</span></label>
+                                <label><input type="radio" name="pulserCrystal" value="2"><span>双晶</span></label>
+                            </div>
+                            
+                            <label class="config-label" style="margin-top: 8px;">阻尼</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="pulserDamping" value="0"><span>34Ω</span></label>
+                                <label><input type="radio" name="pulserDamping" value="1" checked><span>50Ω</span></label>
+                            </div>
+                            <div class="radio-group">
+                                <label><input type="radio" name="pulserDamping" value="2"><span>90Ω</span></label>
+                                <label><input type="radio" name="pulserDamping" value="3"><span>510Ω</span></label>
+                            </div>
+                            
+                            <label class="config-label" style="margin-top: 8px;">增益</label>
+                            <div class="slider-spinner-control">
+                                <input type="range" id="pulserGainSlider" class="slider-spinner-slider" min="0" max="60" value="30">
+                                <div class="slider-spinner-right">
+                                    <div class="spinner-buttons">
+                                        <button id="pulserGainUp" class="spinner-btn spinner-btn-up">▲</button>
+                                        <button id="pulserGainDown" class="spinner-btn spinner-btn-down">▼</button>
+                                    </div>
+                                    <span id="pulserGainValue" class="slider-spinner-value">30 dB</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -371,7 +469,7 @@
                                 </div>
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
-                                        <input type="checkbox" id="wa-bandpass-checkbox">
+                                        <input type="checkbox" id="wa-bandpass-checkbox" checked>
                                         <span>带通滤波</span>
                                     </label>
                                 </div>
@@ -1281,6 +1379,7 @@
     <script src="js/common.js"></script>
     <!-- 实时采集模块 -->
     <script src="js/realtime-capture/realtime-capture.js"></script>
+    <script src="js/realtime-capture/pulser-control.js"></script>
     <!-- 波形分析模块（按依赖顺序加载）-->
     <script src="js/waveform-analysis/waveform-drawing.js"></script>
     <script src="js/waveform-analysis/waveform-zoom.js"></script>

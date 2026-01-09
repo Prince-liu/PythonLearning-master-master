@@ -653,6 +653,7 @@ const FieldCanvas = (function() {
     }
     
     // ========== 滚轮缩放 ==========
+    // 注意：此函数与 field-contour.js 中的实现相同，修改时需同步更新
     function 处理滚轮缩放(event) {
         event.preventDefault();
         
@@ -660,11 +661,11 @@ const FieldCanvas = (function() {
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
         
-        // 缩放因子
+        // 缩放因子（每次缩放 10%）
         const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
         const newZoom = 显示设置.缩放比例 * zoomFactor;
         
-        // 限制缩放范围
+        // 限制缩放范围（0.3x ~ 10x）
         if (newZoom < 0.3 || newZoom > 10) return;
         
         // 以鼠标位置为中心缩放
@@ -683,8 +684,9 @@ const FieldCanvas = (function() {
     }
     
     // ========== 拖动平移 ==========
+    // 注意：此函数与 field-contour.js 中的实现类似，但增加了测点点击检查
     function 处理拖动开始(event) {
-        // 检查是否点击在测点上
+        // 检查是否点击在测点上（field-contour.js 中没有此检查）
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
@@ -714,12 +716,13 @@ const FieldCanvas = (function() {
         刷新();
     }
     
+    // 注意：此函数与 field-contour.js 中的实现类似，但增加了延迟重置
     function 处理拖动结束(event) {
         if (拖动状态.正在拖动) {
             拖动状态.正在拖动 = false;
             canvas.style.cursor = 'grab';
             
-            // 延迟重置拖动状态，避免触发点击事件
+            // 延迟重置拖动状态，避免触发点击事件（field-contour.js 中没有此延迟）
             setTimeout(() => {
                 拖动状态.正在拖动 = false;
             }, 50);
@@ -727,6 +730,7 @@ const FieldCanvas = (function() {
     }
     
     // ========== 重置视图 ==========
+    // 注意：此函数与 field-contour.js 中的实现相同，修改时需同步更新
     function 重置视图() {
         显示设置.缩放比例 = 1;
         显示设置.偏移X = 0;

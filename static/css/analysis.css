@@ -272,7 +272,7 @@ select.config-input option {
     padding: 15px 20px;
     background: white;
     border-radius: 8px;
-    margin-bottom: 15px;
+    margin-bottom: 2px;  /* 保留2px间距 */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -355,6 +355,7 @@ select.config-input option {
     min-width: 320px;
     background: white;
     border-right: 1px solid #e5e7eb;
+    border-radius: 8px;  /* 四个角都是圆角 */
     overflow-y: auto;
     flex-shrink: 0;
     transition: all 0.3s ease;

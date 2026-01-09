@@ -5,10 +5,12 @@
 
 from .oscilloscope import OscilloscopeBase
 from .signal_processing_wrapper import SignalProcessingWrapper
+from .ultrasonic_pulser import UltrasonicPulserController
 from . import signal_processing
 
 __all__ = [
     'OscilloscopeBase',
     'SignalProcessingWrapper',
+    'UltrasonicPulserController',
     'signal_processing'
 ]

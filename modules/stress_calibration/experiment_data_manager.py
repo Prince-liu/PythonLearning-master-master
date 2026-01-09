@@ -5,6 +5,7 @@
 
 import sqlite3
 import os
+import shutil
 import numpy as np
 import h5py
 from datetime import datetime
@@ -91,6 +92,8 @@ class ExperimentDataManager:
         这样可以保留：
         - 只有基准波形但还没采集应力数据的方向（用户可能暂停了实验）
         - 有应力数据但基准波形路径丢失的方向（异常情况，保留数据）
+        
+        同时清理文件系统中的空文件夹和孤儿文件夹
         """
         cursor = self.conn.cursor()
         
@@ -105,6 +108,9 @@ class ExperimentDataManager:
             GROUP BY td.id
         ''')
         不完整方向列表 = cursor.fetchall()
+        
+        # 记录要删除的实验ID
+        要删除的实验ID集合 = set()
         
         for 方向ID, 实验ID in 不完整方向列表:
             # 删除该方向的所有应力数据
@@ -123,11 +129,50 @@ class ExperimentDataManager:
             # 如果没有方向了，删除整个实验
             if 剩余方向数 == 0:
                 cursor.execute('DELETE FROM experiments WHERE id = ?', (实验ID,))
+                要删除的实验ID集合.add(实验ID)
         
         self.conn.commit()
         
+        # 清理文件系统中的空文件夹
+        if 要删除的实验ID集合:
+            波形根目录 = 'data/waveforms'
+            
+            for 实验ID in 要删除的实验ID集合:
+                实验文件夹 = os.path.join(波形根目录, f'EXP{实验ID:03d}')
+                if os.path.exists(实验文件夹):
+                    try:
+                        shutil.rmtree(实验文件夹)
+                    except Exception as e:
+                        print(f"⚠️  清理文件夹失败 {实验文件夹}: {e}")
+        
+        # 清理孤儿文件夹（数据库中没有记录但文件系统中存在的文件夹）
+        波形根目录 = 'data/waveforms'
+        if os.path.exists(波形根目录):
+            # 获取数据库中所有实验ID
+            cursor.execute('SELECT id FROM experiments')
+            数据库实验ID集合 = {row[0] for row in cursor.fetchall()}
+            
+            # 遍历文件系统中的实验文件夹
+            孤儿文件夹数 = 0
+            for 文件夹名 in os.listdir(波形根目录):
+                if 文件夹名.startswith('EXP') and len(文件夹名) == 6:
+                    try:
+                        实验ID = int(文件夹名[3:])
+                        if 实验ID not in 数据库实验ID集合:
+                            # 这是孤儿文件夹，删除它
+                            实验文件夹 = os.path.join(波形根目录, 文件夹名)
+                            shutil.rmtree(实验文件夹)
+                            孤儿文件夹数 += 1
+                    except (ValueError, OSError) as e:
+                        print(f"⚠️  处理文件夹失败 {文件夹名}: {e}")
+            
+            if 孤儿文件夹数 > 0:
+                print(f"✓ 已清理 {孤儿文件夹数} 个孤儿文件夹")
+        
         if 不完整方向列表:
             print(f"✓ 已清理 {len(不完整方向列表)} 条不完整的实验数据")
+            if 要删除的实验ID集合:
+                print(f"✓ 已删除 {len(要删除的实验ID集合)} 个空实验文件夹")
     
     def 创建实验(self, 材料名称):
         """创建新实验，返回实验ID"""

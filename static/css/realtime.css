@@ -1,11 +1,41 @@
 /* ==================== 实时采集模块样式 ==================== */
 
+/* 配置区块 - 卡片式样式 */
+.config-section {
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    margin-bottom: 0;  /* 改为0，由父容器的gap控制间距 */
+}
+
+.config-section .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.config-section .config-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 6px;
+    margin-top: 8px;
+    display: block;
+}
+
+.config-section .config-label:first-of-type {
+    margin-top: 0;
+}
+
 /* 设备连接控制 */
 .device-controls {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 12px;
 }
 
 /* 波形状态信息栏 */
@@ -132,12 +162,12 @@
     background: white;
     border-radius: 8px;
     padding: 20px;
-    padding-bottom: 15px;
+    padding-bottom: 20px;  /* 确保底部有足够空间显示阴影 */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;  /* 改为visible，不裁剪阴影 */
 }
 
 .waveform-header {
@@ -163,7 +193,7 @@
 
 #captureTab .waveform-display {
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;  /* 改为visible，不裁剪内容 */
 }
 
 #captureTab .canvas-container {
@@ -290,3 +320,293 @@
     color: #eab308;
     font-weight: 600;
 }
+
+
+/* ==================== 脉冲发生器控制样式 ==================== */
+
+.pulser-control-panel {
+    padding-top: 2px;
+}
+
+/* 脉冲发生器标题的下边距 */
+#pulserSectionTitle {
+    margin-bottom: 6px !important;
+}
+
+/* 设备选择器 */
+.pulser-device-selector {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    background: white;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.pulser-device-selector select {
+    flex: 1;
+    font-size: 13px;
+    padding: 5px 8px;
+}
+
+.pulser-device-selector button {
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* 子区块样式 - 更紧凑、更现代 */
+.config-subsection {
+    padding: 10px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 单选按钮组 - 更紧凑的布局 */
+.radio-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: nowrap;
+    margin-top: 6px;
+}
+
+/* 发射电压单选按钮组 - 每行3个，居中显示 */
+.pulser-control-panel .radio-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 6px;
+    justify-items: center;
+}
+
+/* 只有2个选项的按钮组 - 填满整个宽度 */
+.pulser-control-panel .radio-group:has(label:nth-child(2):last-child) {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.radio-group label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    background: white;
+    border: 1px solid #e2e8f0;
+    width: 100%;
+}
+
+.radio-group label:hover {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #2563eb;
+}
+
+.radio-group input[type="radio"] {
+    cursor: pointer;
+    margin: 0;
+    width: 14px;
+    height: 14px;
+}
+
+.radio-group input[type="radio"]:checked + span,
+.radio-group label:has(input[type="radio"]:checked) {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1e40af;
+    font-weight: 500;
+}
+
+/* 滑块样式优化 - 更现代的外观 */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: white;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+    background: #3b82f6;
+    transform: scale(1.1);
+}
+
+input[type="range"]:hover::-moz-range-thumb {
+    background: #3b82f6;
+    transform: scale(1.1);
+}
+
+input[type="range"]:active::-webkit-slider-thumb {
+    background: #2563eb;
+    transform: scale(1.2);
+}
+
+input[type="range"]:active::-moz-range-thumb {
+    background: #2563eb;
+    transform: scale(1.2);
+}
+
+/* 滑块数值显示 */
+.pulser-control-panel span[id$="Value"] {
+    min-width: 55px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e40af;
+    text-align: right;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 按钮组优化 */
+.pulser-control-panel .button-group {
+    display: flex;
+    gap: 8px;
+}
+
+.pulser-control-panel .button-group button {
+    flex: 1;
+    font-size: 13px;
+    padding: 8px 12px;
+    font-weight: 500;
+}
+
+/* 标签优化 */
+.pulser-control-panel .config-label {
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+.pulser-control-panel .config-label[style*="font-weight: 600"] {
+    font-size: 13px;
+    color: #1e293b;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 下拉框优化 */
+.pulser-control-panel .config-select {
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+/* ==================== 滑块+微调控件（Slider + Spinner）==================== */
+.slider-spinner-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.slider-spinner-slider {
+    flex: 1;
+    min-width: 0;
+}
+
+.slider-spinner-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;  /* 从6px改为4px，让箭头更靠近数字 */
+}
+
+.slider-spinner-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-family: 'Consolas', 'Monaco', monospace;
+    min-width: 60px;
+    text-align: center;  /* 改为居中 */
+    background: white;  /* 添加白色背景 */
+    padding: 6px 12px;  /* 添加内边距 */
+    border-radius: 6px;  /* 添加圆角 */
+    border: 1px solid #e2e8f0;  /* 添加边框 */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);  /* 添加轻微阴影 */
+}
+
+.spinner-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.spinner-btn {
+    width: 24px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid #cbd5e0;
+    background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+    color: #4a5568;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spinner-btn-up {
+    border-radius: 4px 4px 0 0;
+}
+
+.spinner-btn-down {
+    border-radius: 0 0 4px 4px;
+}
+
+.spinner-btn:hover {
+    background: linear-gradient(180deg, #edf2f7 0%, #e2e8f0 100%);
+    border-color: #a0aec0;
+    color: #2d3748;
+}
+
+.spinner-btn:active {
+    background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e0 100%);
+    transform: scale(0.95);
+}
+
+.spinner-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #f7fafc;
+}
+
+.spinner-btn:disabled:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    transform: none;
+}
+

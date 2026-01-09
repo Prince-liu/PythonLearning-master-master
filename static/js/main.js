@@ -115,6 +115,12 @@
     function 初始化应用() {
         // 初始化各模块
         RealtimeCapture.初始化(canvas, ctx);
+        
+        // 🆕 初始化脉冲发生器控制模块
+        if (typeof PulserControl !== 'undefined') {
+            PulserControl.初始化();
+        }
+        
         WaveformAnalysis.初始化(analysisCanvas, analysisCtx);
         
         // 初始化应力系数标定模块
